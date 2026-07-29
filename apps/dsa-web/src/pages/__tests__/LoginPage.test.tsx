@@ -167,6 +167,23 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
   });
 
+  it('shows the enrollment password policy before submit and links it to the password field', () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    const policy = screen.getByText(translate('zh', 'auth.login.passwordPolicyDescription'));
+    const passwordInput = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+    expect(policy).toHaveAttribute('id', 'enrollment-password-policy');
+    expect(passwordInput).toHaveAttribute('aria-describedby', expect.stringContaining('enrollment-password-policy'));
+  });
+
   it('enters create-account mode directly on the register route', async () => {
     window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);

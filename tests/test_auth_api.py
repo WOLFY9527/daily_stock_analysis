@@ -306,6 +306,25 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertFalse(me_response["isAdmin"])
         self.assertTrue(me_response["isAuthenticated"])
 
+    def test_login_rejects_numeric_only_six_digit_enrollment(self) -> None:
+        response = self._login_user(username="numeric-only-user", password="123456")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._json_response_body(response)["error"], "invalid_password")
+        self.assertIsNone(self.db.get_app_user_by_username("numeric-only-user"))
+
+    def test_login_fails_closed_when_durable_abuse_store_is_unavailable(self) -> None:
+        with patch(
+            "src.storage.DatabaseManager.get_instance",
+            side_effect=RuntimeError("bounded-test-store-failure"),
+        ):
+            response = self._login_user(username="store-failure-user", password="secret123")
+
+        self.assertEqual(response.status_code, 503)
+        payload = self._json_response_body(response)
+        self.assertEqual(payload["error"], "auth_protection_unavailable")
+        self.assertNotIn("bounded-test-store-failure", json.dumps(payload))
+
     def test_cookie_max_age_uses_the_server_session_ttl_floor(self) -> None:
         request = self._build_request()
 
@@ -696,6 +715,27 @@ class AuthApiTestCase(unittest.TestCase):
             "traceback",
         ):
             self.assertNotIn(forbidden, text)
+
+    def test_reauth_does_not_grant_marker_when_durable_protection_clear_fails(self) -> None:
+        login_response = self._login_admin(password="passwd6")
+        self.assertEqual(login_response.status_code, 200)
+        session_cookie = self._extract_session_cookie(login_response)
+
+        unavailable = auth_endpoint._auth_protection_unavailable_error()
+        with patch.object(
+            auth_endpoint,
+            "_clear_rate_limit_for_request",
+            return_value=(False, unavailable),
+        ), patch.object(auth_endpoint, "mark_admin_session_reauthenticated") as mark_reauthenticated:
+            response = asyncio.run(
+                auth_endpoint.auth_reauth(
+                    self._build_request(cookies={auth.COOKIE_NAME: session_cookie}),
+                    auth_endpoint.ReauthRequest(password="passwd6"),
+                )
+            )
+
+        self.assertEqual(response.status_code, 503)
+        mark_reauthenticated.assert_not_called()
 
     def test_reauth_rejects_wrong_password_safely(self) -> None:
         login_response = self._login_admin(password="passwd6")

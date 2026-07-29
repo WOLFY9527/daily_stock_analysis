@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import func, select, text
 
+from src.auth import get_auth_rate_limit_store_status
 from src.logging_config import describe_runtime_file_logging
 from src.services.build_provenance_service import BuildProvenanceService, build_unknown_provenance
 from src.services.admin_logs_service import AdminLogsRetentionService
@@ -159,6 +160,7 @@ class AdminOpsStatusService:
         db_size_risk = self._safe_source(self._build_db_size_risk)
         admin_role_assignment_status = self._safe_source(self._build_admin_role_assignment_status)
         durable_task_backlog_status = self._safe_source(self._build_durable_task_backlog_status)
+        auth_abuse_protection_status = self._safe_source(self._build_auth_abuse_protection_status)
         build_provenance = self._safe_build_provenance(app_state)
         return {
             "generatedAt": generated_at_iso,
@@ -256,6 +258,9 @@ class AdminOpsStatusService:
                 last_checked_at=generated_at_iso if durable_task_backlog_status.get("available") else None,
                 message=self._durable_task_backlog_status_message(durable_task_backlog_status),
             ),
+            "authAbuseProtectionStatus": self._project_auth_abuse_protection_section(
+                auth_abuse_protection_status,
+            ),
             "recommendedMaintenanceActions": self._recommended_maintenance_actions(
                 retention_policy_status=retention_policy_status,
                 execution_log_retention_risk=execution_log_retention_risk,
@@ -281,6 +286,7 @@ class AdminOpsStatusService:
                     "db_size",
                     "admin_role_assignment",
                     "durable_task_backlog",
+                    "auth_abuse_protection",
                     "build_provenance",
                     "launch_readiness",
                 ],
@@ -339,6 +345,24 @@ class AdminOpsStatusService:
             summary=dict(raw_summary),
             limitations=[str(item) for item in raw_limitations if str(item).strip()],
         )
+
+    @classmethod
+    def _project_auth_abuse_protection_section(cls, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        section = cls._project_maintenance_section(
+            service="auth_abuse_protection",
+            snapshot=snapshot,
+            configured=True,
+            last_checked_at=snapshot.get("lastCheckedAt"),
+            message=cls._auth_abuse_protection_status_message(snapshot),
+        )
+        section.update(
+            {
+                "label": "bounded_admin_diagnostic",
+                "liveEnforcement": True,
+                "enforcementEnabled": True,
+            }
+        )
+        return section
 
     @staticmethod
     def _provider_status_message(snapshot: Dict[str, Any]) -> str:
@@ -415,6 +439,15 @@ class AdminOpsStatusService:
         if snapshot.get("available"):
             return "Durable task backlog status is summarized with bucketed counts; task identifiers are omitted."
         return "Durable task backlog status unavailable."
+
+    @staticmethod
+    def _auth_abuse_protection_status_message(snapshot: Dict[str, Any]) -> str:
+        status = str(snapshot.get("status") or "not_checked")
+        if status == "available":
+            return "Durable login protection is available; process-local fallback is disabled."
+        if status == "unavailable":
+            return "Durable login protection is unavailable; risky authentication is fail-closed."
+        return "Durable login protection has not been checked in this process."
 
     def _safe_launch_cockpit(self, generated_at: str) -> Dict[str, Any]:
         try:
@@ -986,6 +1019,22 @@ class AdminOpsStatusService:
                 "ownerIdentifiersIncluded": False,
             },
             limitations=["bounded_counts_only", "does_not_claim_or_repair_tasks", "no_task_cleanup"],
+        )
+
+    def _build_auth_abuse_protection_status(self) -> Dict[str, Any]:
+        snapshot = get_auth_rate_limit_store_status()
+        return self._section(
+            available=True,
+            status=str(snapshot.get("status") or "not_checked"),
+            lastCheckedAt=snapshot.get("lastCheckedAt"),
+            dataSources=["auth_rate_limit_buckets"],
+            summary={
+                "durableStoreRequired": True,
+                "failClosed": True,
+                "processLocalFallback": False,
+                "lastOperation": snapshot.get("lastOperation"),
+            },
+            limitations=["process_local_health_observation_only"],
         )
 
     def _recommended_maintenance_actions(

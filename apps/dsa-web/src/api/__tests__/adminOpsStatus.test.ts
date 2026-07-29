@@ -164,6 +164,32 @@ describe('adminOpsStatusApi', () => {
           summary: {},
           limitations: [],
         },
+        auth_abuse_protection_status: {
+          available: true,
+          status: 'unavailable',
+          service: 'auth_abuse_protection',
+          configured: true,
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'Durable login protection is unavailable; risky authentication is fail-closed.',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: true,
+          enforcement_enabled: true,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: ['auth_rate_limit_buckets'],
+          summary: {
+            durable_store_required: true,
+            fail_closed: true,
+            process_local_fallback: false,
+          },
+          limitations: ['process_local_health_observation_only'],
+        },
         recommended_maintenance_actions: ['Review retention policy evidence'],
         build_provenance: {
           contract: 'admin_build_provenance_v1',
@@ -279,6 +305,12 @@ describe('adminOpsStatusApi', () => {
     expect(result.recommendedMaintenanceActions).toEqual(['Review retention policy evidence']);
     expect(result.buildProvenance.freshnessStatus).toBe('unknown');
     expect(result.launchCockpit.status).toBe('blocked');
+    expect(result.authAbuseProtectionStatus.status).toBe('unavailable');
+    expect(result.authAbuseProtectionStatus.summary).toEqual({
+      durableStoreRequired: true,
+      failClosed: true,
+      processLocalFallback: false,
+    });
     expect(result.launchCockpit.message).toBe('Public launch remains blocked pending operator evidence');
     expect(result.launchCockpit.publicLaunchApproved).toBe(false);
     expect(result.launchCockpit.publicLaunchNoGo).toBe(true);

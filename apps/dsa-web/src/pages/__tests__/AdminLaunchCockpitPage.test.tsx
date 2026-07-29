@@ -87,6 +87,19 @@ function statusFixture(): AdminOpsStatusResponse {
     dbSizeRisk: statusSection('db_size', 'ok', 'Database size within bounded threshold'),
     adminRoleAssignmentStatus: statusSection('admin_role_assignment', 'degraded', 'Admin role assignment needs staged evidence'),
     durableTaskBacklogStatus: statusSection('durable_task_backlog', 'ok', 'Durable task backlog within threshold'),
+    authAbuseProtectionStatus: statusSection(
+      'auth_abuse_protection',
+      'unavailable',
+      'Durable login protection is unavailable; risky authentication is fail-closed.',
+      {
+        configured: true,
+        summary: {
+          durableStoreRequired: true,
+          failClosed: true,
+          processLocalFallback: false,
+        },
+      },
+    ),
     recommendedMaintenanceActions: ['Review sanitized admin launch evidence'],
     buildProvenance: {
       contract: 'admin_build_provenance_v1',
@@ -367,6 +380,9 @@ describe('AdminLaunchCockpitPage', () => {
     expect(page).toHaveTextContent('Public launch NO-GO');
     expect(page).toHaveTextContent('Read-only advisory');
     expect(page).toHaveTextContent('No external calls');
+    expect(screen.getByTestId('auth-abuse-protection-status')).toHaveTextContent(
+      'Durable login protection is unavailable; risky authentication is fail-closed.',
+    );
     expect(page).toHaveTextContent('Approval required');
     expect(page).toHaveTextContent('Security / RBAC / MFA');
     expect(page).toHaveTextContent('Quota / Cost');

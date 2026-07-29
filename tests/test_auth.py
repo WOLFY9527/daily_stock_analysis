@@ -39,7 +39,9 @@ class AuthValidationTestCase(unittest.TestCase):
         self.assertIsNotNone(auth._validate_password("12345"))
 
     def test_validate_password_valid(self) -> None:
-        self.assertIsNone(auth._validate_password("123456"))
+        self.assertIsNotNone(auth._validate_password("123456"))
+        self.assertIsNotNone(auth._validate_password("852258"))
+        self.assertIsNone(auth._validate_password("passwd6"))
         self.assertIsNone(auth._validate_password("password123"))
 
 
@@ -222,6 +224,29 @@ class AuthRateLimitTestCase(unittest.TestCase):
         self.assertFalse(auth.check_rate_limit(ip))
         auth.clear_rate_limit(ip)
         self.assertTrue(auth.check_rate_limit(ip))
+
+    def test_durable_store_failure_fails_closed_without_process_local_fallback(self) -> None:
+        operations = (
+            ("check", lambda: auth.check_rate_limit("198.51.100.44", "test-account")),
+            ("inspect", lambda: auth.has_rate_limit_failures("198.51.100.44", "test-account")),
+            ("record", lambda: auth.record_login_failure("198.51.100.44", "test-account")),
+            ("clear", lambda: auth.clear_rate_limit("198.51.100.44", "test-account")),
+        )
+        for expected_operation, operation in operations:
+            with self.subTest(operation=expected_operation), patch(
+                "src.storage.DatabaseManager.get_instance",
+                side_effect=RuntimeError("bounded-test-store-failure"),
+            ):
+                with self.assertRaises(auth.AuthRateLimitStoreUnavailable):
+                    operation()
+
+            self.assertEqual(auth._rate_limit, {})
+            status = auth.get_auth_rate_limit_store_status()
+            self.assertEqual(status["status"], "unavailable")
+            self.assertEqual(status["lastOperation"], expected_operation)
+            self.assertTrue(status["failClosed"])
+            self.assertFalse(status["processLocalFallback"])
+            self.assertNotIn("bounded-test-store-failure", json.dumps(status))
 
 
 class AuthSetPasswordTestCase(unittest.TestCase):

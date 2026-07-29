@@ -236,6 +236,7 @@ class AdminOpsStatusResponse(_AdminOpsStatusModel):
     db_size_risk: AdminOpsStatusSection = Field(alias="dbSizeRisk")
     admin_role_assignment_status: AdminOpsStatusSection = Field(alias="adminRoleAssignmentStatus")
     durable_task_backlog_status: AdminOpsStatusSection = Field(alias="durableTaskBacklogStatus")
+    auth_abuse_protection_status: AdminOpsStatusSection = Field(alias="authAbuseProtectionStatus")
     recommended_maintenance_actions: List[str] = Field(default_factory=list, alias="recommendedMaintenanceActions")
     build_provenance: AdminBuildProvenance = Field(alias="buildProvenance")
     launch_cockpit: AdminOpsLaunchCockpit = Field(alias="launchCockpit")

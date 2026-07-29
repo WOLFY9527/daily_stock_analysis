@@ -345,8 +345,26 @@ test('creates and restores an ordinary-user session through the real browser jou
   await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#displayName')).toBeVisible();
   await expect(page.locator('#passwordConfirm')).toBeVisible();
+  const passwordPolicy = page.locator('#enrollment-password-policy');
+  await expect(passwordPolicy).toContainText('密码至少 6 位，且不能只包含数字。');
+  await expect(page.locator('#password')).toHaveAttribute('aria-describedby', /enrollment-password-policy/);
   await page.locator('#username').fill(username);
   await page.locator('#displayName').fill(displayName);
+
+  await page.locator('#password').fill('123456');
+  await page.locator('#passwordConfirm').fill('123456');
+  const weakRegistrationResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+  );
+  await page.locator('button[type="submit"]').click();
+  const weakRegistrationResponse = await weakRegistrationResponsePromise;
+  expect(weakRegistrationResponse.status()).toBe(400);
+  expect(await weakRegistrationResponse.json()).toMatchObject({ error: 'invalid_password' });
+  await expect(page).toHaveURL(/\/zh\/register\?redirect=%2Fzh$/);
+  await expect(page.getByText('密码不能只包含数字')).toBeVisible();
+  await expect(passwordPolicy).toContainText('密码至少 6 位，且不能只包含数字。');
+  await expect(page.locator('#password')).toHaveAttribute('aria-describedby', /enrollment-password-policy/);
+
   await page.locator('#password').fill(password);
   await page.locator('#passwordConfirm').fill(password);
 
@@ -460,11 +478,13 @@ test('creates and restores an ordinary-user session through the real browser jou
   await expectNoAdminNavigation(page);
 
   expect(consoleErrors).toEqual([
+    'Failed to load resource: the server responded with a status of 400 (Bad Request)',
     'Failed to load resource: the server responded with a status of 409 (Conflict)',
   ]);
   expect(pageErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
   expect(httpErrors).toEqual([
+    `POST 400 ${appUrl}/api/v1/auth/login`,
     `POST 409 ${appUrl}/api/v1/scanner/run`,
   ]);
 });

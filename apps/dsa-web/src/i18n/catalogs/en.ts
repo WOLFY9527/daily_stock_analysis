@@ -2942,6 +2942,7 @@ export const enCatalog = {
         passwordLabelLogin: String('Password'),
         passwordPlaceholderSetup: String('Set a password with at least 6 characters'),
         passwordPlaceholderLogin: 'Enter your password',
+        passwordPolicyDescription: 'Use at least 6 characters. The password cannot contain only numbers.',
         passwordConfirmLabel: String('Confirm password'),
         passwordConfirmPlaceholderSetup: String('Confirm the admin password again'),
         passwordConfirmPlaceholderLogin: String('Confirm the sign-in password again'),

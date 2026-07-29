@@ -61,6 +61,15 @@ _password_hash_value: Optional[str] = None
 _rate_limit: dict[str, Tuple[int, float]] = {}
 _admin_reauth_markers: dict[str, datetime] = {}
 _rate_limit_lock = None
+_auth_rate_limit_store_status: dict[str, Any] = {
+    "contract": "auth_rate_limit_store_status_v1",
+    "status": "not_checked",
+    "lastOperation": None,
+    "lastCheckedAt": None,
+    "durableStoreRequired": True,
+    "failClosed": True,
+    "processLocalFallback": False,
+}
 
 _PRODUCTION_ENV_VALUES = {"prod", "production"}
 _ADMIN_AUTH_TRUE_VALUES = {"true", "1", "yes"}
@@ -89,6 +98,10 @@ class SessionIdentity:
 class PasswordHashVerification:
     verified: bool
     needs_upgrade: bool = False
+
+
+class AuthRateLimitStoreUnavailable(RuntimeError):
+    """Raised when durable authentication abuse protection cannot be verified."""
 
 
 def _get_lock():
@@ -826,6 +839,8 @@ def _validate_password(pwd: str) -> Optional[str]:
         return "密码不能为空"
     if len(pwd) < MIN_PASSWORD_LEN:
         return f"密码至少 {MIN_PASSWORD_LEN} 位"
+    if pwd.strip().isdigit():
+        return "密码不能只包含数字"
     return None
 
 
@@ -1045,38 +1060,42 @@ def _rate_limit_bucket_keys(ip: str, account_identifier: str | None = None) -> l
     return keys
 
 
-def _memory_check_rate_limit(ip: str) -> bool:
-    lock = _get_lock()
-    now = time.time()
-    with lock:
-        expired_keys = [k for k, (_, ts) in _rate_limit.items() if now - ts > RATE_LIMIT_WINDOW_SEC]
-        for k in expired_keys:
-            del _rate_limit[k]
-        if ip in _rate_limit:
-            count, first_ts = _rate_limit[ip]
-            if count >= RATE_LIMIT_MAX_FAILURES:
-                return False
-        return True
+def reset_auth_rate_limit_store_status() -> None:
+    """Reset bounded limiter-store health telemetry without changing enforcement."""
+    with _get_lock():
+        _auth_rate_limit_store_status.update(
+            {
+                "status": "not_checked",
+                "lastOperation": None,
+                "lastCheckedAt": None,
+            }
+        )
 
 
-def _memory_record_login_failure(ip: str) -> None:
-    lock = _get_lock()
-    now = time.time()
-    with lock:
-        if ip in _rate_limit:
-            count, first_ts = _rate_limit[ip]
-            if now - first_ts > RATE_LIMIT_WINDOW_SEC:
-                _rate_limit[ip] = (1, now)
-            else:
-                _rate_limit[ip] = (count + 1, first_ts)
-        else:
-            _rate_limit[ip] = (1, now)
+def get_auth_rate_limit_store_status() -> dict[str, Any]:
+    """Return sanitized process-local health telemetry for operator diagnostics."""
+    with _get_lock():
+        return dict(_auth_rate_limit_store_status)
 
 
-def _memory_clear_rate_limit(ip: str) -> None:
-    lock = _get_lock()
-    with lock:
-        _rate_limit.pop(ip, None)
+def _record_auth_rate_limit_store_status(*, operation: str, status: str) -> None:
+    with _get_lock():
+        _auth_rate_limit_store_status.update(
+            {
+                "status": status,
+                "lastOperation": operation,
+                "lastCheckedAt": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+
+def _raise_auth_rate_limit_store_unavailable(*, operation: str, cause: Exception) -> None:
+    _record_auth_rate_limit_store_status(operation=operation, status="unavailable")
+    logger.error(
+        "Durable auth rate-limit %s failed; authentication protection is fail-closed",
+        operation,
+    )
+    raise AuthRateLimitStoreUnavailable("Durable authentication protection is unavailable") from cause
 
 
 def check_rate_limit(ip: str, account_identifier: str | None = None, *, admin: bool = False) -> bool:
@@ -1085,6 +1104,7 @@ def check_rate_limit(ip: str, account_identifier: str | None = None, *, admin: b
         from src.storage import DatabaseManager
 
         db = DatabaseManager.get_instance()
+        allowed = True
         for bucket_type, bucket_key in _rate_limit_bucket_keys(ip, account_identifier):
             row = db.get_auth_rate_limit_bucket(bucket_key)
             if row is None:
@@ -1093,11 +1113,12 @@ def check_rate_limit(ip: str, account_identifier: str | None = None, *, admin: b
                 bucket_type=bucket_type,
                 admin=admin,
             ):
-                return False
-        return True
+                allowed = False
+                break
+        _record_auth_rate_limit_store_status(operation="check", status="available")
+        return allowed
     except Exception as exc:
-        logger.warning("Durable auth rate-limit check failed, using process-local fallback: %s", exc)
-        return _memory_check_rate_limit(ip)
+        _raise_auth_rate_limit_store_unavailable(operation="check", cause=exc)
 
 
 def has_rate_limit_failures(ip: str, account_identifier: str | None = None) -> bool:
@@ -1106,12 +1127,14 @@ def has_rate_limit_failures(ip: str, account_identifier: str | None = None) -> b
         from src.storage import DatabaseManager
 
         db = DatabaseManager.get_instance()
-        return any(
+        has_failures = any(
             bool(db.get_auth_rate_limit_bucket(bucket_key))
             for _, bucket_key in _rate_limit_bucket_keys(ip, account_identifier)
         )
-    except Exception:
-        return ip in _rate_limit
+        _record_auth_rate_limit_store_status(operation="inspect", status="available")
+        return has_failures
+    except Exception as exc:
+        _raise_auth_rate_limit_store_unavailable(operation="inspect", cause=exc)
 
 
 def record_login_failure(
@@ -1132,10 +1155,9 @@ def record_login_failure(
                 bucket_type=bucket_type,
                 window_seconds=_rate_limit_window_seconds(),
             )
-        return
+        _record_auth_rate_limit_store_status(operation="record", status="available")
     except Exception as exc:
-        logger.warning("Durable auth rate-limit write failed, using process-local fallback: %s", exc)
-        _memory_record_login_failure(ip)
+        _raise_auth_rate_limit_store_unavailable(operation="record", cause=exc)
 
 
 def clear_rate_limit(ip: str, account_identifier: str | None = None) -> None:
@@ -1146,9 +1168,9 @@ def clear_rate_limit(ip: str, account_identifier: str | None = None) -> None:
         DatabaseManager.get_instance().clear_auth_rate_limit_buckets(
             [bucket_key for _, bucket_key in _rate_limit_bucket_keys(ip, account_identifier)]
         )
+        _record_auth_rate_limit_store_status(operation="clear", status="available")
     except Exception as exc:
-        logger.warning("Durable auth rate-limit clear failed, using process-local fallback: %s", exc)
-    _memory_clear_rate_limit(ip)
+        _raise_auth_rate_limit_store_unavailable(operation="clear", cause=exc)
 
 
 def safe_identifier_hash(value: Any, *, prefix: str = "id") -> str | None:

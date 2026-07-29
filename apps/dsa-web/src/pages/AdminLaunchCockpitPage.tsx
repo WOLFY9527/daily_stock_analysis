@@ -467,6 +467,7 @@ const AdminLaunchCockpitPage: React.FC = () => {
   };
 
   const cockpit = snapshot?.launchCockpit;
+  const authAbuseProtection = snapshot?.authAbuseProtectionStatus;
   const counts = cockpit?.summaryCounts ?? {};
   const generatedAt = snapshot?.generatedAt || 'not loaded';
   const sortedDomains = useMemo(
@@ -570,6 +571,36 @@ const AdminLaunchCockpitPage: React.FC = () => {
         evidenceRef={cockpit?.contract || 'admin_ops_launch_cockpit_v1'}
         lastUpdated={generatedAt}
       />
+
+      <TerminalPanel data-testid="auth-abuse-protection-status" className="space-y-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <ShieldAlert className="mt-0.5 size-5 shrink-0 text-[color:var(--wolfy-market-down)]" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h2 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Authentication abuse protection</h2>
+            <p className={cn('mt-1 text-sm leading-6', TEXT_SECONDARY)}>
+              {authAbuseProtection?.message || 'Durable login protection status is unavailable.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {boolChip(
+                Boolean(authAbuseProtection?.summary?.durableStoreRequired),
+                'Durable store required',
+                'Durable store requirement unknown',
+              )}
+              {boolChip(
+                Boolean(authAbuseProtection?.summary?.failClosed),
+                'Fail-closed',
+                'Fail-closed state unknown',
+              )}
+              {boolChip(
+                Boolean(authAbuseProtection?.summary?.processLocalFallback),
+                'Process-local fallback active',
+                'No process-local fallback',
+                true,
+              )}
+            </div>
+          </div>
+        </div>
+      </TerminalPanel>
 
       {loadFailed ? (
         <TerminalNotice data-testid="admin-launch-cockpit-error" variant="danger">

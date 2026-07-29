@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8141,
-      "sha256": "0063e5acbc3cd0efd89b3969254fd5ddd75beb1fe29ab795dd454097dfad1d32"
+      "count": 8146,
+      "sha256": "efb2a27946d31bc89f48ed31a9d3503c6b455fd013145a95a466b98361ba943f"
     },
     "tests": [
       {
@@ -447,6 +447,11 @@
         "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_does_not_call_provider_status_surfaces",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_exposes_bounded_auth_abuse_protection_state",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_data",
@@ -11409,6 +11414,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_auth.py::AuthRateLimitTestCase::test_durable_store_failure_fails_closed_without_process_local_fallback",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
         "id": "tests/test_auth.py::AuthRateLimitTestCase::test_rate_limit_allows_under_limit",
         "domain": "auth_security",
         "baseline": true
@@ -11674,6 +11684,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_login_fails_closed_when_durable_abuse_store_is_unavailable",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_login_first_time_mismatch_rejected",
         "domain": "auth_security",
         "baseline": true
@@ -11682,6 +11697,11 @@
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_login_first_time_set_initial_password",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_login_rejects_numeric_only_six_digit_enrollment",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_login_response_includes_compatible_current_user_capability_contract",
@@ -11752,6 +11772,11 @@
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_protected_api_returns_401_without_session",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_reauth_does_not_grant_marker_when_durable_protection_clear_fails",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_reauth_rejects_unauthenticated_user",

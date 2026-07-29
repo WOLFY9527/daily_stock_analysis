@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.auth import hash_password_for_storage, is_production_mode, verify_password_hash_string
+from src.auth import _build_password_hash_entry, is_production_mode, verify_password_hash_string
 from src.config import setup_env
 from src.multi_user import ROLE_USER
 from src.repositories.auth_repo import AuthRepository
@@ -56,7 +56,9 @@ def _seed_account(*, repo: AuthRepository, username: str, login_value: str) -> d
     password_hash = (
         str(existing_hash)
         if existing_hash and verify_password_hash_string(login_value, existing_hash)
-        else hash_password_for_storage(login_value)
+        # Preserve the sealed non-production UAT credential without weakening
+        # the public enrollment policy enforced by the authentication API.
+        else _build_password_hash_entry(login_value)
     )
     row = repo.create_or_update_app_user(
         user_id=str(getattr(existing, "id", "") or _account_id(username)),

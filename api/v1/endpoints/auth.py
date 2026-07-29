@@ -24,6 +24,7 @@ from api.deps import (
 from src.admin_rbac import expand_admin_capabilities
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
+    AuthRateLimitStoreUnavailable,
     COOKIE_NAME,
     _get_session_max_age_seconds,
     change_password,
@@ -364,6 +365,42 @@ def _rate_limited_error() -> JSONResponse:
         status_code=429,
         content={"error": "rate_limited", "message": "Login temporarily unavailable. Please try again later."},
     )
+
+
+def _auth_protection_unavailable_error() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "auth_protection_unavailable",
+            "message": "Authentication protection is temporarily unavailable. Please try again later.",
+        },
+    )
+
+
+def _check_rate_limit_for_request(
+    ip: str,
+    account_identifier: str | None = None,
+    *,
+    admin: bool = False,
+) -> tuple[bool, JSONResponse | None]:
+    try:
+        return check_rate_limit(ip, account_identifier, admin=admin), None
+    except AuthRateLimitStoreUnavailable:
+        return False, _auth_protection_unavailable_error()
+
+
+def _clear_rate_limit_for_request(
+    ip: str,
+    account_identifier: str | None = None,
+    *,
+    inspect_failures: bool = False,
+) -> tuple[bool, JSONResponse | None]:
+    try:
+        had_failures = has_rate_limit_failures(ip, account_identifier) if inspect_failures else False
+        clear_rate_limit(ip, account_identifier)
+        return had_failures, None
+    except AuthRateLimitStoreUnavailable:
+        return False, _auth_protection_unavailable_error()
 
 
 def _audit_login_event(
@@ -1009,7 +1046,14 @@ async def auth_reauth(request: Request, body: ReauthRequest):
         )
 
     ip = get_client_ip(request)
-    if not check_rate_limit(ip, current_user.username, admin=True):
+    rate_limit_allowed, rate_limit_error = _check_rate_limit_for_request(
+        ip,
+        current_user.username,
+        admin=True,
+    )
+    if rate_limit_error is not None:
+        return rate_limit_error
+    if not rate_limit_allowed:
         _audit_login_event(
             request=request,
             action="security.reauth_rate_limited",
@@ -1042,6 +1086,10 @@ async def auth_reauth(request: Request, body: ReauthRequest):
         )
         return _generic_login_error()
 
+    _, rate_limit_error = _clear_rate_limit_for_request(ip, current_user.username)
+    if rate_limit_error is not None:
+        return rate_limit_error
+
     reauthenticated_at = mark_admin_session_reauthenticated(
         user_id=current_user.user_id,
         session_id=current_user.session_id,
@@ -1052,7 +1100,6 @@ async def auth_reauth(request: Request, body: ReauthRequest):
             content={"error": "admin_reauth_required", "message": "Recent admin reauthentication required"},
         )
 
-    clear_rate_limit(ip, current_user.username)
     ttl_seconds = get_admin_reauth_max_age_seconds()
     return {
         "ok": True,
@@ -1324,7 +1371,14 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
         )
 
     ip = get_client_ip(request)
-    if not check_rate_limit(ip, current_user.username, admin=True):
+    rate_limit_allowed, rate_limit_error = _check_rate_limit_for_request(
+        ip,
+        current_user.username,
+        admin=True,
+    )
+    if rate_limit_error is not None:
+        return rate_limit_error
+    if not rate_limit_allowed:
         _audit_login_event(
             request=request,
             action="security.login_rate_limited",
@@ -1396,7 +1450,9 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
             )
             return _generic_login_error()
 
-    clear_rate_limit(ip, current_user.username)
+    _, rate_limit_error = _clear_rate_limit_for_request(ip, current_user.username)
+    if rate_limit_error is not None:
+        return rate_limit_error
     unlock_token = create_admin_unlock_token(
         user_id=current_user.user_id,
         username=current_user.username,
@@ -1508,7 +1564,10 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                         content={"error": "current_required", "message": "重新开启认证前请输入当前密码"},
                     )
                 ip = get_client_ip(request)
-                if not check_rate_limit(ip):
+                rate_limit_allowed, rate_limit_error = _check_rate_limit_for_request(ip)
+                if rate_limit_error is not None:
+                    return rate_limit_error
+                if not rate_limit_allowed:
                     return JSONResponse(
                         status_code=429,
                         content={
@@ -1522,7 +1581,9 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                         status_code=401,
                         content={"error": "invalid_password", "message": "当前密码错误"},
                     )
-                clear_rate_limit(ip)
+                _, rate_limit_error = _clear_rate_limit_for_request(ip)
+                if rate_limit_error is not None:
+                    return rate_limit_error
     else:
         if current_enabled:
             cookie_val = request.cookies.get(COOKIE_NAME)
@@ -1535,7 +1596,10 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                         content={"error": "current_required", "message": "关闭认证前请输入当前密码"},
                     )
                 ip = get_client_ip(request)
-                if not check_rate_limit(ip):
+                rate_limit_allowed, rate_limit_error = _check_rate_limit_for_request(ip)
+                if rate_limit_error is not None:
+                    return rate_limit_error
+                if not rate_limit_allowed:
                     return JSONResponse(
                         status_code=429,
                         content={
@@ -1549,7 +1613,9 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                         status_code=401,
                         content={"error": "invalid_password", "message": "当前密码错误"},
                     )
-                clear_rate_limit(ip)
+                _, rate_limit_error = _clear_rate_limit_for_request(ip)
+                if rate_limit_error is not None:
+                    return rate_limit_error
 
     if target_enabled != current_enabled:
         if not _apply_auth_enabled(target_enabled, request=request):
@@ -1642,7 +1708,14 @@ async def auth_login(request: Request, body: LoginRequest):
 
     ip = get_client_ip(request)
     admin_flow = username == BOOTSTRAP_ADMIN_USERNAME
-    if not check_rate_limit(ip, username, admin=admin_flow):
+    rate_limit_allowed, rate_limit_error = _check_rate_limit_for_request(
+        ip,
+        username,
+        admin=admin_flow,
+    )
+    if rate_limit_error is not None:
+        return rate_limit_error
+    if not rate_limit_allowed:
         _audit_login_event(
             request=request,
             action="security.login_rate_limited",
@@ -1839,8 +1912,13 @@ async def auth_login(request: Request, body: LoginRequest):
     if str(getattr(user_row, "id", "") or "") == BOOTSTRAP_ADMIN_USER_ID:
         repo.ensure_bootstrap_admin_role_assignment()
 
-    had_failures = has_rate_limit_failures(ip, username)
-    clear_rate_limit(ip, username)
+    had_failures, rate_limit_error = _clear_rate_limit_for_request(
+        ip,
+        username,
+        inspect_failures=True,
+    )
+    if rate_limit_error is not None:
+        return rate_limit_error
     if had_failures:
         _audit_login_event(
             request=request,

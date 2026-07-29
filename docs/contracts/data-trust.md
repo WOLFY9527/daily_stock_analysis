@@ -161,6 +161,18 @@ protection fail closed. Admin diagnostics may expose bounded internal state to
 authorized operators, but never raw credentials, security material, provider
 payloads, or unrestricted local paths.
 
+External and private-beta enrollment accepts passwords with at least six
+characters only when they are not numeric-only. This policy is disclosed before
+submission and remains available to assistive technology after validation
+errors. Existing stored credentials remain verifiable; the enrollment policy
+does not create user-specific exceptions.
+
+Login abuse protection uses the durable rate-limit store as its only enforcement
+authority. Store check, write, inspection, or clear failures do not reset into a
+process-local limiter. Risky authentication fails closed with a bounded error,
+while authorized admin diagnostics may report only sanitized process-local
+health observations and never claim those observations are durable state.
+
 ## Consumer Projection
 
 Consumer copy communicates the visible state and a bounded explanation. It

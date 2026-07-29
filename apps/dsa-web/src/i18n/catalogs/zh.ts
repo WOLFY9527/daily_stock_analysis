@@ -2940,6 +2940,7 @@ export const zhCatalog = {
         passwordLabelLogin: String('登录密码'),
         passwordPlaceholderSetup: String('请设置 6 位以上密码'),
         passwordPlaceholderLogin: String('请输入密码'),
+        passwordPolicyDescription: '密码至少 6 位，且不能只包含数字。',
         passwordConfirmLabel: String('确认密码'),
         passwordConfirmPlaceholderSetup: String('再次确认管理员密码'),
         passwordConfirmPlaceholderLogin: String('再次确认登录密码'),

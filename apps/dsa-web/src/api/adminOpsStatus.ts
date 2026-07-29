@@ -169,6 +169,7 @@ export interface AdminOpsStatusResponse {
   dbSizeRisk: AdminOpsStatusSection;
   adminRoleAssignmentStatus: AdminOpsStatusSection;
   durableTaskBacklogStatus: AdminOpsStatusSection;
+  authAbuseProtectionStatus: AdminOpsStatusSection;
   recommendedMaintenanceActions: string[];
   buildProvenance: AdminBuildProvenance;
   launchCockpit: AdminOpsLaunchCockpit;

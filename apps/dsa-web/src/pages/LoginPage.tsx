@@ -47,6 +47,7 @@ type LoginCopy = {
   passwordLabelLogin: string;
   passwordPlaceholderSetup: string;
   passwordPlaceholderLogin: string;
+  passwordPolicyDescription: string;
   passwordConfirmLabel: string;
   passwordConfirmPlaceholderSetup: string;
   passwordConfirmPlaceholderLogin: string;
@@ -106,6 +107,7 @@ function buildLoginCopy(language: LoginLanguage): LoginCopy {
     passwordLabelLogin: auth(language, 'passwordLabelLogin'),
     passwordPlaceholderSetup: auth(language, 'passwordPlaceholderSetup'),
     passwordPlaceholderLogin: auth(language, 'passwordPlaceholderLogin'),
+    passwordPolicyDescription: auth(language, 'passwordPolicyDescription'),
     passwordConfirmLabel: auth(language, 'passwordConfirmLabel'),
     passwordConfirmPlaceholderSetup: auth(language, 'passwordConfirmPlaceholderSetup'),
     passwordConfirmPlaceholderLogin: auth(language, 'passwordConfirmPlaceholderLogin'),
@@ -350,6 +352,15 @@ const LoginPage: React.FC = () => {
               />
             ) : null}
 
+            {isAdminBootstrap || isCreateUserMode ? (
+              <p
+                id="enrollment-password-policy"
+                className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]"
+              >
+                {copy.passwordPolicyDescription}
+              </p>
+            ) : null}
+
             <Input
               id="password"
               type="password"
@@ -361,6 +372,7 @@ const LoginPage: React.FC = () => {
               onChange={(event) => setPassword(event.target.value)}
               disabled={isSubmitting}
               autoComplete={isAdminBootstrap || isCreateUserMode ? 'new-password' : 'current-password'}
+              aria-describedby={isAdminBootstrap || isCreateUserMode ? 'enrollment-password-policy' : undefined}
             />
 
             {isAdminBootstrap || isCreateUserMode ? (

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import DatabaseManager, DurableTaskState, ExecutionLogEvent, ExecutionLogSession
 
 
@@ -536,6 +537,23 @@ def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> No
     _assert_no_sensitive_markers(payload)
 
 
+def test_admin_ops_status_exposes_bounded_auth_abuse_protection_state(app: FastAPI) -> None:
+    auth.reset_auth_rate_limit_store_status()
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    section = response.json()["authAbuseProtectionStatus"]
+    assert section["service"] == "auth_abuse_protection"
+    assert section["status"] == "not_checked"
+    assert section["summary"]["durableStoreRequired"] is True
+    assert section["summary"]["failClosed"] is True
+    assert section["summary"]["processLocalFallback"] is False
+    assert section["readOnly"] is True
+    assert section["deleteAllowed"] is False
+    _assert_no_sensitive_markers(section)
+
+
 def test_admin_ops_status_reports_runtime_log_sink_without_sensitive_paths(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
@@ -615,7 +633,7 @@ def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_
         session.add(
             DurableTaskState(
                 task_id="raw-pending-task-id",
-                owner_user_id="raw-owner-user-id",
+                owner_user_id=BOOTSTRAP_ADMIN_USER_ID,
                 task_type="analysis",
                 status="pending",
                 created_at=old_started_at,
