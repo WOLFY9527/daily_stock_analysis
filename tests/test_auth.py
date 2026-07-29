@@ -18,15 +18,23 @@ import src.auth as auth
 
 
 _DURABLE_RATE_LIMIT_PROCESS_PROBE = """
+import hashlib
 import json
 import os
 import sys
+from pathlib import Path
 
 import src.auth as auth
+from src.storage import DatabaseManager
 
 ip = "198.51.100.67"
 account = "r04-process-proof"
 action = sys.argv[1]
+database = DatabaseManager.get_instance()
+database_path_hash = hashlib.sha256(
+    str(Path(database._engine.url.database).resolve()).encode("utf-8")
+).hexdigest()
+allowed_before_action = auth.check_rate_limit(ip, account)
 if action == "record":
     for _ in range(5):
         auth.record_login_failure(ip, account)
@@ -37,6 +45,8 @@ status = auth.get_auth_rate_limit_store_status()
 print("T693_R04_PROCESS_RESULT=" + json.dumps({
     "action": action,
     "allowed": auth.check_rate_limit(ip, account),
+    "allowedBeforeAction": allowed_before_action,
+    "databasePathSha256": database_path_hash,
     "durableStoreRequired": status["durableStoreRequired"],
     "pid": os.getpid(),
     "processLocalFallback": status["processLocalFallback"],
@@ -294,6 +304,9 @@ class AuthRateLimitTestCase(unittest.TestCase):
                     "PYTHONPATH": str(root),
                 }
             )
+            expected_database_path_hash = hashlib.sha256(
+                str((temporary_root / "limiter.sqlite").resolve()).encode("utf-8")
+            ).hexdigest()
 
             def run_probe(action: str) -> dict[str, object]:
                 result = subprocess.run(
@@ -304,26 +317,31 @@ class AuthRateLimitTestCase(unittest.TestCase):
                     capture_output=True,
                     check=False,
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.returncode, 0, f"rate-limit {action} child exited nonzero")
                 lines = [
                     line.removeprefix("T693_R04_PROCESS_RESULT=")
                     for line in result.stdout.splitlines()
                     if line.startswith("T693_R04_PROCESS_RESULT=")
                 ]
-                self.assertEqual(len(lines), 1, result.stdout)
-                return json.loads(lines[0])
+                self.assertEqual(len(lines), 1, f"rate-limit {action} child emitted invalid sentinel")
+                try:
+                    return json.loads(lines[0])
+                except json.JSONDecodeError:
+                    self.fail(f"rate-limit {action} child emitted invalid JSON")
 
             recorder = run_probe("record")
             verifier = run_probe("check")
 
-        for result in (recorder, verifier):
-            self.assertFalse(result["allowed"])
-            self.assertTrue(result["durableStoreRequired"])
-            self.assertFalse(result["processLocalFallback"])
-            self.assertEqual(result["status"], "available")
-        self.assertEqual(recorder["action"], "record")
-        self.assertEqual(verifier["action"], "check")
-        self.assertNotEqual(recorder["pid"], verifier["pid"])
+            for result in (recorder, verifier):
+                self.assertFalse(result["allowed"])
+                self.assertEqual(result["databasePathSha256"], expected_database_path_hash)
+                self.assertTrue(result["durableStoreRequired"])
+                self.assertFalse(result["processLocalFallback"])
+                self.assertEqual(result["status"], "available")
+            self.assertEqual(recorder["action"], "record")
+            self.assertTrue(recorder["allowedBeforeAction"])
+            self.assertEqual(verifier["action"], "check")
+            self.assertNotEqual(recorder["pid"], verifier["pid"])
 
 
 class AuthSetPasswordTestCase(unittest.TestCase):
