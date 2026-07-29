@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "1d6a8116f3a0334e2c11a53f577f102fbb1b44feb40094c52972d3abc84bc950",
+    "manualSha256": "32ce44241046f1dcbc1a023af0d0951cf228fa2d3461224ee049949f30642ef2",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -452,13 +452,13 @@
       "title": "Development Environment"
     },
     {
-      "bytes": 7886,
+      "bytes": 8141,
       "editable": true,
       "id": "validation-reference",
       "kind": "canonical",
-      "lineCount": 171,
+      "lineCount": 174,
       "path": "docs/development/validation.md",
-      "sha256": "14fb028b38c7c0a8c02f1c9b1db4eae3627fdf24d1cfc85abd18749492ff94f3",
+      "sha256": "297cbe3da9663635824b3af9ad523201beae7b545dd80486095b9b3801c8cfa6",
       "status": "active",
       "summary": "Validation command routing and evidence reference",
       "title": "Validation And Evidence"

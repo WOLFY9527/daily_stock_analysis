@@ -66,8 +66,11 @@ or a skipped browser case is not equivalent.
 `build` is the explicit dependency, typecheck, and bundle phase. The
 `verify-runtime` action is read-only: it validates the canonical `static/`
 manifest, candidate and tree identity, dependency and environment provenance,
-configuration hashes, index, and assets without invoking npm, Node, dependency
-installation, or a frontend build.
+configuration hashes, Vite dotenv source presence and hashes, and the
+manifest's resolved production Vite value hashes, index, and assets without
+invoking npm, Node, dependency installation, or a frontend build. The build
+action snapshots the resolved Vite environment before and after bundling and
+rejects source or resolved-value drift before publishing an artifact.
 
 ## Runtime UAT
 

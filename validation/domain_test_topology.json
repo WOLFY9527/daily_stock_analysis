@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8148,
-      "sha256": "c3f5c96b4f0829b2ee5b7a0d1b04b1e3a79f3c26426dbd6c0bb5e647ab45a06b"
+      "count": 8156,
+      "sha256": "e5860a6d5409709af1803adfbf9e4ea1d415fed8ef4981e4dd33c4806bb99c56"
     },
     "tests": [
       {
@@ -7494,6 +7494,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_rejects_vite_environment_changed_during_build",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_reuses_existing_verified_identity_without_rebuild",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7504,12 +7509,37 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_web_build_artifact.py::test_candidate_rejects_unavailable_worktree_status",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_web_build_artifact.py::test_manifest_regeneration_is_deterministic",
         "domain": "runtime_operator_tooling",
         "baseline": true
       },
       {
         "id": "tests/scripts/test_web_build_artifact.py::test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_runtime_artifact_rejects_changed_vite_env_source",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_runtime_artifact_rejects_missing_vite_resolved_values",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_runtime_artifact_rejects_new_vite_env_source",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_runtime_artifact_rejects_removed_vite_env_source",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7545,6 +7575,16 @@
       },
       {
         "id": "tests/scripts/test_web_build_artifact.py::test_verify_runtime_artifact_rejects_missing_malformed_and_wrong_candidate",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_vite_resolved_environment_binds_unprefixed_expansion",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_vite_resolved_environment_rejects_malformed_resolver_output",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

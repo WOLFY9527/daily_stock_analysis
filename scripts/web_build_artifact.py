@@ -35,6 +35,38 @@ CONFIG_FILES = (
     Path("tsconfig.app.json"),
     Path("tsconfig.node.json"),
 )
+VITE_ENV_FILES = (
+    Path(".env"),
+    Path(".env.local"),
+    Path(".env.production"),
+    Path(".env.production.local"),
+)
+VITE_RESOLVED_ENV_SCRIPT = """
+import { createHash } from "node:crypto";
+import path from "node:path";
+import { resolveConfig } from "vite";
+
+const resolved = await resolveConfig(
+  { root: process.cwd(), logLevel: "silent" },
+  "build",
+  "production",
+  "production",
+);
+const values = Object.fromEntries(
+  Object.keys(resolved.env).sort().map((key) => {
+    const serialized = JSON.stringify({ value: resolved.env[key] });
+    if (typeof serialized !== "string") {
+      throw new TypeError("nonserializable Vite environment value");
+    }
+    return [key, createHash("sha256").update(serialized).digest("hex")];
+  }),
+);
+process.stdout.write(JSON.stringify({
+  mode: resolved.mode,
+  envDirMatchesWebRoot: path.resolve(resolved.envDir) === path.resolve(process.cwd()),
+  values,
+}));
+"""
 
 
 @dataclass(frozen=True)
@@ -52,9 +84,11 @@ def _run(repo_root: Path, *args: str, capture: bool = True) -> subprocess.Comple
     return subprocess.run(command, cwd=repo_root, check=False, capture_output=capture, text=True)
 
 
-def _git(repo_root: Path, *args: str) -> str:
+def _git(repo_root: Path, *args: str) -> tuple[str | None, bool]:
     result = _run(repo_root, "git", *args)
-    return result.stdout.strip() if result.returncode == 0 else ""
+    if result.returncode != 0:
+        return None, False
+    return result.stdout.strip(), True
 
 
 def _sha256_file(path: Path) -> str | None:
@@ -93,17 +127,23 @@ def _version(repo_root: Path, *command: str) -> str | None:
 
 
 def _candidate(repo_root: Path, expected_sha: str | None = None) -> tuple[dict[str, Any], list[str]]:
-    sha = _git(repo_root, "rev-parse", "HEAD")
-    tree = _git(repo_root, "rev-parse", "HEAD^{tree}")
-    status = _git(repo_root, "status", "--porcelain")
+    sha, sha_available = _git(repo_root, "rev-parse", "HEAD")
+    tree, tree_available = _git(repo_root, "rev-parse", "HEAD^{tree}")
+    status, status_available = _git(repo_root, "status", "--porcelain")
     errors: list[str] = []
-    if status:
+    if not status_available:
+        errors.append("worktree_status_unavailable")
+    elif status:
         errors.append("worktree_dirty")
-    if not sha or not tree:
+    if not sha_available or not tree_available or not sha or not tree:
         errors.append("candidate_unavailable")
     if expected_sha and sha != expected_sha:
         errors.append("candidate_sha_mismatch")
-    return {"commit": sha or None, "tree": tree or None, "dirty": bool(status)}, errors
+    return {
+        "commit": sha or None,
+        "tree": tree or None,
+        "dirty": bool(status) if status_available else None,
+    }, errors
 
 
 def _config_hashes(web_root: Path) -> tuple[dict[str, str], list[str]]:
@@ -116,6 +156,54 @@ def _config_hashes(web_root: Path) -> tuple[dict[str, str], list[str]]:
         else:
             hashes[relative.as_posix()] = digest
     return hashes, errors
+
+
+def _vite_env_file_hashes(web_root: Path) -> dict[str, dict[str, str | bool | None]]:
+    """Bind Vite's dotenv sources without parsing or exposing their values."""
+    hashes: dict[str, dict[str, str | bool | None]] = {}
+    for relative in VITE_ENV_FILES:
+        digest = _sha256_file(web_root / relative)
+        hashes[relative.as_posix()] = {
+            "present": digest is not None,
+            "sha256": digest,
+        }
+    return hashes
+
+
+def _valid_vite_resolved_values(payload: Any) -> bool:
+    return (
+        isinstance(payload, dict)
+        and set(payload) == {"mode", "envDirMatchesWebRoot", "values"}
+        and payload.get("mode") == "production"
+        and payload.get("envDirMatchesWebRoot") is True
+        and isinstance(payload.get("values"), dict)
+        and bool(payload["values"])
+        and all(
+            isinstance(key, str)
+            and bool(key)
+            and re.fullmatch(r"[0-9a-f]{64}", str(value or ""))
+            for key, value in payload["values"].items()
+        )
+    )
+
+
+def _vite_environment_contract(web_root: Path) -> tuple[dict[str, Any], list[str]]:
+    """Capture Vite's resolved production inputs without exposing their values."""
+    sources = _vite_env_file_hashes(web_root)
+    result = _run(web_root, "node", "--input-type=module", "--eval", VITE_RESOLVED_ENV_SCRIPT)
+    try:
+        resolved_values = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        resolved_values = None
+    if result.returncode != 0 or not _valid_vite_resolved_values(resolved_values):
+        return {
+            "viteEnvFiles": sources,
+            "viteResolvedValues": {},
+        }, ["vite_environment_resolution_failed"]
+    return {
+        "viteEnvFiles": sources,
+        "viteResolvedValues": resolved_values,
+    }, []
 
 
 def _managed_environment_identity(repo_root: Path) -> tuple[dict[str, Any], list[str]]:
@@ -163,12 +251,20 @@ def _managed_environment_identity(repo_root: Path) -> tuple[dict[str, Any], list
     return identity, sorted(set(errors))
 
 
-def _environment_contract(repo_root: Path) -> tuple[dict[str, Any], list[str]]:
+def _environment_contract(
+    repo_root: Path,
+    *,
+    vite_environment: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     managed, errors = _managed_environment_identity(repo_root)
+    if vite_environment is None:
+        vite_environment, vite_errors = _vite_environment_contract(repo_root / WEB_RELATIVE)
+        errors.extend(vite_errors)
     keys = ["NODE_ENV", *sorted(key for key in os.environ if key.startswith("VITE_"))]
     return {
         "managed": managed,
         "buildVariables": {key: _sha256_json({"value": os.environ.get(key)}) for key in keys},
+        **vite_environment,
     }, errors
 
 
@@ -215,6 +311,7 @@ def generate_manifest(
     *,
     static_root: Path | str | None = None,
     expected_sha: str | None = None,
+    environment: dict[str, Any] | None = None,
 ) -> ArtifactResult:
     repo = Path(repo_root).resolve()
     web_root = repo / WEB_RELATIVE
@@ -224,8 +321,9 @@ def generate_manifest(
     errors.extend(integrity_errors)
     config_hashes, config_errors = _config_hashes(web_root)
     errors.extend(config_errors)
-    environment, environment_errors = _environment_contract(repo)
-    errors.extend(environment_errors)
+    if environment is None:
+        environment, environment_errors = _environment_contract(repo)
+        errors.extend(environment_errors)
     index_path = output_root / "index.html"
     if not index_path.is_file():
         errors.append("artifact_index_missing")
@@ -330,6 +428,20 @@ def _build_artifact(
             "--outDir",
             str(staged_root),
         )
+        pre_vite_environment, vite_errors = _vite_environment_contract(repo / WEB_RELATIVE)
+        if vite_errors:
+            return ArtifactResult(
+                False,
+                {"candidate": candidate, "commands": command_log},
+                sorted(set(vite_errors)),
+            )
+        environment, environment_errors = _environment_contract(repo, vite_environment=pre_vite_environment)
+        if environment_errors:
+            return ArtifactResult(
+                False,
+                {"candidate": candidate, "commands": command_log},
+                sorted(set(environment_errors)),
+            )
         result = _run(repo, *command, capture=False)
         command_log.append(
             {
@@ -339,6 +451,20 @@ def _build_artifact(
         )
         if result.returncode != 0:
             return ArtifactResult(False, {"candidate": candidate, "commands": command_log}, ["web_build_command_failed"])
+
+        post_vite_environment, post_vite_errors = _vite_environment_contract(repo / WEB_RELATIVE)
+        if post_vite_errors:
+            return ArtifactResult(
+                False,
+                {"candidate": candidate, "commands": command_log},
+                sorted(set(post_vite_errors)),
+            )
+        if post_vite_environment != pre_vite_environment:
+            return ArtifactResult(
+                False,
+                {"candidate": candidate, "commands": command_log},
+                ["vite_environment_changed_during_build"],
+            )
 
         from scripts.uat_fresh_build_verifier import read_backend_info, write_frontend_build_identity
 
@@ -350,7 +476,12 @@ def _build_artifact(
         if not legacy_identity.ok:
             return ArtifactResult(False, legacy_identity.payload, legacy_identity.error_codes)
 
-        generated = generate_manifest(repo, static_root=staged_root, expected_sha=expected_sha)
+        generated = generate_manifest(
+            repo,
+            static_root=staged_root,
+            expected_sha=expected_sha,
+            environment=environment,
+        )
         if not generated.ok:
             return ArtifactResult(False, generated.payload, generated.error_codes)
         manifest = {**generated.payload, "commands": command_log}
@@ -429,9 +560,11 @@ def prepare_playwright_artifact(
         expected_sha=expected_sha,
         prepared_typecheck=typecheck,
     )
+    artifact_environment = prepared.payload.get("environment") if isinstance(prepared.payload, dict) else None
     payload = {
         "candidate": candidate,
-        "environment": environment,
+        "environment": artifact_environment,
+        "environmentPreflight": environment,
         "typecheck": typecheck.payload,
         "artifact": prepared.payload,
     }
@@ -458,6 +591,8 @@ def _manifest_provenance_errors(manifest: dict[str, Any]) -> list[str]:
     environment = manifest.get("environment")
     managed = environment.get("managed") if isinstance(environment, dict) else None
     components = managed.get("componentFingerprints") if isinstance(managed, dict) else None
+    vite_env_files = environment.get("viteEnvFiles") if isinstance(environment, dict) else None
+    vite_resolved_values = environment.get("viteResolvedValues") if isinstance(environment, dict) else None
     if (
         not isinstance(environment, dict)
         or not isinstance(environment.get("buildVariables"), dict)
@@ -485,6 +620,24 @@ def _manifest_provenance_errors(manifest: dict[str, Any]) -> list[str]:
         )
         for component in ("python", "web", "browser", "rg")
     ):
+        errors.append("artifact_provenance_invalid")
+
+    if not isinstance(vite_env_files, dict) or set(vite_env_files) != {path.as_posix() for path in VITE_ENV_FILES}:
+        errors.append("artifact_provenance_invalid")
+    else:
+        for source in vite_env_files.values():
+            if not isinstance(source, dict) or set(source) != {"present", "sha256"}:
+                errors.append("artifact_provenance_invalid")
+                break
+            present = source.get("present")
+            digest = source.get("sha256")
+            if not isinstance(present, bool) or (present and not re.fullmatch(r"[0-9a-f]{64}", str(digest or ""))) or (
+                not present and digest is not None
+            ):
+                errors.append("artifact_provenance_invalid")
+                break
+
+    if not _valid_vite_resolved_values(vite_resolved_values):
         errors.append("artifact_provenance_invalid")
 
     commands = manifest.get("commands")
@@ -548,6 +701,10 @@ def _verify_manifest_artifact(
     errors.extend(config_errors)
     if not isinstance(configuration, dict) or configuration.get("sha256") != config_hashes:
         errors.append("artifact_config_mismatch")
+
+    environment = manifest.get("environment")
+    if not isinstance(environment, dict) or environment.get("viteEnvFiles") != _vite_env_file_hashes(web_root):
+        errors.append("artifact_vite_env_mismatch")
 
     static_root = resolved_artifact.parent
     index_path = static_root / "index.html"
