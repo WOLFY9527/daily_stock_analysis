@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "32ce44241046f1dcbc1a023af0d0951cf228fa2d3461224ee049949f30642ef2",
+    "manualSha256": "13dfe620e5494380ba186fba34ce01c1d6fab769fbe2855ca6d8efd927ed417c",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -464,13 +464,13 @@
       "title": "Validation And Evidence"
     },
     {
-      "bytes": 4460,
+      "bytes": 4941,
       "editable": true,
       "id": "database-operations",
       "kind": "canonical",
-      "lineCount": 97,
+      "lineCount": 105,
       "path": "docs/operations/database.md",
-      "sha256": "3a16ef609a753b620f85e68f15063a42ea14beb65ea05e3402112878b7064c61",
+      "sha256": "a8e92511388e6d66c664b1395e5c71b1b0a5b50f378c7ff9eaf2317d0b69ee55",
       "status": "active",
       "summary": "Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook",
       "title": "Database Operations"

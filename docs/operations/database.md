@@ -84,6 +84,14 @@ and replay contracts, not cleanup authority. The administrator status and
 `scripts/db_retention_preview_report.py` expose bounded aggregate evidence
 without task IDs, owner IDs, row payloads, database paths, or mutation.
 
+When no operator-supplied database is available, or either required durable-task
+table is missing, durable capacity is `not_evaluated`: its candidate counts and
+estimated bytes remain null rather than being reported as zero. The retention
+checker emits `NOT_EVALUATED` for that valid policy-only or incomplete-storage
+state. It emits `EVIDENCE-READY` only after both durable-task tables were read
+through the report's read-only inspection path; neither status authorizes
+cleanup.
+
 Automatic durable-task deletion is disabled. Cleanup remains blocked until a
 restore qualification and explicit operator approval both exist; no repository
 runtime or report command currently performs durable-task deletion. Capacity

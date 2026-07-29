@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8157,
-      "sha256": "5be1408dd163e17d0142e5cf7f2a3701be45f81c58a7d21944a4c956c179fd0f"
+      "count": 8159,
+      "sha256": "19223045739b0b7b0da3da40f1c051e6f78b0710b5d7f37e56a25a41766f81b3"
     },
     "tests": [
       {
@@ -15439,6 +15439,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_healthy_durable_capacity_without_all_required_tables",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_missing_required_posture_without_echoing_values",
         "domain": "database_storage_migrations",
         "baseline": true
@@ -15459,9 +15464,9 @@
         "baseline": true
       },
       {
-        "id": "tests/test_db_retention_preview_report.py::test_generated_report_is_accepted_as_evidence_ready",
+        "id": "tests/test_db_retention_preview_report.py::test_incomplete_durable_tables_are_not_evaluated",
         "domain": "database_storage_migrations",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_db_retention_preview_report.py::test_leaf_tables_are_reported_as_parent_join_protected",
@@ -15472,6 +15477,11 @@
         "id": "tests/test_db_retention_preview_report.py::test_non_admin_domains_emit_required_dry_run_evidence_posture",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_db_retention_preview_report.py::test_policy_only_report_is_valid_but_not_evaluated",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_db_retention_preview_report.py::test_portfolio_source_of_truth_is_explicitly_protected",
@@ -41054,6 +41064,7 @@
       "tests/test_data_coverage_surface_snapshot.py::test_snapshot_consumer_summary_uses_only_bounded_product_state_vocabulary",
       "tests/test_data_coverage_surface_snapshot.py::test_snapshot_helper_module_is_pure_and_inert",
       "tests/test_data_coverage_surface_snapshot.py::test_surface_or_audience_disagreement_fails_closed",
+      "tests/test_db_retention_preview_report.py::test_generated_report_is_accepted_as_evidence_ready",
       "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-confidence]",
       "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-importance_score]",
       "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[1.01-confidence]",

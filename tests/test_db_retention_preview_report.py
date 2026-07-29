@@ -261,7 +261,10 @@ def test_default_report_is_policy_only_and_destructive_actions_are_disabled() ->
         "policyOwner": "storage_operations",
         "escalationPath": "storage_capacity_review",
     }
-    assert durable["capacityStatus"] == "ok"
+    assert durable["capacityStatus"] == "not_evaluated"
+    assert durable["capacityReason"] == "database_not_supplied"
+    assert durable["dryRunCandidateCount"] is None
+    assert durable["matchedRowCount"] is None
     assert durable["recoveryPolicy"] == "expired_leases_reclaimed_by_compare_and_set"
     assert durable["replayPolicy"] == "owner_scoped_sequence_cursor"
     assert durable["cleanupApproval"] == {
@@ -301,7 +304,7 @@ def test_non_admin_domains_emit_required_dry_run_evidence_posture() -> None:
         assert domain["publicLaunchApproved"] is False
 
 
-def test_generated_report_is_accepted_as_evidence_ready(tmp_path: Path) -> None:
+def test_policy_only_report_is_valid_but_not_evaluated(tmp_path: Path) -> None:
     artifact = tmp_path / "retention-evidence.json"
     artifact.write_text(json.dumps(build_report()), encoding="utf-8")
 
@@ -311,10 +314,34 @@ def test_generated_report_is_accepted_as_evidence_ready(tmp_path: Path) -> None:
     assert findings == []
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["finalStatus"] == "EVIDENCE-READY"
+    assert payload["finalStatus"] == "NOT_EVALUATED"
     assert payload["publicLaunchApproved"] is False
     assert "launch-approved" not in result.stdout.lower()
     assert "production-ready" not in result.stdout.lower()
+
+
+def test_incomplete_durable_tables_are_not_evaluated(tmp_path: Path) -> None:
+    db_path = tmp_path / "incomplete-durable-preview.db"
+    with _connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE durable_task_states (id INTEGER PRIMARY KEY, created_at TEXT, updated_at TEXT)"
+        )
+
+    report = build_report(sqlite_db=db_path)
+    durable = _domain(report, "durable_task_state_progress")
+    artifact = tmp_path / "incomplete-durable-evidence.json"
+    artifact.write_text(json.dumps(report), encoding="utf-8")
+    result = _check_artifact(artifact)
+
+    assert durable["capacityStatus"] == "not_evaluated"
+    assert durable["capacityReason"] == "required_durable_task_tables_missing"
+    assert durable["dryRunCandidateCount"] is None
+    assert durable["matchedRowCount"] is None
+    assert durable["matchedTableCount"] == 1
+    assert durable["missingTableCount"] == 1
+    assert check_evidence(report) == []
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["finalStatus"] == "NOT_EVALUATED"
 
 
 def test_checker_rejects_missing_required_posture_without_echoing_values(tmp_path: Path) -> None:
@@ -362,6 +389,22 @@ def test_checker_rejects_destructive_or_launch_approval_claims(tmp_path: Path) -
     assert "domains[provider_quota_circuit_probe_events].rawSqlDump:unsafe_sql_or_dump_key" in payload["findings"]
 
 
+def test_checker_rejects_healthy_durable_capacity_without_all_required_tables() -> None:
+    report = build_report()
+    durable = _domain(report, "durable_task_state_progress")
+    durable["capacityStatus"] = "ok"
+    durable.pop("capacityReason")
+    durable["dryRunCandidateCount"] = 0
+    durable["matchedRowCount"] = 0
+
+    findings = check_evidence(report)
+
+    assert (
+        "domains[durable_task_state_progress].capacityStatus:complete_durable_tables_required"
+        in findings
+    )
+
+
 def test_checker_rejects_unqualified_durable_cleanup_approval(tmp_path: Path) -> None:
     report = build_report()
     durable = _domain(report, "durable_task_state_progress")
@@ -395,6 +438,8 @@ def test_sqlite_preview_counts_only_aggregates_and_does_not_mutate_rows(tmp_path
     assert admin_logs["newestCreatedAt"] == "2025-12-31T00:01:00Z"
     durable = _domain(report, "durable_task_state_progress")
     assert durable["matchedRowCount"] == 2
+    assert durable["capacityStatus"] == "ok"
+    assert "capacityReason" not in durable
     assert durable["oldestCreatedAt"] == "2026-01-01T00:00:00Z"
     assert durable["newestCreatedAt"] == "2026-01-01T00:01:00Z"
     llm = _domain(report, "llm_usage_cost_ledger")
@@ -405,6 +450,13 @@ def test_sqlite_preview_counts_only_aggregates_and_does_not_mutate_rows(tmp_path
     with _connect(db_path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM durable_task_progress_events").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM portfolio_trades").fetchone()[0] == 1
+
+    artifact = tmp_path / "complete-durable-evidence.json"
+    artifact.write_text(json.dumps(report), encoding="utf-8")
+    result = _check_artifact(artifact)
+    assert check_evidence(report) == []
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["finalStatus"] == "EVIDENCE-READY"
 
 
 def test_portfolio_source_of_truth_is_explicitly_protected(tmp_path: Path) -> None:

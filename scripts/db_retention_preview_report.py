@@ -554,13 +554,32 @@ def _preview_domain(conn: sqlite3.Connection | None, domain_policy: DomainPolicy
     }
     if domain_policy.domain == "durable_task_state_progress":
         policy = DurableTaskRetentionPolicy()
-        total_rows = matched_row_count
-        if total_rows >= policy.capacity_critical_rows:
-            capacity_status = "critical"
-        elif total_rows >= policy.capacity_warning_rows:
-            capacity_status = "warning"
+        capacity_not_evaluated = conn is None or bool(missing_tables)
+        if capacity_not_evaluated:
+            capacity_status = "not_evaluated"
+            capacity_reason = (
+                "database_not_supplied"
+                if conn is None
+                else "required_durable_task_tables_missing"
+            )
+            payload.update(
+                dryRunCandidateCount=None,
+                matchedRowCount=None,
+                estimatedBytes=None,
+                candidateWindow={
+                    "oldest": None,
+                    "newest": None,
+                    "source": "not_evaluated_missing_durable_capacity_evidence",
+                },
+            )
         else:
-            capacity_status = "ok"
+            total_rows = matched_row_count
+            if total_rows >= policy.capacity_critical_rows:
+                capacity_status = "critical"
+            elif total_rows >= policy.capacity_warning_rows:
+                capacity_status = "warning"
+            else:
+                capacity_status = "ok"
         payload.update(
             retentionPolicy=policy.public_contract(),
             capacityStatus=capacity_status,
@@ -574,6 +593,8 @@ def _preview_domain(conn: sqlite3.Connection | None, domain_policy: DomainPolicy
                 "deleteAllowed": False,
             },
         )
+        if capacity_not_evaluated:
+            payload["capacityReason"] = capacity_reason
         payload["sanitizedAuditSummary"].update(
             eventType="durable_task_retention_preview_generated",
             outcome="read_only_preview",
@@ -652,6 +673,25 @@ def check_evidence(report: dict[str, Any]) -> list[str]:
     return sorted(dict.fromkeys(findings))
 
 
+def qualification_status(report: dict[str, Any], findings: list[str] | None = None) -> str:
+    """Classify valid evidence without treating missing durable capacity as readiness."""
+    if findings is None:
+        findings = check_evidence(report)
+    if findings:
+        return "REJECTED"
+    durable = next(
+        (
+            item
+            for item in report.get("domains", [])
+            if isinstance(item, dict) and item.get("domain") == "durable_task_state_progress"
+        ),
+        None,
+    )
+    if isinstance(durable, dict) and durable.get("capacityStatus") == "not_evaluated":
+        return "NOT_EVALUATED"
+    return "EVIDENCE-READY"
+
+
 def _check_domain_evidence(domain: dict[str, Any], findings: list[str]) -> None:
     domain_name = str(domain.get("domain", "unknown"))
     prefix = f"domains[{domain_name}]"
@@ -722,8 +762,29 @@ def _check_durable_task_retention_evidence(
     expected_policy = DurableTaskRetentionPolicy().public_contract()
     if policy != expected_policy:
         findings.append(f"{prefix}.retentionPolicy:mismatch")
-    if domain.get("capacityStatus") not in {"ok", "warning", "critical"}:
+    capacity_status = domain.get("capacityStatus")
+    missing_table_count = domain.get("missingTableCount")
+    if capacity_status not in {"ok", "warning", "critical", "not_evaluated"}:
         findings.append(f"{prefix}.capacityStatus:invalid")
+    elif capacity_status == "not_evaluated":
+        if domain.get("capacityReason") not in {
+            "database_not_supplied",
+            "required_durable_task_tables_missing",
+        }:
+            findings.append(f"{prefix}.capacityReason:invalid_not_evaluated_reason")
+        if missing_table_count in (None, 0):
+            findings.append(f"{prefix}.missingTableCount:not_evaluated_requires_missing_table")
+        for key in ("dryRunCandidateCount", "matchedRowCount", "estimatedBytes"):
+            if domain.get(key) is not None:
+                findings.append(f"{prefix}.{key}:not_evaluated_must_be_null")
+    else:
+        if missing_table_count != 0:
+            findings.append(f"{prefix}.capacityStatus:complete_durable_tables_required")
+        if "capacityReason" in domain:
+            findings.append(f"{prefix}.capacityReason:unexpected_for_inspected_capacity")
+        for key in ("dryRunCandidateCount", "matchedRowCount"):
+            if not isinstance(domain.get(key), int):
+                findings.append(f"{prefix}.{key}:inspected_capacity_requires_integer")
     if domain.get("recoveryPolicy") != "expired_leases_reclaimed_by_compare_and_set":
         findings.append(f"{prefix}.recoveryPolicy:mismatch")
     if domain.get("replayPolicy") != "owner_scoped_sequence_cursor":
@@ -868,9 +929,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_artifact is not None:
         payload = _load_json_artifact(args.check_artifact)
         findings = check_evidence(payload)
+        final_status = qualification_status(payload, findings)
         result = {
             "policyVersion": payload.get("policyVersion", POLICY_VERSION),
-            "finalStatus": "REJECTED" if findings else "EVIDENCE-READY",
+            "finalStatus": final_status,
             "publicLaunchApproved": False,
             "domainsCovered": sorted(
                 item.get("domain")
@@ -881,7 +943,7 @@ def main(argv: list[str] | None = None) -> int:
         }
         json.dump(result, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True)
         sys.stdout.write("\n")
-        return 1 if findings else 0
+        return 1 if final_status == "REJECTED" else 0
 
     report = build_report(sqlite_db=args.sqlite_db)
     json.dump(report, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True)

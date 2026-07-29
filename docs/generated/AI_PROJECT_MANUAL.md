@@ -78,7 +78,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | daafda4c2ccb |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 297cbe3da966 |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
-| [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | 3a16ef609a75 |
+| [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | a8e92511388e |
 | [docs/operations/historical-ohlcv-seed.md](../operations/historical-ohlcv-seed.md) | canonical | active | yes | Local historical OHLCV seed and verification runbook | d4d4706d3d51 |
 | [docs/operations/operator-evidence.md](../operations/operator-evidence.md) | canonical | active | yes | Sanitized offline operator-evidence runbook | a819a54cae32 |
 | [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | b12def381196 |
