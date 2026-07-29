@@ -216,15 +216,9 @@ def verify_frontend_static_build(**kwargs: Any) -> Any:
 
 
 def verify_web_build_artifact(repo_root: Path, artifact_path: Path, expected_sha: str | None) -> Any:
-    from scripts.web_build_artifact import verify_artifact
+    from scripts.web_build_artifact import verify_runtime_artifact
 
-    return verify_artifact(repo_root, artifact_path, expected_sha=expected_sha)
-
-
-def build_web_build_artifact(repo_root: Path, artifact_path: Path, expected_sha: str | None) -> Any:
-    from scripts.web_build_artifact import build_artifact
-
-    return build_artifact(repo_root, artifact_path, expected_sha=expected_sha)
+    return verify_runtime_artifact(repo_root, artifact_path, expected_sha=expected_sha)
 
 
 def prepare_canonical_web_artifact(
@@ -255,22 +249,13 @@ def prepare_canonical_web_artifact(
             "buildInvoked": False,
             "reasonCodes": list(result.error_codes),
         }
-    built = build_web_build_artifact(repo_root, canonical, expected_sha)
-    if not built.ok:
-        return built, {
-            "action": "artifact_build_failed",
-            "artifactPath": str(canonical),
-            "canonicalPath": str(canonical),
-            "buildInvoked": True,
-            "reasonCodes": list(built.error_codes),
-        }
-    verified = verify_web_build_artifact(repo_root, canonical, expected_sha)
-    return verified, {
-        "action": "built_and_verified_artifact" if verified.ok else "artifact_verification_failed",
+    result = ArtifactResult(False, {}, ["web_artifact_missing"])
+    return result, {
+        "action": "artifact_missing",
         "artifactPath": str(canonical),
         "canonicalPath": str(canonical),
-        "buildInvoked": True,
-        "reasonCodes": list(verified.error_codes),
+        "buildInvoked": False,
+        "reasonCodes": list(result.error_codes),
     }
 
 

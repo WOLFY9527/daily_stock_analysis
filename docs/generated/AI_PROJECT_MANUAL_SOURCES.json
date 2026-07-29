@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "a203d2922de4d6b6023dfe94bfd00ee3db872c1a39926239903d523daded4cde",
+    "manualSha256": "375526c6b04390bdc87c66985e763393bb6f11e0d1f28825f8df5f6df4d57f8e",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -308,25 +308,25 @@
       "title": "AGENTS.md"
     },
     {
-      "bytes": 4104,
+      "bytes": 4518,
       "editable": true,
       "id": "human-entry",
       "kind": "canonical",
-      "lineCount": 116,
+      "lineCount": 125,
       "path": "README.md",
-      "sha256": "2fcc0c10e497948cab9a48d20b8351a07ac47cbee7738d0bde8eacdc6fe37d1c",
+      "sha256": "93d0ca43d82232ec41013e212900b815926e86a672d5716a59e522390725b359",
       "status": "active",
       "summary": "Human product orientation and quick start",
       "title": "WolfyStock"
     },
     {
-      "bytes": 4337,
+      "bytes": 4710,
       "editable": true,
       "id": "system-architecture",
       "kind": "canonical",
-      "lineCount": 86,
+      "lineCount": 90,
       "path": "docs/architecture/overview.md",
-      "sha256": "cfe458a5a97cfbf0aeb828d56abd194ffdbf150e25b886848c1e5f93db31ca91",
+      "sha256": "3e3e0b18e3162831ea2ac0e51348d678b35cae26a1bd818b4dce8720b3becf94",
       "status": "active",
       "summary": "System map, runtime entrypoints, and component ownership",
       "title": "System Architecture"
@@ -440,25 +440,25 @@
       "title": "Consumer Frontend Design Contract"
     },
     {
-      "bytes": 9186,
+      "bytes": 9488,
       "editable": true,
       "id": "development-environment",
       "kind": "canonical",
-      "lineCount": 229,
+      "lineCount": 234,
       "path": "docs/development/environment.md",
-      "sha256": "8f1cc32526f288de2525db6825a31db4c5c721f94c0b2d38b20d8dd0e458c2fd",
+      "sha256": "daafda4c2ccb3fac2c4c78e6fe9c57ee6e4d8e5508e95e41ad8d451b8aa63e53",
       "status": "active",
       "summary": "Dependency, bootstrap, target, snapshot, runtime, and configuration authority",
       "title": "Development Environment"
     },
     {
-      "bytes": 7232,
+      "bytes": 7886,
       "editable": true,
       "id": "validation-reference",
       "kind": "canonical",
-      "lineCount": 162,
+      "lineCount": 171,
       "path": "docs/development/validation.md",
-      "sha256": "5ca0c15610258121fa05ab29d2463e6f4771cba7ebde32a3e0f0ea3cb8b58e6b",
+      "sha256": "14fb028b38c7c0a8c02f1c9b1db4eae3627fdf24d1cfc85abd18749492ff94f3",
       "status": "active",
       "summary": "Validation command routing and evidence reference",
       "title": "Validation And Evidence"

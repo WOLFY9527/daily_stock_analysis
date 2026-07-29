@@ -703,8 +703,6 @@ def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch,
         "verify_web_build_artifact",
         lambda *_args: type("Result", (), {"ok": False, "payload": {}, "error_codes": ["artifact_asset_mismatch"], "warning_codes": []})(),
     )
-    monkeypatch.setattr(harness, "build_web_build_artifact", lambda *_args: pytest.fail("invalid artifact must not rebuild"))
-
     exit_code, evidence = harness.run_harness(
         repo_root=tmp_path,
         expected_sha="45b6965d",
@@ -729,12 +727,6 @@ def test_prepare_canonical_web_artifact_reuses_verified_identity_without_build(m
         {"ok": True, "payload": {"fingerprint": "f" * 64}, "error_codes": [], "warning_codes": []},
     )()
     monkeypatch.setattr(harness, "verify_web_build_artifact", lambda *_args: verified)
-    monkeypatch.setattr(
-        harness,
-        "build_web_build_artifact",
-        lambda *_args: pytest.fail("valid artifact must not rebuild"),
-    )
-
     result, evidence = harness.prepare_canonical_web_artifact(
         tmp_path,
         expected_sha="45b6965d",
@@ -747,28 +739,13 @@ def test_prepare_canonical_web_artifact_reuses_verified_identity_without_build(m
     assert evidence["buildInvoked"] is False
 
 
-def test_prepare_canonical_web_artifact_builds_missing_identity_then_verifies(monkeypatch, tmp_path: Path) -> None:
+def test_prepare_canonical_web_artifact_rejects_missing_identity_without_build(monkeypatch, tmp_path: Path) -> None:
     artifact_path = tmp_path / "static" / ".wolfystock-web-build-artifact.json"
-    built = type("Result", (), {"ok": True, "payload": {}, "error_codes": [], "warning_codes": []})()
-    verified = type(
-        "Result",
-        (),
-        {"ok": True, "payload": {"fingerprint": "f" * 64}, "error_codes": [], "warning_codes": []},
-    )()
-    calls: list[str] = []
-
-    def build(*_args):
-        calls.append("build")
-        artifact_path.parent.mkdir(parents=True)
-        artifact_path.write_text("{}\n", encoding="utf-8")
-        return built
-
-    def verify(*_args):
-        calls.append("verify")
-        return verified
-
-    monkeypatch.setattr(harness, "build_web_build_artifact", build)
-    monkeypatch.setattr(harness, "verify_web_build_artifact", verify)
+    monkeypatch.setattr(
+        harness,
+        "verify_web_build_artifact",
+        lambda *_args: pytest.fail("a missing artifact cannot be verified"),
+    )
 
     result, evidence = harness.prepare_canonical_web_artifact(
         tmp_path,
@@ -776,10 +753,11 @@ def test_prepare_canonical_web_artifact_builds_missing_identity_then_verifies(mo
         requested_path=artifact_path,
     )
 
-    assert result is verified
-    assert calls == ["build", "verify"]
-    assert evidence["action"] == "built_and_verified_artifact"
-    assert evidence["buildInvoked"] is True
+    assert result.ok is False
+    assert result.error_codes == ["web_artifact_missing"]
+    assert evidence["action"] == "artifact_missing"
+    assert evidence["buildInvoked"] is False
+    assert evidence["reasonCodes"] == ["web_artifact_missing"]
 
 
 def test_prepare_canonical_web_artifact_rejects_mismatch_without_build(monkeypatch, tmp_path: Path) -> None:
@@ -797,12 +775,6 @@ def test_prepare_canonical_web_artifact_rejects_mismatch_without_build(monkeypat
         },
     )()
     monkeypatch.setattr(harness, "verify_web_build_artifact", lambda *_args: failed)
-    monkeypatch.setattr(
-        harness,
-        "build_web_build_artifact",
-        lambda *_args: pytest.fail("mismatched artifact must not be replaced"),
-    )
-
     result, evidence = harness.prepare_canonical_web_artifact(
         tmp_path,
         expected_sha="45b6965d",

@@ -67,12 +67,16 @@ A failure or bounded startup timeout exits the main process with code 1 before
 bot clients, analysis, scheduling, or a keepalive loop starts. Desktop, Docker,
 and the UAT harness observe that same process-level signal.
 
-Frontend asset preparation is a separate degradation boundary.
-`prepare_webui_frontend_assets()` returning `False` logs a warning and leaves
-the API plus fallback root page available. A bound API returning readiness 503
-is operationally not ready; it is not mislabeled as an import, lifespan, or
-bind failure. Normal return and interactive shutdown request uvicorn shutdown
-and join its managed thread.
+Frontend asset preparation is a separate degradation boundary for ordinary
+`main.py --serve`: `prepare_webui_frontend_assets()` returning `False` logs a
+warning and leaves the API plus fallback root page available. In contrast,
+`main.py --serve-only`, direct `server:app` startup, and the UAT runtime harness
+are immutable-artifact consumers. They verify the separately built canonical
+artifact without invoking dependency or build tools and refuse before runtime
+bind when its manifest, candidate, provenance, configuration, index, or assets
+do not match. A bound API returning readiness 503 is operationally not ready;
+it is not mislabeled as an import, lifespan, or bind failure. Normal return and
+interactive shutdown request uvicorn shutdown and join its managed thread.
 
 ## Public Contract Changes
 

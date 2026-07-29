@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8136,
-      "sha256": "3dc01d7836ea986bc6093b9b492fe15a30cd065484cc8cd3a9f3dbaca01152d6"
+      "count": 8141,
+      "sha256": "0063e5acbc3cd0efd89b3969254fd5ddd75beb1fe29ab795dd454097dfad1d32"
     },
     "tests": [
       {
@@ -7094,12 +7094,12 @@
         "baseline": true
       },
       {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_builds_missing_identity_then_verifies",
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_rejects_mismatch_without_build",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_rejects_mismatch_without_build",
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_rejects_missing_identity_without_build",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7532,6 +7532,16 @@
         "id": "tests/scripts/test_web_build_artifact.py::test_verify_artifact_rejects_manifest_tampering",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_verify_runtime_artifact_is_read_only_and_never_invokes_dependency_tools",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_verify_runtime_artifact_rejects_missing_malformed_and_wrong_candidate",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_wolfy_browser_tools.py::test_browser_contract_is_derived_from_reviewed_web_dependency_graph",
@@ -20984,7 +20994,22 @@
         "baseline": false
       },
       {
+        "id": "tests/test_main_runtime_startup.py::test_serve_mode_static_asset_degradation_remains_nonfatal",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_main_runtime_startup.py::test_serve_only_fails_closed_when_api_start_is_suppressed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_serve_only_rejects_unverified_artifact_before_api_start",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_serve_only_uses_artifact_verifier_without_frontend_preparation",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -21030,11 +21055,6 @@
       },
       {
         "id": "tests/test_main_runtime_startup.py::test_startup_handshake_does_not_require_application_readiness",
-        "domain": "runtime_operator_tooling",
-        "baseline": false
-      },
-      {
-        "id": "tests/test_main_runtime_startup.py::test_static_asset_degradation_remains_nonfatal",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -36764,9 +36784,14 @@
         "baseline": true
       },
       {
-        "id": "tests/test_server_frontend_bootstrap.py::test_server_entrypoint_prepares_frontend_assets_before_import",
+        "id": "tests/test_server_frontend_bootstrap.py::test_server_entrypoint_rejects_invalid_artifact_before_app_import",
         "domain": "residual_repository_integration",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_server_frontend_bootstrap.py::test_server_entrypoint_verifies_immutable_frontend_artifact_before_import",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_single_stock_evidence_contract.py::test_contract_module_import_is_inert_and_requires_no_runtime_clients",
@@ -41023,6 +41048,7 @@
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_execution_model_for_legacy_runs_without_structured_config",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_model_as_derived_when_snapshot_missing",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_execution_model_with_provenance",
+      "tests/test_server_frontend_bootstrap.py::test_server_entrypoint_prepares_frontend_assets_before_import",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
 def _manifest(repo: Path, artifact_path: Path) -> dict[str, object]:
     web = repo / "apps" / "dsa-web"
     candidate = {"commit": "candidate", "tree": "tree", "dirty": False}
-    integrity = {"command": "npm --prefix apps/dsa-web ls --all --json", "sha256": "deps", "valid": True}
+    integrity = {"command": "npm --prefix apps/dsa-web ls --all --json", "sha256": "d" * 64, "valid": True}
     manifest: dict[str, object] = {
         "contract": artifact.ARTIFACT_CONTRACT,
         "candidate": candidate,
@@ -35,7 +36,12 @@ def _manifest(repo: Path, artifact_path: Path) -> dict[str, object]:
         "toolchain": {"node": "v1", "npm": "1"},
         "configuration": {"sha256": artifact._config_hashes(web)[0]},
         "environment": artifact._environment_contract(repo)[0],
-        "commands": [],
+        "commands": [
+            {
+                "command": "npm --prefix apps/dsa-web run build:bundle -- --outDir $ARTIFACT_STAGING",
+                "exitCode": 0,
+            }
+        ],
         "index": artifact._index_inventory(repo / "static" / "index.html", web),
         "assets": artifact._assets(repo / "static"),
     }
@@ -46,7 +52,7 @@ def _manifest(repo: Path, artifact_path: Path) -> dict[str, object]:
 
 def _patch_current(monkeypatch) -> None:
     monkeypatch.setattr(artifact, "_candidate", lambda _repo, expected_sha=None: ({"commit": "candidate", "tree": "tree", "dirty": False}, [] if expected_sha in (None, "candidate") else ["candidate_sha_mismatch"]))
-    monkeypatch.setattr(artifact, "_npm_integrity", lambda _repo: ({"command": "npm --prefix apps/dsa-web ls --all --json", "sha256": "deps", "valid": True}, []))
+    monkeypatch.setattr(artifact, "_npm_integrity", lambda _repo: ({"command": "npm --prefix apps/dsa-web ls --all --json", "sha256": "d" * 64, "valid": True}, []))
     monkeypatch.setattr(artifact, "_version", lambda _repo, *command: "v1" if command[0] == "node" else "1")
     monkeypatch.setattr(
         artifact,
@@ -58,13 +64,13 @@ def _patch_current(monkeypatch) -> None:
                     "environmentPolicyVersion": "wolfystock_test_environment_policy_v1",
                     "environmentFingerprint": "e" * 64,
                     "componentFingerprints": {
-                        "python": {"input": "p" * 64, "installed": "q" * 64},
-                        "web": {"input": "w" * 64, "installed": "x" * 64},
-                        "browser": {"input": "b" * 64, "installed": "c" * 64},
-                        "rg": {"input": "r" * 64, "installed": "s" * 64},
+                        "python": {"input": "1" * 64, "installed": "2" * 64},
+                        "web": {"input": "3" * 64, "installed": "4" * 64},
+                        "browser": {"input": "5" * 64, "installed": "6" * 64},
+                        "rg": {"input": "7" * 64, "installed": "8" * 64},
                     },
                 },
-                "buildVariables": {"NODE_ENV": "env"},
+                "buildVariables": {"NODE_ENV": "9" * 64},
             },
             [],
         ),
@@ -79,6 +85,72 @@ def test_verify_artifact_accepts_matching_candidate(monkeypatch, tmp_path: Path)
     result = artifact.verify_artifact(repo, artifact_path, expected_sha="candidate")
 
     assert result.ok is True
+
+
+def test_verify_runtime_artifact_is_read_only_and_never_invokes_dependency_tools(monkeypatch, tmp_path: Path) -> None:
+    repo, artifact_path = _write_fixture(tmp_path)
+    _patch_current(monkeypatch)
+    _manifest(repo, artifact_path)
+    monkeypatch.setattr(
+        artifact,
+        "_npm_integrity",
+        lambda _repo: (_ for _ in ()).throw(AssertionError("runtime verification must not invoke npm")),
+    )
+    monkeypatch.setattr(
+        artifact,
+        "_version",
+        lambda _repo, *_command: (_ for _ in ()).throw(AssertionError("runtime verification must not invoke node or npm")),
+    )
+    monkeypatch.setattr(
+        artifact,
+        "_environment_contract",
+        lambda _repo: (_ for _ in ()).throw(AssertionError("runtime verification must not invoke environment tooling")),
+    )
+    paths = [*sorted((repo / "static").rglob("*"), reverse=True), repo / "static"]
+    for path in paths:
+        path.chmod(path.stat().st_mode & ~stat.S_IWRITE)
+
+    try:
+        result = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+    finally:
+        for path in reversed(paths):
+            path.chmod(path.stat().st_mode | stat.S_IWRITE)
+
+    assert result.ok is True
+
+
+def test_verify_runtime_artifact_rejects_missing_malformed_and_wrong_candidate(monkeypatch, tmp_path: Path) -> None:
+    repo, artifact_path = _write_fixture(tmp_path)
+    _patch_current(monkeypatch)
+
+    missing = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+    artifact_path.write_text("{not-json", encoding="utf-8")
+    malformed = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+    manifest = _manifest(repo, artifact_path)
+    manifest.pop("dependencyIntegrity")
+    manifest["fingerprint"] = artifact._sha256_json({key: value for key, value in manifest.items() if key != "fingerprint"})
+    artifact_path.write_text(json.dumps(manifest), encoding="utf-8")
+    missing_metadata = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+    manifest = _manifest(repo, artifact_path)
+    manifest["configuration"] = []
+    manifest["fingerprint"] = artifact._sha256_json(
+        {key: value for key, value in manifest.items() if key != "fingerprint"}
+    )
+    artifact_path.write_text(json.dumps(manifest), encoding="utf-8")
+    malformed_metadata = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+    _manifest(repo, artifact_path)
+    monkeypatch.setattr(
+        artifact,
+        "_candidate",
+        lambda _repo, expected_sha=None: ({"commit": "other", "tree": "other-tree", "dirty": False}, []),
+    )
+    wrong_candidate = artifact.verify_runtime_artifact(repo, artifact_path, expected_sha="candidate")
+
+    assert missing.error_codes == ["artifact_manifest_unreadable"]
+    assert malformed.error_codes == ["artifact_manifest_unreadable"]
+    assert "artifact_provenance_invalid" in missing_metadata.error_codes
+    assert "artifact_metadata_invalid" in malformed_metadata.error_codes
+    assert "artifact_candidate_mismatch" in wrong_candidate.error_codes
 
 
 def test_manifest_regeneration_is_deterministic(monkeypatch, tmp_path: Path) -> None:

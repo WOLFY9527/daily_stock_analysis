@@ -141,6 +141,12 @@ def _patch_main(
     monkeypatch.setattr(runtime_main, "get_config", lambda: config or _config())
     monkeypatch.setattr(runtime_main, "setup_logging", lambda **kwargs: None)
     monkeypatch.setattr(runtime_main, "prepare_webui_frontend_assets", lambda: True)
+    monkeypatch.setattr(
+        runtime_main,
+        "verify_webui_frontend_artifact",
+        lambda: SimpleNamespace(ok=True, error_codes=[]),
+        raising=False,
+    )
 
 
 def test_start_api_server_waits_for_server_started(monkeypatch, caplog) -> None:
@@ -343,8 +349,8 @@ def test_main_returns_one_and_skips_bots_on_api_startup_failure(monkeypatch, arg
     assert bot_calls == []
 
 
-def test_static_asset_degradation_remains_nonfatal(monkeypatch) -> None:
-    args = _args(serve_only=True, host="0.0.0.0", port=8000)
+def test_serve_mode_static_asset_degradation_remains_nonfatal(monkeypatch) -> None:
+    args = _args(serve=True, host="0.0.0.0", port=8000)
     config = _config(
         webui_host="127.0.0.1",
         webui_port=8765,
@@ -373,6 +379,49 @@ def test_static_asset_degradation_remains_nonfatal(monkeypatch) -> None:
     assert handle.stop_calls == 1
     assert server_kwargs["host"] == "127.0.0.1"
     assert server_kwargs["port"] == 8765
+
+
+def test_serve_only_rejects_unverified_artifact_before_api_start(monkeypatch) -> None:
+    _patch_main(monkeypatch, args=_args(serve_only=True))
+    api_calls: list[str] = []
+    bot_calls: list[str] = []
+    monkeypatch.setattr(
+        runtime_main,
+        "verify_webui_frontend_artifact",
+        lambda: SimpleNamespace(ok=False, error_codes=["artifact_candidate_mismatch"]),
+        raising=False,
+    )
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: api_calls.append("api"))
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: bot_calls.append("bot"))
+    monkeypatch.setattr(runtime_main.time, "sleep", lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()))
+
+    assert runtime_main.main() == 1
+    assert api_calls == []
+    assert bot_calls == []
+
+
+def test_serve_only_uses_artifact_verifier_without_frontend_preparation(monkeypatch) -> None:
+    _patch_main(monkeypatch, args=_args(serve_only=True))
+    calls: list[str] = []
+    handle = _RecordingHandle()
+    monkeypatch.setattr(
+        runtime_main,
+        "verify_webui_frontend_artifact",
+        lambda: calls.append("verify") or SimpleNamespace(ok=True, error_codes=[]),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        runtime_main,
+        "prepare_webui_frontend_assets",
+        lambda: (_ for _ in ()).throw(AssertionError("serve-only must not prepare or build")),
+    )
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: calls.append("start") or handle)
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: None)
+    monkeypatch.setattr(runtime_main.time, "sleep", lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()))
+
+    assert runtime_main.main() == 0
+    assert calls == ["verify", "start"]
+    assert handle.stop_calls == 1
 
 
 def test_main_stops_api_when_interrupted_during_bot_start(monkeypatch) -> None:

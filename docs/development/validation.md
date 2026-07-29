@@ -55,12 +55,19 @@ environment:
 ./wolfy exec --profile test -- npm --prefix apps/dsa-web run test
 ./wolfy exec --profile test -- npm --prefix apps/dsa-web run lint
 ./wolfy exec --profile test -- python scripts/web_build_artifact.py typecheck
-./wolfy exec --profile test -- python scripts/web_build_artifact.py build
+./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "$(git rev-parse HEAD)"
+./wolfy exec --profile test -- python scripts/web_build_artifact.py verify-runtime --expected-sha "$(git rev-parse HEAD)"
 ```
 
 Visual, interaction, responsive, or accessibility claims require managed
 browser evidence at the applicable viewports. DOM presence, source inspection,
 or a skipped browser case is not equivalent.
+
+`build` is the explicit dependency, typecheck, and bundle phase. The
+`verify-runtime` action is read-only: it validates the canonical `static/`
+manifest, candidate and tree identity, dependency and environment provenance,
+configuration hashes, index, and assets without invoking npm, Node, dependency
+installation, or a frontend build.
 
 ## Runtime UAT
 
@@ -71,11 +78,13 @@ The local UAT harness binds evidence to the expected source identity:
 ./wolfy exec --profile test -- python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
 ```
 
-It verifies a clean source tree, source SHA, immutable Web artifact, runtime
-CWD, local HTTP identity, and no-live-provider isolation. It fails closed on an
-unknown port owner, dependency/build failure, source mismatch, stale asset, or
-non-WolfyStock HTML. Evidence under `output/runtime-verification/` is run-scoped
-and is not durable documentation.
+It verifies a clean source tree, source SHA, an already-built immutable Web
+artifact, runtime CWD, local HTTP identity, and no-live-provider isolation. It
+never repairs or builds a missing or invalid artifact. It fails closed before
+runtime bind on an unknown port owner, missing or corrupt artifact, source or
+candidate mismatch, stale asset, or invalid provenance. Non-WolfyStock HTML
+also fails qualification. Evidence under `output/runtime-verification/` is
+run-scoped and is not durable documentation.
 
 The managed UAT runtime sets `CRYPTO_REALTIME_ENABLED=false`,
 `WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true`,

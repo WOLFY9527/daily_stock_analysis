@@ -2,8 +2,8 @@
 """
 WebUI frontend asset preparation helper.
 
-Default behavior runs startup-time frontend auto build.
-Set WEBUI_AUTO_BUILD=false to disable auto build and only verify artifacts.
+Ordinary serve mode can retain the existing startup-time development build behavior.
+Serve-only and direct server startup use the immutable artifact verifier instead.
 """
 
 from __future__ import annotations
@@ -194,3 +194,14 @@ def prepare_webui_frontend_assets() -> bool:
         artifact_index,
     )
     return _run_frontend_commands(commands=commands, frontend_dir=frontend_dir)
+
+
+def verify_webui_frontend_artifact():
+    """Verify the canonical serve-only artifact without installing or building dependencies."""
+    from scripts.web_build_artifact import ARTIFACT_FILENAME, verify_runtime_artifact
+
+    repo_root = Path(__file__).resolve().parent.parent
+    return verify_runtime_artifact(
+        repo_root,
+        repo_root / "static" / ARTIFACT_FILENAME,
+    )

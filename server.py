@@ -19,11 +19,10 @@ Daily Stock Analysis - FastAPI 后端服务入口
 """
 
 import logging
-import os
 
 from src.config import get_config
 from src.logging_config import setup_logging
-from src.webui_frontend import prepare_webui_frontend_assets
+from src.webui_frontend import verify_webui_frontend_artifact
 
 # Initialize the runtime snapshot before configuring process logging.
 config = get_config()
@@ -38,17 +37,16 @@ setup_logging(
 )
 
 
-def _prepare_frontend_assets_for_server_entrypoint() -> None:
+def _verify_frontend_artifact_for_server_entrypoint() -> None:
     """Keep direct uvicorn startup aligned with main.py --serve-only."""
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        return
-    if not prepare_webui_frontend_assets():
-        logging.getLogger(__name__).warning(
-            "Frontend static assets are not ready; API will start with the fallback page."
+    result = verify_webui_frontend_artifact()
+    if not result.ok:
+        raise RuntimeError(
+            "Frontend artifact verification failed: " + ",".join(result.error_codes)
         )
 
 
-_prepare_frontend_assets_for_server_entrypoint()
+_verify_frontend_artifact_for_server_entrypoint()
 
 # 从 api.app 导入应用实例
 from api.app import app  # noqa: E402

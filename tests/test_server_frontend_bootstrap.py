@@ -3,16 +3,29 @@ from __future__ import annotations
 import importlib
 import inspect
 import sys
+from types import SimpleNamespace
+
+import pytest
 
 
-def test_server_entrypoint_prepares_frontend_assets_before_import(monkeypatch) -> None:
+def test_server_entrypoint_verifies_immutable_frontend_artifact_before_import(monkeypatch) -> None:
     calls: list[str] = []
 
     import api as api_package
     import src.webui_frontend as webui_frontend
 
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.setattr(webui_frontend, "prepare_webui_frontend_assets", lambda: calls.append("prepare") or True)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(
+        webui_frontend,
+        "verify_webui_frontend_artifact",
+        lambda: calls.append("verify") or SimpleNamespace(ok=True, error_codes=[]),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webui_frontend,
+        "prepare_webui_frontend_assets",
+        lambda: (_ for _ in ()).throw(AssertionError("direct server startup must not prepare or build")),
+    )
     previous_api_app = sys.modules.pop("api.app", None)
     previous_package_app = getattr(api_package, "app", None)
     sys.modules.pop("server", None)
@@ -38,4 +51,33 @@ def test_server_entrypoint_prepares_frontend_assets_before_import(monkeypatch) -
         elif previous_package_app is not None:
             api_package.app = previous_package_app
 
-    assert calls == ["prepare", "prepare"]
+    assert calls == ["verify", "verify"]
+
+
+def test_server_entrypoint_rejects_invalid_artifact_before_app_import(monkeypatch) -> None:
+    import api as api_package
+    import src.webui_frontend as webui_frontend
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(
+        webui_frontend,
+        "verify_webui_frontend_artifact",
+        lambda: SimpleNamespace(ok=False, error_codes=["artifact_manifest_unreadable"]),
+        raising=False,
+    )
+    previous_api_app = sys.modules.pop("api.app", None)
+    previous_package_app = getattr(api_package, "app", None)
+    sys.modules.pop("server", None)
+
+    try:
+        with pytest.raises(RuntimeError, match="artifact_manifest_unreadable"):
+            importlib.import_module("server")
+        assert "api.app" not in sys.modules
+    finally:
+        sys.modules.pop("server", None)
+        if previous_api_app is not None:
+            sys.modules["api.app"] = previous_api_app
+        if previous_package_app is None and hasattr(api_package, "app"):
+            delattr(api_package, "app")
+        elif previous_package_app is not None:
+            api_package.app = previous_package_app

@@ -438,6 +438,154 @@ def prepare_playwright_artifact(
     return ArtifactResult(prepared.ok, payload, prepared.error_codes, prepared.warning_codes)
 
 
+def _manifest_provenance_errors(manifest: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    integrity = manifest.get("dependencyIntegrity")
+    if not isinstance(integrity, dict) or (
+        integrity.get("command") != "npm --prefix apps/dsa-web ls --all --json"
+        or integrity.get("valid") is not True
+        or not re.fullmatch(r"[0-9a-f]{64}", str(integrity.get("sha256") or ""))
+    ):
+        errors.append("artifact_provenance_invalid")
+
+    toolchain = manifest.get("toolchain")
+    if not isinstance(toolchain, dict) or set(toolchain) != {"node", "npm"} or any(
+        not isinstance(toolchain.get(name), str) or not toolchain[name]
+        for name in ("node", "npm")
+    ):
+        errors.append("artifact_provenance_invalid")
+
+    environment = manifest.get("environment")
+    managed = environment.get("managed") if isinstance(environment, dict) else None
+    components = managed.get("componentFingerprints") if isinstance(managed, dict) else None
+    if (
+        not isinstance(environment, dict)
+        or not isinstance(environment.get("buildVariables"), dict)
+        or not environment["buildVariables"]
+        or any(
+            not isinstance(key, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", str(value or ""))
+            for key, value in environment["buildVariables"].items()
+        )
+        or not isinstance(managed, dict)
+        or not isinstance(managed.get("schemaVersion"), str)
+        or not managed["schemaVersion"].strip()
+        or not isinstance(managed.get("environmentPolicyVersion"), str)
+        or not managed["environmentPolicyVersion"].strip()
+        or not re.fullmatch(r"[0-9a-f]{64}", str(managed.get("environmentFingerprint") or ""))
+        or not isinstance(components, dict)
+        or set(components) != {"python", "web", "browser", "rg"}
+    ):
+        errors.append("artifact_provenance_invalid")
+    elif any(
+        not isinstance(components.get(component), dict)
+        or any(
+            not re.fullmatch(r"[0-9a-f]{64}", str(components[component].get(field) or ""))
+            for field in ("input", "installed")
+        )
+        for component in ("python", "web", "browser", "rg")
+    ):
+        errors.append("artifact_provenance_invalid")
+
+    commands = manifest.get("commands")
+    if (
+        not isinstance(commands, list)
+        or not commands
+        or any(
+            not isinstance(command, dict)
+            or set(command) != {"command", "exitCode"}
+            or not isinstance(command.get("command"), str)
+            or not command["command"].strip()
+            or command.get("exitCode") != 0
+            for command in commands
+        )
+    ):
+        errors.append("artifact_provenance_invalid")
+    return sorted(set(errors))
+
+
+def _verify_manifest_artifact(
+    repo: Path,
+    artifact: Path,
+    *,
+    expected_sha: str | None,
+    require_canonical: bool,
+) -> ArtifactResult:
+    canonical = (repo / STATIC_RELATIVE / ARTIFACT_FILENAME).resolve()
+    resolved_artifact = artifact.resolve()
+    if require_canonical and resolved_artifact != canonical:
+        return ArtifactResult(False, {}, ["artifact_path_not_canonical"])
+    try:
+        manifest = json.loads(resolved_artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return ArtifactResult(False, {}, ["artifact_manifest_unreadable"])
+    if not isinstance(manifest, dict) or manifest.get("contract") != ARTIFACT_CONTRACT:
+        return ArtifactResult(
+            False,
+            manifest if isinstance(manifest, dict) else {},
+            ["artifact_contract_mismatch"],
+        )
+
+    errors = _manifest_provenance_errors(manifest)
+    package_lock = manifest.get("packageLock")
+    configuration = manifest.get("configuration")
+    if (
+        not isinstance(package_lock, dict)
+        or package_lock.get("path") != "apps/dsa-web/package-lock.json"
+        or not re.fullmatch(r"[0-9a-f]{64}", str(package_lock.get("sha256") or ""))
+        or not isinstance(configuration, dict)
+        or not isinstance(configuration.get("sha256"), dict)
+    ):
+        errors.append("artifact_metadata_invalid")
+    candidate, candidate_errors = _candidate(repo, expected_sha)
+    errors.extend(candidate_errors)
+    if manifest.get("candidate") != candidate:
+        errors.append("artifact_candidate_mismatch")
+    web_root = repo / WEB_RELATIVE
+    if not isinstance(package_lock, dict) or package_lock.get("sha256") != _sha256_file(web_root / "package-lock.json"):
+        errors.append("artifact_lockfile_mismatch")
+    config_hashes, config_errors = _config_hashes(web_root)
+    errors.extend(config_errors)
+    if not isinstance(configuration, dict) or configuration.get("sha256") != config_hashes:
+        errors.append("artifact_config_mismatch")
+
+    static_root = resolved_artifact.parent
+    index_path = static_root / "index.html"
+    try:
+        index_matches = index_path.is_file() and manifest.get("index") == _index_inventory(index_path, web_root)
+    except (OSError, UnicodeError):
+        index_matches = False
+    if not index_matches:
+        errors.append("artifact_index_mismatch")
+    try:
+        assets_match = manifest.get("assets") == _assets(static_root)
+    except OSError:
+        assets_match = False
+    if not assets_match:
+        errors.append("artifact_asset_mismatch")
+    fingerprint_payload = dict(manifest)
+    fingerprint = fingerprint_payload.pop("fingerprint", None)
+    if fingerprint != _sha256_json(fingerprint_payload):
+        errors.append("artifact_manifest_tampered")
+    return ArtifactResult(not errors, manifest, sorted(set(errors)))
+
+
+def verify_runtime_artifact(
+    repo_root: Path | str,
+    artifact_path: Path | str,
+    *,
+    expected_sha: str | None = None,
+) -> ArtifactResult:
+    """Verify the canonical serve-only artifact without invoking build or dependency tools."""
+    repo = Path(repo_root).resolve()
+    return _verify_manifest_artifact(
+        repo,
+        Path(artifact_path),
+        expected_sha=expected_sha,
+        require_canonical=True,
+    )
+
+
 def verify_artifact(
     repo_root: Path | str,
     artifact_path: Path | str,
@@ -446,24 +594,16 @@ def verify_artifact(
 ) -> ArtifactResult:
     repo = Path(repo_root).resolve()
     artifact = Path(artifact_path)
-    try:
-        manifest = json.loads(artifact.read_text(encoding="utf-8"))
-    except Exception:
-        return ArtifactResult(False, {}, ["artifact_manifest_unreadable"])
-    if not isinstance(manifest, dict) or manifest.get("contract") != ARTIFACT_CONTRACT:
-        return ArtifactResult(False, manifest if isinstance(manifest, dict) else {}, ["artifact_contract_mismatch"])
-    errors: list[str] = []
-    candidate, candidate_errors = _candidate(repo, expected_sha)
-    errors.extend(candidate_errors)
-    if manifest.get("candidate") != candidate:
-        errors.append("artifact_candidate_mismatch")
-    web_root = repo / WEB_RELATIVE
-    if manifest.get("packageLock", {}).get("sha256") != _sha256_file(web_root / "package-lock.json"):
-        errors.append("artifact_lockfile_mismatch")
-    config_hashes, config_errors = _config_hashes(web_root)
-    errors.extend(config_errors)
-    if manifest.get("configuration", {}).get("sha256") != config_hashes:
-        errors.append("artifact_config_mismatch")
+    runtime_result = _verify_manifest_artifact(
+        repo,
+        artifact,
+        expected_sha=expected_sha,
+        require_canonical=False,
+    )
+    if "artifact_manifest_unreadable" in runtime_result.error_codes or "artifact_contract_mismatch" in runtime_result.error_codes:
+        return runtime_result
+    manifest = runtime_result.payload
+    errors = list(runtime_result.error_codes)
     integrity, integrity_errors = _npm_integrity(repo)
     errors.extend(integrity_errors)
     if manifest.get("dependencyIntegrity") != integrity:
@@ -474,22 +614,12 @@ def verify_artifact(
     errors.extend(environment_errors)
     if manifest.get("environment") != environment:
         errors.append("artifact_environment_mismatch")
-    static_root = artifact.parent
-    index_path = static_root / "index.html"
-    if not index_path.is_file() or manifest.get("index") != _index_inventory(index_path, web_root):
-        errors.append("artifact_index_mismatch")
-    if manifest.get("assets") != _assets(static_root):
-        errors.append("artifact_asset_mismatch")
-    fingerprint_payload = dict(manifest)
-    fingerprint = fingerprint_payload.pop("fingerprint", None)
-    if fingerprint != _sha256_json(fingerprint_payload):
-        errors.append("artifact_manifest_tampered")
     return ArtifactResult(not errors, manifest, sorted(set(errors)))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create or verify an immutable Web build artifact.")
-    parser.add_argument("action", choices=("build", "manifest", "playwright", "typecheck", "verify"))
+    parser.add_argument("action", choices=("build", "manifest", "playwright", "typecheck", "verify", "verify-runtime"))
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--artifact", type=Path, default=None)
     parser.add_argument("--expected-sha", default=None)
@@ -504,9 +634,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = generate_manifest(args.repo_root)
     elif args.action == "typecheck":
         result = run_typecheck(args.repo_root)
-    else:
+    elif args.action == "verify":
         artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
         result = verify_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
+    else:
+        artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
+        result = verify_runtime_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
     if args.json:
         print(json.dumps({"ok": result.ok, "errorCodes": result.error_codes, "manifest": result.payload}, ensure_ascii=False, indent=2, sort_keys=True))
     else:

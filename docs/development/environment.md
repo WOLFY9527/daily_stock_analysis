@@ -208,6 +208,11 @@ python main.py --serve-only
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
+`python main.py --serve-only` and direct `server:app` startup consume only a
+previously built, candidate-bound canonical Web artifact. They do not install
+or build dependencies; use the build and `verify-runtime` commands in
+[Validation And Evidence](validation.md) before starting either entrypoint.
+
 Desktop currently retains its own local build path:
 
 ```bash

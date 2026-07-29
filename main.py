@@ -38,7 +38,7 @@ from typing import Any, List, Optional, Tuple
 from data_provider.base import canonical_stock_code
 from src.core.pipeline import StockAnalysisPipeline
 from src.core.market_review import run_market_review
-from src.webui_frontend import prepare_webui_frontend_assets
+from src.webui_frontend import prepare_webui_frontend_assets, verify_webui_frontend_artifact
 from src.config import get_config, Config
 from src.logging_config import setup_logging
 from src.runtime.settings import SettingSource
@@ -664,7 +664,15 @@ def main() -> int:
 
     api_handle = None
     if start_serve:
-        if not prepare_webui_frontend_assets():
+        if args.serve_only:
+            artifact_result = verify_webui_frontend_artifact()
+            if not artifact_result.ok:
+                logger.error(
+                    "FastAPI 服务启动失败: reason=frontend_artifact_invalid error_codes=%s",
+                    ",".join(artifact_result.error_codes),
+                )
+                return 1
+        elif not prepare_webui_frontend_assets():
             logger.warning("前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）")
         try:
             api_handle = start_api_server(host=args.host, port=args.port, config=config)

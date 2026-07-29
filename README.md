@@ -81,6 +81,15 @@ python main.py --serve-only
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
+`--serve-only` and direct `server:app` startup never install dependencies or
+build frontend assets. Build and verify the clean candidate's canonical
+artifact first:
+
+```bash
+./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "$(git rev-parse HEAD)"
+./wolfy exec --profile test -- python scripts/web_build_artifact.py verify-runtime --expected-sha "$(git rev-parse HEAD)"
+```
+
 Environment locks, supported targets, offline snapshots, test isolation, Web,
 Desktop, and optional LiteLLM configuration are documented in
 [Development Environment](docs/development/environment.md).
