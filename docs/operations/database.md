@@ -69,6 +69,27 @@ remain distinct.
 
 ## Cleanup And Rollback
 
+### Durable Task Retention
+
+Durable task state and progress use policy `durable_task_retention_v1`.
+Terminal task history has a 90-day monitoring window and a 30-day protected
+minimum. Aggregate task-plus-progress row counts warn at 50,000 and become
+critical at 100,000. The storage owner is `storage_operations`; warnings,
+expired leases, or terminal rows beyond the monitoring window escalate to a
+`storage_capacity_review`.
+
+Expired worker leases are recovered through compare-and-set reclaim, and
+progress replay remains owner-scoped by sequence cursor. These are recovery
+and replay contracts, not cleanup authority. The administrator status and
+`scripts/db_retention_preview_report.py` expose bounded aggregate evidence
+without task IDs, owner IDs, row payloads, database paths, or mutation.
+
+Automatic durable-task deletion is disabled. Cleanup remains blocked until a
+restore qualification and explicit operator approval both exist; no repository
+runtime or report command currently performs durable-task deletion. Capacity
+pressure never overrides the minimum window, owner isolation, audit evidence,
+or the no-silent-deletion rule.
+
 Delete only task-owned temporary databases or explicitly configured local
 cache artifacts. Never remove a broad data directory, another worktree's data,
 or production material from a generic cleanup instruction. Roll back code or

@@ -24,6 +24,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from src.sqlite_foreign_keys import connect_sqlite
+from src.durable_task_retention import DurableTaskRetentionPolicy
 
 
 POLICY_VERSION = "wolfystock_db_retention_preview_v1"
@@ -490,7 +491,7 @@ def _preview_domain(conn: sqlite3.Connection | None, domain_policy: DomainPolicy
     elif missing_tables:
         protected_reasons.add("some_expected_tables_missing")
 
-    return {
+    payload = {
         "policyVersion": POLICY_VERSION,
         "domain": domain_policy.domain,
         "domainLabel": DOMAIN_LABELS.get(domain_policy.domain, domain_policy.domain.replace("_", " ")),
@@ -551,6 +552,34 @@ def _preview_domain(conn: sqlite3.Connection | None, domain_policy: DomainPolicy
         "tablesInspected": inspected_tables,
         "leafTables": leaf_table_names,
     }
+    if domain_policy.domain == "durable_task_state_progress":
+        policy = DurableTaskRetentionPolicy()
+        total_rows = matched_row_count
+        if total_rows >= policy.capacity_critical_rows:
+            capacity_status = "critical"
+        elif total_rows >= policy.capacity_warning_rows:
+            capacity_status = "warning"
+        else:
+            capacity_status = "ok"
+        payload.update(
+            retentionPolicy=policy.public_contract(),
+            capacityStatus=capacity_status,
+            recoveryPolicy="expired_leases_reclaimed_by_compare_and_set",
+            replayPolicy="owner_scoped_sequence_cursor",
+            cleanupApproval={
+                "status": "blocked_pending_restore_qualification_and_explicit_operator_approval",
+                "restoreQualificationRequired": True,
+                "explicitOperatorApprovalRequired": True,
+                "automaticDeletionEnabled": False,
+                "deleteAllowed": False,
+            },
+        )
+        payload["sanitizedAuditSummary"].update(
+            eventType="durable_task_retention_preview_generated",
+            outcome="read_only_preview",
+            actorIdentifiersIncluded=False,
+        )
+    return payload
 
 
 def build_report(sqlite_db: Path | None = None) -> dict[str, Any]:
@@ -679,6 +708,70 @@ def _check_domain_evidence(domain: dict[str, Any], findings: list[str]) -> None:
     else:
         _require_true(rollback_note, "restoreOrPitrEvidenceRequiredBeforeCleanup", findings, f"{prefix}.rollbackRestoreNote.restoreOrPitrEvidenceRequiredBeforeCleanup")
         _require_false(rollback_note, "cleanupExecutedByThisReport", findings, f"{prefix}.rollbackRestoreNote.cleanupExecutedByThisReport")
+
+    if domain_name == "durable_task_state_progress":
+        _check_durable_task_retention_evidence(domain, findings, prefix)
+
+
+def _check_durable_task_retention_evidence(
+    domain: dict[str, Any],
+    findings: list[str],
+    prefix: str,
+) -> None:
+    policy = domain.get("retentionPolicy")
+    expected_policy = DurableTaskRetentionPolicy().public_contract()
+    if policy != expected_policy:
+        findings.append(f"{prefix}.retentionPolicy:mismatch")
+    if domain.get("capacityStatus") not in {"ok", "warning", "critical"}:
+        findings.append(f"{prefix}.capacityStatus:invalid")
+    if domain.get("recoveryPolicy") != "expired_leases_reclaimed_by_compare_and_set":
+        findings.append(f"{prefix}.recoveryPolicy:mismatch")
+    if domain.get("replayPolicy") != "owner_scoped_sequence_cursor":
+        findings.append(f"{prefix}.replayPolicy:mismatch")
+
+    approval = domain.get("cleanupApproval")
+    if not isinstance(approval, dict):
+        findings.append(f"{prefix}.cleanupApproval:missing")
+    else:
+        if approval.get("status") != "blocked_pending_restore_qualification_and_explicit_operator_approval":
+            findings.append(f"{prefix}.cleanupApproval.status:must_remain_blocked")
+        _require_true(
+            approval,
+            "restoreQualificationRequired",
+            findings,
+            f"{prefix}.cleanupApproval.restoreQualificationRequired",
+        )
+        _require_true(
+            approval,
+            "explicitOperatorApprovalRequired",
+            findings,
+            f"{prefix}.cleanupApproval.explicitOperatorApprovalRequired",
+        )
+        _require_false(
+            approval,
+            "automaticDeletionEnabled",
+            findings,
+            f"{prefix}.cleanupApproval.automaticDeletionEnabled",
+        )
+        _require_false(
+            approval,
+            "deleteAllowed",
+            findings,
+            f"{prefix}.cleanupApproval.deleteAllowed",
+        )
+
+    audit = domain.get("sanitizedAuditSummary")
+    if isinstance(audit, dict):
+        if audit.get("eventType") != "durable_task_retention_preview_generated":
+            findings.append(f"{prefix}.sanitizedAuditSummary.eventType:missing")
+        if audit.get("outcome") != "read_only_preview":
+            findings.append(f"{prefix}.sanitizedAuditSummary.outcome:mismatch")
+        _require_false(
+            audit,
+            "actorIdentifiersIncluded",
+            findings,
+            f"{prefix}.sanitizedAuditSummary.actorIdentifiersIncluded",
+        )
 
 
 def _require_true(payload: dict[str, Any], key: str, findings: list[str], path: str) -> None:

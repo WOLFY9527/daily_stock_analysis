@@ -7,15 +7,17 @@ import json
 import re
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from api.v1.endpoints.analysis import _format_sse_event, get_analysis_status, poll_analysis_task_progress
-from src.storage import DatabaseManager
+from src.durable_task_retention import DurableTaskRetentionPolicy
+from src.storage import DatabaseManager, DurableTaskState
 from src.services.task_queue import AnalysisTaskQueue
 
 
@@ -72,6 +74,76 @@ class DurableTaskStateTestCase(unittest.TestCase):
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["progress"], 100)
         self.assertIsNotNone(completed["completed_at"])
+
+    def test_retention_monitoring_survives_restart_and_never_deletes(self) -> None:
+        policy = DurableTaskRetentionPolicy(
+            terminal_retention_days=90,
+            minimum_retention_days=30,
+            capacity_warning_rows=4,
+            capacity_critical_rows=8,
+        )
+        observed_at = datetime(2026, 7, 29, 12, 0, 0)
+        cutoff = observed_at - timedelta(days=policy.terminal_retention_days)
+
+        for task_id in ("old-terminal", "boundary-terminal", "expired-active"):
+            self.db.create_durable_task_state(
+                task_id=task_id,
+                owner_user_id="user-a",
+                task_type="analysis",
+                status="queued",
+            )
+        self.db.mark_durable_task_completed(task_id="old-terminal", owner_user_id="user-a")
+        self.db.mark_durable_task_completed(task_id="boundary-terminal", owner_user_id="user-a")
+        self.db.append_durable_task_progress_event(
+            task_id="old-terminal",
+            owner_user_id="user-a",
+            event_type="completed",
+            message="Completed",
+        )
+        with self.db.session_scope() as session:
+            old_terminal = session.execute(
+                select(DurableTaskState).where(DurableTaskState.task_id == "old-terminal")
+            ).scalar_one()
+            old_terminal.completed_at = cutoff - timedelta(seconds=1)
+            old_terminal.updated_at = cutoff - timedelta(seconds=1)
+            boundary_terminal = session.execute(
+                select(DurableTaskState).where(DurableTaskState.task_id == "boundary-terminal")
+            ).scalar_one()
+            boundary_terminal.completed_at = cutoff
+            boundary_terminal.updated_at = cutoff
+        claim = self.db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type="analysis",
+            lease_seconds=1,
+            now=observed_at - timedelta(seconds=2),
+        )
+        self.assertEqual(claim["task_id"], "expired-active")
+
+        before = self.db.inspect_durable_task_retention(now=observed_at, policy=policy)
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
+        after = self.db.inspect_durable_task_retention(now=observed_at, policy=policy)
+
+        self.assertEqual(after, before)
+        self.assertEqual(after["policyVersion"], "durable_task_retention_v1")
+        self.assertEqual(after["status"], "warning")
+        self.assertEqual(after["totalTaskCount"], 3)
+        self.assertEqual(after["progressEventCount"], 1)
+        self.assertEqual(after["totalRowCount"], 4)
+        self.assertEqual(after["terminalBeyondRetentionCount"], 1)
+        self.assertEqual(after["reclaimableExpiredLeaseCount"], 1)
+        self.assertEqual(after["capacityStatus"], "warning")
+        self.assertEqual(after["recoveryPolicy"], "expired_leases_reclaimed_by_compare_and_set")
+        self.assertEqual(after["replayPolicy"], "owner_scoped_sequence_cursor")
+        self.assertFalse(after["automaticDeletionEnabled"])
+        self.assertFalse(after["deleteAllowed"])
+        self.assertFalse(after["cleanupCalled"])
+        self.assertEqual(
+            after["cleanupAuthorizationStatus"],
+            "blocked_pending_restore_qualification_and_explicit_operator_approval",
+        )
+        self.assertFalse(after["taskIdentifiersIncluded"])
+        self.assertFalse(after["ownerIdentifiersIncluded"])
 
     def test_active_durable_task_reservation_returns_existing_duplicate(self) -> None:
         created, duplicate = self.db.reserve_durable_task_state(

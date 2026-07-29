@@ -660,7 +660,20 @@ def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_
     assert payload["retentionPolicyStatus"]["readOnly"] is True
     assert payload["retentionPolicyStatus"]["deleteAllowed"] is False
     assert payload["retentionPolicyStatus"]["summary"]["executionLogPolicy"] == "preview_first_retention_cleanup"
-    assert payload["retentionPolicyStatus"]["summary"]["durableTaskRetentionPolicy"] == "not_configured"
+    retention = payload["retentionPolicyStatus"]
+    assert retention["status"] == "configured_monitoring_only"
+    assert retention["summary"]["durableTaskRetentionPolicy"] == "terminal_history_90_days"
+    assert retention["summary"]["durableTaskPolicyVersion"] == "durable_task_retention_v1"
+    assert retention["summary"]["durableTaskRetentionDays"] == 90
+    assert retention["summary"]["durableTaskMinimumRetentionDays"] == 30
+    assert retention["summary"]["durableTaskCapacityWarningRows"] == 50000
+    assert retention["summary"]["durableTaskCapacityCriticalRows"] == 100000
+    assert retention["summary"]["automaticDeletionEnabled"] is False
+    assert retention["summary"]["cleanupApprovalStatus"] == (
+        "blocked_pending_restore_qualification_and_explicit_operator_approval"
+    )
+    assert retention["summary"]["policyOwner"] == "storage_operations"
+    assert retention["summary"]["escalationPath"] == "storage_capacity_review"
     assert payload["executionLogRetentionRisk"]["status"] == "warning"
     assert payload["executionLogRetentionRisk"]["summary"]["logsOlderThanRetentionCountBucket"] == "1-9"
     assert payload["executionLogRetentionRisk"]["summary"]["cleanupCalled"] is False
@@ -672,7 +685,15 @@ def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_
     assert payload["adminRoleAssignmentStatus"]["summary"]["legacyAdminUserCountBucket"] == "1-9"
     assert payload["durableTaskBacklogStatus"]["status"] == "warning"
     assert payload["durableTaskBacklogStatus"]["summary"]["pendingBacklogCountBucket"] == "1-9"
-    assert payload["durableTaskBacklogStatus"]["summary"]["retentionPolicy"] == "not_configured"
+    assert payload["durableTaskBacklogStatus"]["summary"]["retentionPolicy"] == "terminal_history_90_days"
+    assert payload["durableTaskBacklogStatus"]["summary"]["capacityStatus"] == "ok"
+    assert payload["durableTaskBacklogStatus"]["summary"]["automaticDeletionEnabled"] is False
+    assert payload["durableTaskBacklogStatus"]["summary"]["recoveryPolicy"] == (
+        "expired_leases_reclaimed_by_compare_and_set"
+    )
+    assert payload["durableTaskBacklogStatus"]["summary"]["replayPolicy"] == (
+        "owner_scoped_sequence_cursor"
+    )
     assert payload["recommendedMaintenanceActions"]
     assert all(isinstance(item, str) and item for item in payload["recommendedMaintenanceActions"])
     _assert_no_sensitive_markers(payload)

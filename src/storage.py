@@ -59,6 +59,7 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from src.config import get_config
+from src.durable_task_retention import DurableTaskRetentionPolicy
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
 from src.sqlite_foreign_keys import (
     create_engine_with_sqlite_foreign_keys,
@@ -235,6 +236,7 @@ DURABLE_TASK_ACTIVE_STATUSES = frozenset(
         "running",
     }
 )
+DURABLE_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 if TYPE_CHECKING:
     from src.search_service import SearchResponse
@@ -6249,6 +6251,90 @@ class DatabaseManager:
             row.updated_at = now
             session.flush()
             return self._durable_task_payload(row)
+
+    def inspect_durable_task_retention(
+        self,
+        *,
+        now: Optional[datetime] = None,
+        policy: Optional[DurableTaskRetentionPolicy] = None,
+    ) -> Dict[str, Any]:
+        """Return aggregate retention/capacity/recovery evidence without mutation."""
+        resolved_policy = policy or DurableTaskRetentionPolicy()
+        observed_at = now or datetime.now()
+        retention_cutoff = observed_at - timedelta(days=resolved_policy.terminal_retention_days)
+        terminal_timestamp = func.coalesce(
+            DurableTaskState.completed_at,
+            DurableTaskState.failed_at,
+            DurableTaskState.cancelled_at,
+            DurableTaskState.updated_at,
+        )
+        with self.get_session() as session:
+            total_tasks = int(session.execute(select(func.count(DurableTaskState.id))).scalar() or 0)
+            progress_events = int(
+                session.execute(select(func.count(DurableTaskProgressEvent.id))).scalar() or 0
+            )
+            active_tasks = int(
+                session.execute(
+                    select(func.count(DurableTaskState.id)).where(
+                        DurableTaskState.status.in_(tuple(DURABLE_TASK_ACTIVE_STATUSES))
+                    )
+                ).scalar()
+                or 0
+            )
+            terminal_beyond_retention = int(
+                session.execute(
+                    select(func.count(DurableTaskState.id)).where(
+                        DurableTaskState.status.in_(tuple(DURABLE_TASK_TERMINAL_STATUSES)),
+                        terminal_timestamp < retention_cutoff,
+                    )
+                ).scalar()
+                or 0
+            )
+            reclaimable_expired_leases = int(
+                session.execute(
+                    select(func.count(DurableTaskState.id)).where(
+                        DurableTaskState.status.in_(("leased", "processing", "running")),
+                        DurableTaskState.lease_expires_at.is_not(None),
+                        DurableTaskState.lease_expires_at <= observed_at,
+                    )
+                ).scalar()
+                or 0
+            )
+
+        total_rows = total_tasks + progress_events
+        if total_rows >= resolved_policy.capacity_critical_rows:
+            capacity_status = "critical"
+        elif total_rows >= resolved_policy.capacity_warning_rows:
+            capacity_status = "warning"
+        else:
+            capacity_status = "ok"
+        status = capacity_status
+        if status == "ok" and (terminal_beyond_retention or reclaimable_expired_leases):
+            status = "warning"
+
+        return {
+            **resolved_policy.public_contract(),
+            "status": status,
+            "capacityStatus": capacity_status,
+            "totalTaskCount": total_tasks,
+            "progressEventCount": progress_events,
+            "totalRowCount": total_rows,
+            "activeTaskCount": active_tasks,
+            "terminalBeyondRetentionCount": terminal_beyond_retention,
+            "reclaimableExpiredLeaseCount": reclaimable_expired_leases,
+            "recoveryPolicy": "expired_leases_reclaimed_by_compare_and_set",
+            "replayPolicy": "owner_scoped_sequence_cursor",
+            "automaticDeletionEnabled": False,
+            "deleteAllowed": False,
+            "cleanupCalled": False,
+            "cleanupAuthorizationStatus": (
+                "blocked_pending_restore_qualification_and_explicit_operator_approval"
+            ),
+            "restoreQualificationRequired": True,
+            "explicitOperatorApprovalRequired": True,
+            "taskIdentifiersIncluded": False,
+            "ownerIdentifiersIncluded": False,
+        }
 
     def claim_next_durable_task_state(
         self,

@@ -413,7 +413,7 @@ class AdminOpsStatusService:
     @staticmethod
     def _retention_policy_status_message(snapshot: Dict[str, Any]) -> str:
         if snapshot.get("available"):
-            return "Retention policy status is advisory; cleanup requires a separate explicit admin action."
+            return "Durable-task retention monitoring is configured; cleanup remains blocked pending restore qualification and explicit operator approval."
         return "Retention policy status unavailable."
 
     @staticmethod
@@ -853,15 +853,29 @@ class AdminOpsStatusService:
 
     def _build_retention_policy_status(self) -> Dict[str, Any]:
         policy = AdminLogsRetentionService._policy()
+        durable = DatabaseManager.get_instance().inspect_durable_task_retention()
         return self._section(
             available=True,
-            status="partial_policy",
-            dataSources=["admin_log_retention_policy", "db_retention_backup_restore_plan"],
+            status="configured_monitoring_only",
+            dataSources=[
+                "admin_log_retention_policy",
+                "durable_task_retention_v1",
+                "db_retention_backup_restore_plan",
+            ],
             summary={
                 "executionLogPolicy": "preview_first_retention_cleanup",
                 "executionLogRetentionDays": int(policy.retention_days),
                 "executionLogMinimumRetentionDays": int(policy.min_retention_days),
-                "durableTaskRetentionPolicy": "not_configured",
+                "durableTaskRetentionPolicy": "terminal_history_90_days",
+                "durableTaskPolicyVersion": durable["policyVersion"],
+                "durableTaskRetentionDays": durable["terminalRetentionDays"],
+                "durableTaskMinimumRetentionDays": durable["minimumRetentionDays"],
+                "durableTaskCapacityWarningRows": durable["capacityWarningRows"],
+                "durableTaskCapacityCriticalRows": durable["capacityCriticalRows"],
+                "automaticDeletionEnabled": durable["automaticDeletionEnabled"],
+                "cleanupApprovalStatus": durable["cleanupAuthorizationStatus"],
+                "policyOwner": durable["policyOwner"],
+                "escalationPath": durable["escalationPath"],
                 "adminRoleAssignmentRetentionPolicy": "not_applicable",
                 "cleanupCalled": False,
                 "migrationRun": False,
@@ -869,7 +883,9 @@ class AdminOpsStatusService:
             },
             limitations=[
                 "execution_log_cleanup_requires_separate_write_capability",
-                "durable_task_lifecycle_retention_not_configured",
+                "durable_task_cleanup_requires_restore_qualification",
+                "durable_task_cleanup_requires_explicit_operator_approval",
+                "durable_task_automatic_deletion_disabled",
                 "admin_role_assignment_audit_is_status_only",
             ],
         )
@@ -985,6 +1001,7 @@ class AdminOpsStatusService:
 
     def _build_durable_task_backlog_status(self) -> Dict[str, Any]:
         db = DatabaseManager.get_instance()
+        retention = db.inspect_durable_task_retention()
         pending_statuses = self._pending_task_statuses()
         with db.get_session() as session:
             total_tasks = int(session.execute(select(func.count(DurableTaskState.id))).scalar() or 0)
@@ -1002,8 +1019,10 @@ class AdminOpsStatusService:
                 )
             ).scalar()
 
-        status = "warning" if pending_count > 0 else "ok"
-        if pending_count >= 1000:
+        status = str(retention["status"])
+        if pending_count > 0 and status == "ok":
+            status = "warning"
+        if pending_count >= 1000 or retention["capacityStatus"] == "critical":
             status = "critical"
         return self._section(
             available=True,
@@ -1011,14 +1030,31 @@ class AdminOpsStatusService:
             dataSources=["durable_task_states"],
             summary={
                 "totalTaskCountBucket": self._maintenance_count_bucket(total_tasks),
+                "totalRowCountBucket": self._maintenance_count_bucket(retention["totalRowCount"]),
                 "pendingBacklogCountBucket": self._maintenance_count_bucket(pending_count),
                 "oldestPendingPresent": oldest_pending is not None,
-                "retentionPolicy": "not_configured",
+                "retentionPolicy": "terminal_history_90_days",
+                "capacityStatus": retention["capacityStatus"],
+                "terminalBeyondRetentionCountBucket": self._maintenance_count_bucket(
+                    retention["terminalBeyondRetentionCount"]
+                ),
+                "reclaimableExpiredLeaseCountBucket": self._maintenance_count_bucket(
+                    retention["reclaimableExpiredLeaseCount"]
+                ),
+                "recoveryPolicy": retention["recoveryPolicy"],
+                "replayPolicy": retention["replayPolicy"],
+                "automaticDeletionEnabled": retention["automaticDeletionEnabled"],
+                "cleanupApprovalStatus": retention["cleanupAuthorizationStatus"],
                 "cleanupCalled": False,
                 "taskIdentifiersIncluded": False,
                 "ownerIdentifiersIncluded": False,
             },
-            limitations=["bounded_counts_only", "does_not_claim_or_repair_tasks", "no_task_cleanup"],
+            limitations=[
+                "bounded_counts_only",
+                "does_not_claim_or_repair_tasks",
+                "automatic_task_cleanup_disabled",
+                "restore_qualification_and_operator_approval_required",
+            ],
         )
 
     def _build_auth_abuse_protection_status(self) -> Dict[str, Any]:

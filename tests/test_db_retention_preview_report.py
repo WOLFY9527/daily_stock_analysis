@@ -251,6 +251,29 @@ def test_default_report_is_policy_only_and_destructive_actions_are_disabled() ->
     assert report["productionDataTouched"] is False
     assert report["networkCallsExecuted"] is False
     assert report["publicLaunchApproved"] is False
+    durable = _domain(report, "durable_task_state_progress")
+    assert durable["retentionPolicy"] == {
+        "policyVersion": "durable_task_retention_v1",
+        "terminalRetentionDays": 90,
+        "minimumRetentionDays": 30,
+        "capacityWarningRows": 50000,
+        "capacityCriticalRows": 100000,
+        "policyOwner": "storage_operations",
+        "escalationPath": "storage_capacity_review",
+    }
+    assert durable["capacityStatus"] == "ok"
+    assert durable["recoveryPolicy"] == "expired_leases_reclaimed_by_compare_and_set"
+    assert durable["replayPolicy"] == "owner_scoped_sequence_cursor"
+    assert durable["cleanupApproval"] == {
+        "status": "blocked_pending_restore_qualification_and_explicit_operator_approval",
+        "restoreQualificationRequired": True,
+        "explicitOperatorApprovalRequired": True,
+        "automaticDeletionEnabled": False,
+        "deleteAllowed": False,
+    }
+    assert durable["sanitizedAuditSummary"]["eventType"] == "durable_task_retention_preview_generated"
+    assert durable["sanitizedAuditSummary"]["outcome"] == "read_only_preview"
+    assert durable["sanitizedAuditSummary"]["actorIdentifiersIncluded"] is False
 
 
 def test_non_admin_domains_emit_required_dry_run_evidence_posture() -> None:
@@ -337,6 +360,25 @@ def test_checker_rejects_destructive_or_launch_approval_claims(tmp_path: Path) -
     assert "domains[provider_quota_circuit_probe_events].deleteAllowed:must_be_false" in payload["findings"]
     assert "domains[provider_quota_circuit_probe_events].cleanupExecuted:unsafe_runtime_cleanup_key" in payload["findings"]
     assert "domains[provider_quota_circuit_probe_events].rawSqlDump:unsafe_sql_or_dump_key" in payload["findings"]
+
+
+def test_checker_rejects_unqualified_durable_cleanup_approval(tmp_path: Path) -> None:
+    report = build_report()
+    durable = _domain(report, "durable_task_state_progress")
+    durable["cleanupApproval"]["status"] = "approved"
+    durable["cleanupApproval"]["deleteAllowed"] = True
+    durable["sanitizedAuditSummary"].pop("eventType")
+
+    artifact = tmp_path / "unqualified-durable-cleanup.json"
+    artifact.write_text(json.dumps(report), encoding="utf-8")
+    result = _check_artifact(artifact)
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["finalStatus"] == "REJECTED"
+    assert "domains[durable_task_state_progress].cleanupApproval.status:must_remain_blocked" in payload["findings"]
+    assert "domains[durable_task_state_progress].cleanupApproval.deleteAllowed:must_be_false" in payload["findings"]
+    assert "domains[durable_task_state_progress].sanitizedAuditSummary.eventType:missing" in payload["findings"]
 
 
 def test_sqlite_preview_counts_only_aggregates_and_does_not_mutate_rows(tmp_path: Path) -> None:

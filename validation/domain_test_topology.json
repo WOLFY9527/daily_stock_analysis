@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8146,
-      "sha256": "efb2a27946d31bc89f48ed31a9d3503c6b455fd013145a95a466b98361ba943f"
+      "count": 8148,
+      "sha256": "c3f5c96b4f0829b2ee5b7a0d1b04b1e3a79f3c26426dbd6c0bb5e647ab45a06b"
     },
     "tests": [
       {
@@ -15399,6 +15399,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_unqualified_durable_cleanup_approval",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_db_retention_preview_report.py::test_cli_output_is_sanitized_and_does_not_emit_path_or_row_values",
         "domain": "database_storage_migrations",
         "baseline": true
@@ -15717,6 +15722,11 @@
         "id": "tests/test_durable_task_state.py::DurableTaskStateTestCase::test_progress_events_after_sequence_returns_newer_only",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_durable_task_state.py::DurableTaskStateTestCase::test_retention_monitoring_survives_restart_and_never_deletes",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_durable_task_state.py::DurableTaskStateTestCase::test_terminal_durable_task_reservation_releases_dedupe_slot",

@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "375526c6b04390bdc87c66985e763393bb6f11e0d1f28825f8df5f6df4d57f8e",
+    "manualSha256": "1d6a8116f3a0334e2c11a53f577f102fbb1b44feb40094c52972d3abc84bc950",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -404,13 +404,13 @@
       "title": "T576 Frontend Production Simplification Audit"
     },
     {
-      "bytes": 9766,
+      "bytes": 10504,
       "editable": true,
       "id": "data-trust",
       "kind": "canonical",
-      "lineCount": 205,
+      "lineCount": 217,
       "path": "docs/contracts/data-trust.md",
-      "sha256": "93c9434f6d2456eee2a914449152d90a9d6df3cd2eee76fe6d2cff8793aeab3b",
+      "sha256": "18e50cd3f9142047abc67c6ea18d5c26a8a4091e4a625433bd032fed2112f318",
       "status": "active",
       "summary": "Cross-domain truth, source, readiness, no-advice, and protected semantics",
       "title": "Data Trust And Protected Semantics"
@@ -464,13 +464,13 @@
       "title": "Validation And Evidence"
     },
     {
-      "bytes": 3316,
+      "bytes": 4460,
       "editable": true,
       "id": "database-operations",
       "kind": "canonical",
-      "lineCount": 76,
+      "lineCount": 97,
       "path": "docs/operations/database.md",
-      "sha256": "96c9087a86be14e65e59e29e6c062ff489d51e1fbeb6483de825b277adb2a069",
+      "sha256": "3a16ef609a753b620f85e68f15063a42ea14beb65ea05e3402112878b7064c61",
       "status": "active",
       "summary": "Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook",
       "title": "Database Operations"
