@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import secrets
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -13,6 +15,34 @@ from unittest.mock import patch
 import base64
 
 import src.auth as auth
+
+
+_DURABLE_RATE_LIMIT_PROCESS_PROBE = """
+import json
+import os
+import sys
+
+import src.auth as auth
+
+ip = "198.51.100.67"
+account = "r04-process-proof"
+action = sys.argv[1]
+if action == "record":
+    for _ in range(5):
+        auth.record_login_failure(ip, account)
+elif action != "check":
+    raise SystemExit("unsupported probe action")
+
+status = auth.get_auth_rate_limit_store_status()
+print("T693_R04_PROCESS_RESULT=" + json.dumps({
+    "action": action,
+    "allowed": auth.check_rate_limit(ip, account),
+    "durableStoreRequired": status["durableStoreRequired"],
+    "pid": os.getpid(),
+    "processLocalFallback": status["processLocalFallback"],
+    "status": auth.get_auth_rate_limit_store_status()["status"],
+}, sort_keys=True))
+"""
 
 
 def _reset_auth_globals() -> None:
@@ -247,6 +277,53 @@ class AuthRateLimitTestCase(unittest.TestCase):
             self.assertTrue(status["failClosed"])
             self.assertFalse(status["processLocalFallback"])
             self.assertNotIn("bounded-test-store-failure", json.dumps(status))
+
+    def test_durable_rate_limit_blocks_in_second_os_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(__file__).resolve().parents[1]
+            temporary_root = Path(temporary_directory)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "AUTH_ACCOUNT_RATE_LIMIT_MAX_FAILURES": "5",
+                    "AUTH_RATE_LIMIT_MAX_FAILURES": "5",
+                    "AUTH_RATE_LIMIT_WINDOW_SECONDS": "300",
+                    "DATABASE_PATH": str(temporary_root / "limiter.sqlite"),
+                    "ENV_FILE": str(temporary_root / "missing.env"),
+                    "POSTGRES_PHASE_A_URL": "",
+                    "PYTHONPATH": str(root),
+                }
+            )
+
+            def run_probe(action: str) -> dict[str, object]:
+                result = subprocess.run(
+                    [sys.executable, "-c", _DURABLE_RATE_LIMIT_PROCESS_PROBE, action],
+                    cwd=root,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                lines = [
+                    line.removeprefix("T693_R04_PROCESS_RESULT=")
+                    for line in result.stdout.splitlines()
+                    if line.startswith("T693_R04_PROCESS_RESULT=")
+                ]
+                self.assertEqual(len(lines), 1, result.stdout)
+                return json.loads(lines[0])
+
+            recorder = run_probe("record")
+            verifier = run_probe("check")
+
+        for result in (recorder, verifier):
+            self.assertFalse(result["allowed"])
+            self.assertTrue(result["durableStoreRequired"])
+            self.assertFalse(result["processLocalFallback"])
+            self.assertEqual(result["status"], "available")
+        self.assertEqual(recorder["action"], "record")
+        self.assertEqual(verifier["action"], "check")
+        self.assertNotEqual(recorder["pid"], verifier["pid"])
 
 
 class AuthSetPasswordTestCase(unittest.TestCase):

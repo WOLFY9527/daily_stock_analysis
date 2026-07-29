@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8156,
-      "sha256": "e5860a6d5409709af1803adfbf9e4ea1d415fed8ef4981e4dd33c4806bb99c56"
+      "count": 8157,
+      "sha256": "5be1408dd163e17d0142e5cf7f2a3701be45f81c58a7d21944a4c956c179fd0f"
     },
     "tests": [
       {
@@ -11452,6 +11452,11 @@
         "id": "tests/test_auth.py::AuthRateLimitTestCase::test_clear_rate_limit_resets_ip",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_auth.py::AuthRateLimitTestCase::test_durable_rate_limit_blocks_in_second_os_process",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_auth.py::AuthRateLimitTestCase::test_durable_store_failure_fails_closed_without_process_local_fallback",
