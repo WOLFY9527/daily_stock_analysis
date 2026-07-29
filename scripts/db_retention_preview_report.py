@@ -372,9 +372,18 @@ DOMAIN_POLICIES: tuple[DomainPolicy, ...] = (
     ),
 )
 
+DURABLE_TASK_DOMAIN_POLICY = next(
+    policy for policy in DOMAIN_POLICIES if policy.domain == "durable_task_state_progress"
+)
+DURABLE_TASK_TABLE_NAMES = tuple(table.name for table in DURABLE_TASK_DOMAIN_POLICY.tables)
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _is_nonnegative_int(value: Any) -> bool:
+    return type(value) is int and value >= 0
 
 
 def _quote_identifier(identifier: str) -> str:
@@ -663,8 +672,11 @@ def check_evidence(report: dict[str, Any]) -> list[str]:
         if not isinstance(domain_name, str) or not domain_name:
             findings.append(f"domains[{index}].domain:missing")
             continue
-        by_domain[domain_name] = item
-        _check_domain_evidence(item, findings)
+        if domain_name in by_domain:
+            findings.append(f"domains[{domain_name}]:duplicate")
+        else:
+            by_domain[domain_name] = item
+        _check_domain_evidence(item, findings, report)
 
     for domain_name in sorted(REQUIRED_NON_ADMIN_DOMAINS - set(by_domain)):
         findings.append(f"domains[{domain_name}]:missing_required_non_admin_domain")
@@ -692,7 +704,11 @@ def qualification_status(report: dict[str, Any], findings: list[str] | None = No
     return "EVIDENCE-READY"
 
 
-def _check_domain_evidence(domain: dict[str, Any], findings: list[str]) -> None:
+def _check_domain_evidence(
+    domain: dict[str, Any],
+    findings: list[str],
+    report: dict[str, Any],
+) -> None:
     domain_name = str(domain.get("domain", "unknown"))
     prefix = f"domains[{domain_name}]"
     for key in ("domainLabel", "ownerScope"):
@@ -750,13 +766,14 @@ def _check_domain_evidence(domain: dict[str, Any], findings: list[str]) -> None:
         _require_false(rollback_note, "cleanupExecutedByThisReport", findings, f"{prefix}.rollbackRestoreNote.cleanupExecutedByThisReport")
 
     if domain_name == "durable_task_state_progress":
-        _check_durable_task_retention_evidence(domain, findings, prefix)
+        _check_durable_task_retention_evidence(domain, findings, prefix, report)
 
 
 def _check_durable_task_retention_evidence(
     domain: dict[str, Any],
     findings: list[str],
     prefix: str,
+    report: dict[str, Any],
 ) -> None:
     policy = domain.get("retentionPolicy")
     expected_policy = DurableTaskRetentionPolicy().public_contract()
@@ -772,19 +789,36 @@ def _check_durable_task_retention_evidence(
             "required_durable_task_tables_missing",
         }:
             findings.append(f"{prefix}.capacityReason:invalid_not_evaluated_reason")
-        if missing_table_count in (None, 0):
+        if not _is_nonnegative_int(missing_table_count) or missing_table_count == 0:
             findings.append(f"{prefix}.missingTableCount:not_evaluated_requires_missing_table")
         for key in ("dryRunCandidateCount", "matchedRowCount", "estimatedBytes"):
             if domain.get(key) is not None:
                 findings.append(f"{prefix}.{key}:not_evaluated_must_be_null")
     else:
-        if missing_table_count != 0:
+        if not _is_nonnegative_int(missing_table_count):
+            findings.append(f"{prefix}.missingTableCount:inspected_capacity_requires_nonnegative_integer")
+        elif missing_table_count != 0:
             findings.append(f"{prefix}.capacityStatus:complete_durable_tables_required")
         if "capacityReason" in domain:
             findings.append(f"{prefix}.capacityReason:unexpected_for_inspected_capacity")
+        if report.get("databaseInspected") is not True:
+            findings.append("databaseInspected:complete_capacity_requires_inspection")
+        if report.get("databaseSource") != "operator_supplied_sqlite_path":
+            findings.append("databaseSource:complete_capacity_requires_operator_supplied_sqlite")
+        safety = report.get("safety")
+        if not isinstance(safety, dict) or safety.get("readOnlyConnection") is not True:
+            findings.append("safety.readOnlyConnection:complete_capacity_requires_readonly_inspection")
+        if domain.get("tablesInspected") != list(DURABLE_TASK_TABLE_NAMES):
+            findings.append(f"{prefix}.tablesInspected:complete_capacity_requires_required_tables")
+        matched_table_count = domain.get("matchedTableCount")
+        if (
+            not _is_nonnegative_int(matched_table_count)
+            or matched_table_count != len(DURABLE_TASK_TABLE_NAMES)
+        ):
+            findings.append(f"{prefix}.matchedTableCount:complete_capacity_requires_required_tables")
         for key in ("dryRunCandidateCount", "matchedRowCount"):
-            if not isinstance(domain.get(key), int):
-                findings.append(f"{prefix}.{key}:inspected_capacity_requires_integer")
+            if not _is_nonnegative_int(domain.get(key)):
+                findings.append(f"{prefix}.{key}:inspected_capacity_requires_nonnegative_integer")
     if domain.get("recoveryPolicy") != "expired_leases_reclaimed_by_compare_and_set":
         findings.append(f"{prefix}.recoveryPolicy:mismatch")
     if domain.get("replayPolicy") != "owner_scoped_sequence_cursor":

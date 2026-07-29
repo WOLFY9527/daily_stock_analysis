@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8159,
-      "sha256": "19223045739b0b7b0da3da40f1c051e6f78b0710b5d7f37e56a25a41766f81b3"
+      "count": 8161,
+      "sha256": "b9e1f8301268703263250aabab5983f0db2114fbafa3396a6a26c34a8da1c356"
     },
     "tests": [
       {
@@ -15439,6 +15439,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_duplicate_durable_capacity_domains",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_healthy_durable_capacity_without_all_required_tables",
         "domain": "database_storage_migrations",
         "baseline": false
@@ -15447,6 +15452,11 @@
         "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_missing_required_posture_without_echoing_values",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_noninteger_durable_capacity_table_counts",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_db_retention_preview_report.py::test_checker_rejects_unqualified_durable_cleanup_approval",

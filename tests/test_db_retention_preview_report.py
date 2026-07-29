@@ -9,7 +9,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.db_retention_preview_report import POLICY_VERSION, build_report, check_evidence
+from scripts.db_retention_preview_report import (
+    POLICY_VERSION,
+    build_report,
+    check_evidence,
+    qualification_status,
+)
 from src.sqlite_foreign_keys import connect_sqlite
 
 
@@ -396,13 +401,66 @@ def test_checker_rejects_healthy_durable_capacity_without_all_required_tables() 
     durable.pop("capacityReason")
     durable["dryRunCandidateCount"] = 0
     durable["matchedRowCount"] = 0
+    durable["missingTableCount"] = 0
+    durable["matchedTableCount"] = 0
+    durable["tablesInspected"] = []
 
     findings = check_evidence(report)
 
     assert (
-        "domains[durable_task_state_progress].capacityStatus:complete_durable_tables_required"
+        "databaseInspected:complete_capacity_requires_inspection"
         in findings
     )
+    assert (
+        "databaseSource:complete_capacity_requires_operator_supplied_sqlite"
+        in findings
+    )
+    assert (
+        "safety.readOnlyConnection:complete_capacity_requires_readonly_inspection"
+        in findings
+    )
+    assert (
+        "domains[durable_task_state_progress].tablesInspected:complete_capacity_requires_required_tables"
+        in findings
+    )
+    assert (
+        "domains[durable_task_state_progress].matchedTableCount:complete_capacity_requires_required_tables"
+        in findings
+    )
+    assert qualification_status(report, findings) == "REJECTED"
+
+
+def test_checker_rejects_duplicate_durable_capacity_domains(tmp_path: Path) -> None:
+    db_path = tmp_path / "complete-durable-preview.db"
+    _create_preview_fixture(db_path)
+    report = build_report(sqlite_db=db_path)
+    report["domains"].append(dict(_domain(report, "durable_task_state_progress")))
+
+    findings = check_evidence(report)
+
+    assert "domains[durable_task_state_progress]:duplicate" in findings
+    assert qualification_status(report, findings) == "REJECTED"
+
+
+def test_checker_rejects_noninteger_durable_capacity_table_counts(tmp_path: Path) -> None:
+    db_path = tmp_path / "complete-durable-preview.db"
+    _create_preview_fixture(db_path)
+    report = build_report(sqlite_db=db_path)
+    durable = _domain(report, "durable_task_state_progress")
+    durable["missingTableCount"] = False
+    durable["matchedTableCount"] = 2.0
+
+    findings = check_evidence(report)
+
+    assert (
+        "domains[durable_task_state_progress].missingTableCount:inspected_capacity_requires_nonnegative_integer"
+        in findings
+    )
+    assert (
+        "domains[durable_task_state_progress].matchedTableCount:complete_capacity_requires_required_tables"
+        in findings
+    )
+    assert qualification_status(report, findings) == "REJECTED"
 
 
 def test_checker_rejects_unqualified_durable_cleanup_approval(tmp_path: Path) -> None:
