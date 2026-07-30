@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import stat
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 
+from scripts.environment import snapshots
 from scripts.environment.errors import EnvironmentFailure, OfflineMaterialUnavailable
 from scripts.environment.identity import stable_hash
 from scripts.environment.locking import SnapshotLock
@@ -33,6 +36,11 @@ class FakeComponent:
     build_started: threading.Event | None = None
     release_build: threading.Event | None = None
     build_destination: Path | None = None
+    immutable: bool = False
+    promotion_source: Path | None = None
+    promotion_writable: bool | None = None
+    verification_paths: list[Path] = field(default_factory=list)
+    duplicate_final: bool = False
 
     def build(self, destination: Path, *, offline: bool) -> None:
         self.build_destination = destination
@@ -57,12 +65,17 @@ class FakeComponent:
         return {"payload": payload.read_text(encoding="utf-8")}
 
     def verify(self, snapshot: Path, manifest: dict[str, object]) -> None:
+        self.verification_paths.append(snapshot)
         if self.inspect(snapshot) != manifest.get("installed"):
             raise EnvironmentFailure("snapshot_payload_mismatch", "snapshot payload does not match")
 
     def prepare_promotion(self, temporary: Path, final: Path) -> None:
+        self.promotion_source = temporary
+        self.promotion_writable = bool(temporary.stat().st_mode & stat.S_IWUSR)
         if self.corrupt_on_promotion:
             (temporary / "payload.txt").write_text("corrupt-after-inspection\n", encoding="utf-8")
+        if self.duplicate_final:
+            shutil.copytree(temporary, final)
 
 
 def test_corrupt_provenance_manifest_is_rejected_and_rebuilt(tmp_path: Path) -> None:
@@ -115,6 +128,124 @@ def test_snapshot_build_uses_short_cache_root_staging_path(tmp_path: Path) -> No
             "installedFingerprint": result.installed_fingerprint,
         }
     )
+
+
+def test_immutable_promotion_moves_writable_staging_then_publishes_same_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    component = FakeComponent(immutable=True)
+    rename_calls: list[tuple[Path, Path, int]] = []
+    original_rename = Path.rename
+
+    def model_macos_rename(source: Path, target: str | Path) -> Path:
+        target_path = Path(target)
+        mode = source.stat().st_mode
+        if source.is_dir() and source.parent != target_path.parent and not (mode & stat.S_IWUSR):
+            raise PermissionError("sealed cross-parent directory move")
+        rename_calls.append((source, target_path, mode))
+        return original_rename(source, target_path)
+
+    monkeypatch.setattr(Path, "rename", model_macos_rename)
+
+    result = ensure_snapshot(tmp_path, component, offline=True)
+
+    component_root = tmp_path / "snapshots" / component.name
+    staging_moves = [call for call in rename_calls if call[0].parent == tmp_path / "staging"]
+    assert len(staging_moves) == 1
+    staging, promotion, staging_mode = staging_moves[0]
+    assert component.promotion_source == staging
+    assert component.promotion_writable is True
+    assert component.verification_paths[:2] == [staging, staging]
+    assert staging_mode & stat.S_IWUSR
+    assert promotion.parent == component_root
+    assert promotion.name.startswith(".promotion-")
+
+    publication_moves = [call for call in rename_calls if call[1] == result.path]
+    assert len(publication_moves) == 1
+    published_source, final, published_mode = publication_moves[0]
+    assert published_source.parent == final.parent == component_root
+    assert not (published_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    assert not (result.path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    assert not ((result.path / "payload.txt").stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    assert not list(component_root.glob(".promotion-*"))
+    if os.name != "nt":
+        with pytest.raises(PermissionError):
+            (result.path / "payload.txt").write_text("mutation", encoding="utf-8")
+
+
+def test_stale_hidden_promotion_is_quarantined_before_building_snapshot(tmp_path: Path) -> None:
+    component = FakeComponent(name="web", input_fingerprint="b" * 64)
+    component_root = tmp_path / "snapshots" / component.name
+    interrupted = component_root / f".promotion-{component.input_fingerprint[:12]}-{'c' * 32}"
+    interrupted.mkdir(parents=True)
+    (interrupted / "partial").write_text("partial", encoding="utf-8")
+    old = time.time() - 7200
+    os.utime(interrupted, (old, old))
+    interrupted.chmod(0o555)
+
+    result = ensure_snapshot(tmp_path, component, offline=True)
+
+    assert result.path.is_dir()
+    assert component.build_count == 1
+    assert not interrupted.exists()
+    assert not list(component_root.glob(".promotion-*"))
+    assert any((tmp_path / "quarantine").iterdir())
+
+
+def test_duplicate_final_is_validated_while_own_promotion_is_quarantined(tmp_path: Path) -> None:
+    component = FakeComponent(duplicate_final=True)
+
+    result = ensure_snapshot(tmp_path, component, offline=True)
+
+    component_root = tmp_path / "snapshots" / component.name
+    assert verify_cached_snapshot(result.path, component)["installedFingerprint"] == result.installed_fingerprint
+    assert not list(component_root.glob(".promotion-*"))
+    assert any(path.name.startswith("duplicate-python-") for path in (tmp_path / "quarantine").iterdir())
+
+
+def test_seal_failure_quarantines_hidden_promotion_without_publishing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    component = FakeComponent(immutable=True)
+    component_root = tmp_path / "snapshots" / component.name
+
+    def fail_seal(path: Path) -> None:
+        assert path.parent == component_root
+        raise EnvironmentFailure("fixture_seal_failed", "fixture seal failed")
+
+    monkeypatch.setattr(snapshots, "_seal_snapshot", fail_seal)
+
+    with pytest.raises(EnvironmentFailure, match="fixture seal failed"):
+        ensure_snapshot(tmp_path, component, offline=True)
+
+    assert not list(component_root.glob("[0-9a-f]" * 64))
+    assert not list(component_root.glob(".promotion-*"))
+    assert any((tmp_path / "quarantine").iterdir())
+
+
+def test_final_verification_failure_quarantines_sealed_published_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    component = FakeComponent(immutable=True)
+    component_root = tmp_path / "snapshots" / component.name
+    original_verify = snapshots.verify_cached_snapshot
+
+    def fail_final_verification(snapshot: Path, selected: FakeComponent) -> dict[str, object]:
+        if snapshot.parent == component_root and len(snapshot.name) == 64:
+            raise EnvironmentFailure("fixture_final_verification_failed", "fixture final verification failed")
+        return original_verify(snapshot, selected)
+
+    monkeypatch.setattr(snapshots, "verify_cached_snapshot", fail_final_verification)
+
+    with pytest.raises(EnvironmentFailure, match="fixture final verification failed"):
+        ensure_snapshot(tmp_path, component, offline=True)
+
+    assert not list(component_root.glob("[0-9a-f]" * 64))
+    assert not list(component_root.glob(".promotion-*"))
+    assert any((tmp_path / "quarantine").iterdir())
 
 
 def test_snapshots_for_distinct_input_fingerprints_coexist(tmp_path: Path) -> None:

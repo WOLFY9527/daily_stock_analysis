@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7986,
-      "sha256": "f58e4c5e1e9aa83d816d7bdf6de62276d6dda5a932df6ea3098d1212a2df3079"
+      "count": 7991,
+      "sha256": "74ffe665efce6f5be0ab5cbc300893569a49868f80d7f8ec0c1423d0b1bb3a6c"
     },
     "tests": [
       {
@@ -8199,12 +8199,27 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_duplicate_final_is_validated_while_own_promotion_is_quarantined",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_failed_installation_never_creates_a_valid_final_snapshot",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_failed_promotion_verification_never_exposes_final_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_final_verification_failure_quarantines_sealed_published_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_immutable_promotion_moves_writable_staging_then_publishes_same_parent",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -8229,6 +8244,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_seal_failure_quarantines_hidden_promotion_without_publishing",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_snapshot_build_uses_short_cache_root_staging_path",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -8240,6 +8260,11 @@
       },
       {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_stale_dead_owner_lock_is_recovered",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_stale_hidden_promotion_is_quarantined_before_building_snapshot",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

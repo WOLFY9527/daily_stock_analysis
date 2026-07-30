@@ -18,6 +18,7 @@ from .locking import SnapshotLock
 SNAPSHOT_SCHEMA = "wolfystock_dependency_snapshot_v1"
 STAGING_SCHEMA = "wolfystock_dependency_staging_v1"
 STAGING_MARKER = ".wolfy-build.json"
+PROMOTION_PREFIX = ".promotion-"
 
 
 class SnapshotComponent(Protocol):
@@ -71,6 +72,7 @@ def _quarantine(cache_root: Path, path: Path, label: str) -> Path:
     quarantine = cache_root / "quarantine"
     quarantine.mkdir(parents=True, exist_ok=True)
     target = quarantine / f"{label}-{int(time.time())}-{uuid.uuid4().hex}"
+    _make_directory_writable_for_move(path)
     path.rename(target)
     retained = sorted(quarantine.iterdir(), key=lambda item: item.stat().st_mtime, reverse=True)
     for expired in retained[8:]:
@@ -79,6 +81,20 @@ def _quarantine(cache_root: Path, path: Path, label: str) -> Path:
         else:
             expired.unlink(missing_ok=True)
     return target
+
+
+def _make_directory_writable_for_move(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        return
+    try:
+        mode = path.stat().st_mode
+        if mode & stat.S_IWUSR:
+            return
+        path.chmod(mode | stat.S_IWUSR | stat.S_IXUSR)
+    except OSError as exc:
+        raise EnvironmentFailure(
+            "snapshot_quarantine_failed", "unable to prepare dependency snapshot for quarantine"
+        ) from exc
 
 
 def _remove_readonly(function: Any, path: str, _error: object) -> None:
@@ -162,6 +178,58 @@ def sweep_interrupted_builds(
         if old:
             try:
                 _quarantine(cache_root, path, f"interrupted-{component_name}")
+            except FileNotFoundError:
+                continue
+            swept += 1
+    return swept
+
+
+def _promotion_prefix(input_fingerprint: str) -> str:
+    return f"{PROMOTION_PREFIX}{input_fingerprint[:12]}-"
+
+
+def _promotion_path(component_root: Path, input_fingerprint: str) -> Path:
+    promotion = component_root / f"{_promotion_prefix(input_fingerprint)}{uuid.uuid4().hex}"
+    if promotion.exists():
+        raise EnvironmentFailure(
+            "snapshot_promotion_collision", "dependency snapshot promotion path already exists"
+        )
+    return promotion
+
+
+def _is_promotion_directory(path: Path, input_fingerprint: str) -> bool:
+    identifier = path.name.removeprefix(_promotion_prefix(input_fingerprint))
+    return (
+        path.name.startswith(_promotion_prefix(input_fingerprint))
+        and len(identifier) == 32
+        and all(character in "0123456789abcdef" for character in identifier)
+    )
+
+
+def sweep_interrupted_promotions(
+    cache_root: Path,
+    component_root: Path,
+    component_name: str,
+    input_fingerprint: str,
+    *,
+    older_than_seconds: float = 1800.0,
+) -> int:
+    if not component_root.is_dir():
+        return 0
+    now = time.time()
+    swept = 0
+    for path in component_root.iterdir():
+        if not path.is_dir() or not _is_promotion_directory(path, input_fingerprint):
+            continue
+        try:
+            old = now - path.stat().st_mtime > older_than_seconds
+        except OSError as exc:
+            raise EnvironmentFailure(
+                "snapshot_promotion_cleanup_failed", "unable to inspect dependency snapshot promotion"
+            ) from exc
+        if old:
+            try:
+                _quarantine(cache_root, path, f"interrupted-promotion-{component_name}")
             except FileNotFoundError:
                 continue
             swept += 1
@@ -273,6 +341,12 @@ def ensure_snapshot(
         timeout=lock_timeout,
     )
     with lock:
+        sweep_interrupted_promotions(
+            cache_root,
+            component_root,
+            component.name,
+            component.input_fingerprint,
+        )
         existing = _valid_existing(cache_root, component_root, component)
         if existing:
             return existing
@@ -291,20 +365,33 @@ def ensure_snapshot(
             component.input_fingerprint,
             installed_fingerprint,
         )
+        promotion: Path | None = None
+        published = False
+        duplicate = False
         try:
             component.prepare_promotion(temporary, final)
             component.verify(temporary, manifest)
+            promotion = _promotion_path(component_root, component.input_fingerprint)
+            temporary.rename(promotion)
+            temporary = None
             if bool(getattr(component, "immutable", False)):
-                _seal_snapshot(temporary)
+                _seal_snapshot(promotion)
             if final.exists():
-                _quarantine(cache_root, temporary, f"duplicate-{component.name}")
+                duplicate_promotion = promotion
+                promotion = None
+                _quarantine(cache_root, duplicate_promotion, f"duplicate-{component.name}")
+                duplicate = True
             else:
-                temporary.rename(final)
+                promotion.rename(final)
+                promotion = None
+                published = True
             verify_cached_snapshot(final, component)
         except Exception:
-            if temporary.exists():
+            if temporary is not None and temporary.exists():
                 _quarantine(cache_root, temporary, f"failed-promotion-{component.name}")
-            if final.exists():
+            if promotion is not None and promotion.exists():
+                _quarantine(cache_root, promotion, f"failed-promotion-{component.name}")
+            if (published or duplicate) and final.exists():
                 _quarantine(cache_root, final, f"failed-final-{component.name}")
             raise
         return SnapshotResult(
