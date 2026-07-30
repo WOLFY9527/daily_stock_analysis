@@ -159,7 +159,11 @@ def test_windows_managed_reexec_runs_managed_cli_and_propagates_exit(
 
     monkeypatch.setattr(environment_cli, "managed_python_path", lambda _root: expected)
     monkeypatch.setattr(environment_cli.sys, "executable", str(tmp_path / "bootstrap.exe"))
-    monkeypatch.setattr(environment_cli.os, "name", "nt")
+    monkeypatch.setattr(
+        environment_cli,
+        "os",
+        SimpleNamespace(name="nt", environ=os.environ),
+    )
     monkeypatch.setattr(environment_cli.subprocess, "run", run)
 
     with pytest.raises(SystemExit) as raised:
