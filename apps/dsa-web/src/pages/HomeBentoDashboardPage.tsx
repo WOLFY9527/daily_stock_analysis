@@ -7480,6 +7480,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         subtitle: 'WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.',
         commandLabel: 'Command input',
         commandHint: 'Examples: AAPL / Tencent / 600519',
+        accessDisclosure: 'Search validates the symbol; opening full stock research requires sign-in.',
         unlockItems: ['Saved reports', 'Saved history', 'Portfolio workspace', 'Market scanner'],
         unlockAction: 'Create free account',
         previewTitle: 'Available after sign-in',
@@ -7494,6 +7495,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         subtitle: 'WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。',
         commandLabel: '研究命令入口',
         commandHint: '示例：AAPL / 腾讯控股 / 600519',
+        accessDisclosure: '搜索会先验证标的；打开完整个股研究需要登录。',
         unlockItems: ['保存报告', '回看历史', '组合工作台', '全市场扫描'],
         unlockAction: '免费创建账户',
         previewTitle: '登录后可用',
@@ -8133,6 +8135,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandHint}</p>
                   </div>
                   {omnibarModule}
+                  <p
+                    className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
+                    data-testid="guest-home-research-access-disclosure"
+                  >
+                    {guestCommandConsoleCopy.accessDisclosure}
+                  </p>
                 </div>
 
                 {/* Current market observation — integrated subordinate band, not a disconnected side card */}

@@ -4,9 +4,12 @@ import { installExternalStylesheetStubs } from './externalStyles';
 type AppSmokeFixtures = {
   consoleErrors: string[];
   unhandledApiRoutes: string[];
+  allowKnownGuestPreviewRejectionConsole: boolean;
 };
 
 const timestamp = '2026-05-02T09:00:00Z';
+const knownGuestPreviewRejectionConsole = 'Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)';
+const knownGuestPreviewRejectionTestTitle = 'home stock search reaches the canonical route through keyboard, button, and suggestions';
 
 function createScannerCandidate(index: number, overrides: Partial<Record<string, unknown>> = {}) {
   const symbol = typeof overrides.symbol === 'string' ? overrides.symbol : `MOCK${index}`;
@@ -1583,7 +1586,9 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 }
 
 export const test = base.extend<AppSmokeFixtures>({
-  consoleErrors: [async ({ page }, use) => {
+  allowKnownGuestPreviewRejectionConsole: [false, { option: true }],
+
+  consoleErrors: [async ({ page, allowKnownGuestPreviewRejectionConsole }, use, testInfo) => {
     const consoleErrors: string[] = [];
 
     const cleanupExternalStylesheetStubs = await installExternalStylesheetStubs(page);
@@ -1598,6 +1603,14 @@ export const test = base.extend<AppSmokeFixtures>({
 
     await use(consoleErrors);
     await cleanupExternalStylesheetStubs();
+
+    if (allowKnownGuestPreviewRejectionConsole) {
+      expect(testInfo.file.endsWith('/apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts')).toBe(true);
+      expect(testInfo.title).toBe(knownGuestPreviewRejectionTestTitle);
+      expect(consoleErrors.filter((message) => message === knownGuestPreviewRejectionConsole)).toHaveLength(1);
+      expect(consoleErrors.filter((message) => message !== knownGuestPreviewRejectionConsole)).toEqual([]);
+      return;
+    }
 
     expect(consoleErrors).toEqual([]);
   }, { auto: true }],

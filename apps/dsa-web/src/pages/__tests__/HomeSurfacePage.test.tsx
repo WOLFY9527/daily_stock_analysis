@@ -4031,6 +4031,17 @@ describe('HomeSurfacePage', () => {
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
   });
 
+  it('states the guest research sign-in boundary before a guest submits a stock search', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    renderSurfaceWithLocation('/');
+
+    const commandPlane = await screen.findByTestId('guest-home-command-plane-primary');
+    expect(within(commandPlane).getByTestId('guest-home-research-access-disclosure')).toHaveTextContent(
+      '搜索会先验证标的；打开完整个股研究需要登录。',
+    );
+    expect(within(commandPlane).getByTestId('home-bento-analyze-button')).toBeEnabled();
+  });
+
   it('hands a valid home search submission to the canonical stock structure route', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('AAPL'));

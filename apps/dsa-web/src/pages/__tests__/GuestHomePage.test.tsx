@@ -139,6 +139,7 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('报告');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
+    expect(screen.getByTestId('guest-home-research-access-disclosure')).toHaveTextContent('搜索会先验证标的；打开完整个股研究需要登录。');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
     expect(marketPreviewStrip).toHaveAttribute('role', 'status');
@@ -206,6 +207,7 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-market-preview-strip')).toHaveTextContent('Current market observation');
     expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('Safe next step');
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-research-access-disclosure')).toHaveTextContent('Search validates the symbol; opening full stock research requires sign-in.');
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
   });
 

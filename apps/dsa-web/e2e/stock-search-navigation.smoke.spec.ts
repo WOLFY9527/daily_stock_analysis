@@ -6,25 +6,58 @@ type SearchNavigationWindow = Window & {
   __t665RouteTransitions?: number;
 };
 
+test.use({ allowKnownGuestPreviewRejectionConsole: true });
+
 async function stabilizeUnrelatedData(page: Page) {
   await page.route('**/api/v1/analysis/preview', async (route) => {
+    const payload = route.request().postDataJSON() as { stock_code?: unknown } | null;
+    const stockCode = typeof payload?.stock_code === 'string' ? payload.stock_code.trim() : '';
+    if (!stockCode) {
+      throw new Error('Preview fixture requires a request stock_code.');
+    }
+
+    if (stockCode === 'not-a-symbol!') {
+      await route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Guest preview rejected the submitted stock code.' }),
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         query_id: 't665-preview',
-        stock_code: 'AAPL',
-        stock_name: 'Apple',
+        stock_code: stockCode,
+        stock_name: `${stockCode} preview`,
         preview_scope: 'guest',
         report: {
-          meta: { query_id: 't665-preview', stock_code: 'AAPL', stock_name: 'Apple', report_type: 'brief' },
+          meta: { query_id: 't665-preview', stock_code: stockCode, stock_name: `${stockCode} preview`, report_type: 'brief' },
           summary: { analysis_summary: 'Preview unavailable for route qualification.', sentiment_score: 50 },
         },
       }),
     });
   });
-  await page.route('**/api/v1/stocks/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  await page.route('**/api/v1/stocks/AAPL/validate', async (route) => {
+    if (route.request().method() !== 'GET') {
+      throw new Error(`Stock validation fixture received unexpected ${route.request().method()} request.`);
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        stock_code: 'AAPL',
+        normalized_symbol: 'AAPL',
+        market: 'us',
+        status: 'valid',
+        valid: true,
+        exists: true,
+        stock_name: 'Apple Inc.',
+      }),
+    });
   });
   await page.route('**/api/v1/options/**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
@@ -51,14 +84,31 @@ async function expectSpaMarker(page: Page) {
 test('home stock search reaches the canonical route through keyboard, button, and suggestions', async ({ page }) => {
   const failedRequests: string[] = [];
   const errorResponses: string[] = [];
+  const expectedPreviewRejections: Array<{ status: number; stockCode: string; url: string }> = [];
   page.on('requestfailed', (request) => failedRequests.push(`${request.method()} ${request.url()}`));
   page.on('response', (response) => {
-    if (response.status() >= 400) errorResponses.push(`${response.status()} ${response.url()}`);
+    if (response.status() < 400) {
+      return;
+    }
+
+    if (response.status() === 422 && response.url().includes('/api/v1/analysis/preview')) {
+      const payload = response.request().postDataJSON() as { stock_code?: unknown } | null;
+      const stockCode = typeof payload?.stock_code === 'string' ? payload.stock_code.trim() : '';
+      if (stockCode === 'not-a-symbol!') {
+        expectedPreviewRejections.push({ status: response.status(), stockCode, url: response.url() });
+        return;
+      }
+    }
+
+    errorResponses.push(`${response.status()} ${response.url()}`);
   });
 
   await stabilizeUnrelatedData(page);
   await page.goto('/');
   await expect(page.getByTestId('home-bento-omnibar-input')).toBeVisible();
+  await expect(page.getByTestId('guest-home-research-access-disclosure')).toHaveText(
+    '搜索会先验证标的；打开完整个股研究需要登录。',
+  );
   await markClientSession(page);
 
   const homeInput = page.getByTestId('home-bento-omnibar-input');
@@ -83,6 +133,10 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await homeInput.fill('600519');
   await page.getByTestId('home-bento-analyze-button').click();
   await expect(page).toHaveURL(/\/stocks\/600519\/structure-decision\?symbol=600519&source=manual$/);
+  await expect(page.getByTestId('auth-guard-overlay')).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByTestId('consumer-protected-frame')).toHaveAttribute('data-boundary-family', 'consumer-protected');
+  await expect(page.getByTestId('stock-structure-decision-page')).toHaveCount(0);
   await expectSpaMarker(page);
   await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(3);
 
@@ -101,7 +155,7 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await homeInput.fill('not-a-symbol!');
   await page.getByTestId('home-bento-analyze-button').click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText('请输入格式正确的股票代码')).toBeVisible();
+  await expect(page.getByTestId('guest-preview-unavailable-state')).toBeVisible();
   await homeInput.fill('');
   await page.getByTestId('home-bento-analyze-button').click();
   await expect(page).toHaveURL(/\/$/);
@@ -144,12 +198,18 @@ test('home stock search reaches the canonical route through keyboard, button, an
     await expect(shellInputAfterBack).not.toBeFocused();
   }
   await shellInputAfterBack.fill('AAPL');
-  await shellSearchAfterBack.getByRole('button', { name: '打开 AAPL 美股 ticker 语境' }).click();
+  await shellSearchAfterBack
+    .getByTestId('shell-stock-search-popover')
+    .getByRole('button', { name: '验证后打开个股研究 使用已验证的标的身份。', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/stocks\/AAPL\/structure-decision$/);
   await expectSpaMarker(page);
   await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(6);
 
-  await expect(page.locator('[role="alertdialog"]')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toBeVisible();
   expect(failedRequests).toEqual([]);
+  expect(expectedPreviewRejections).toHaveLength(1);
+  expect(expectedPreviewRejections[0]).toMatchObject({ status: 422, stockCode: 'not-a-symbol!' });
+  expect(expectedPreviewRejections[0]?.url).toContain('/api/v1/analysis/preview');
   expect(errorResponses).toEqual([]);
 });
