@@ -10,8 +10,8 @@ describe('ResearchWorkspaceFlowPanel', () => {
         <ResearchWorkspaceFlowPanel
           language="en"
           current="scanner"
-          symbol="nvda"
-          market="us"
+          symbol="NVDA"
+          market="US"
           source="scanner"
           knownEvidence={['Scanner candidate formed']}
           missingEvidence={['Portfolio exposure not reviewed']}

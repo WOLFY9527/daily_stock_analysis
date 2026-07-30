@@ -1662,7 +1662,8 @@ describe('OptionsLabPage', () => {
     mockHappyPath(buildOptionsResearchReadiness());
     renderPage();
 
-    const hero = await screen.findByTestId('options-lab-product-hero');
+    await expectContractSymbolVisible('TEM260619C00055000');
+    const hero = screen.getByTestId('options-lab-product-hero');
     expect(hero).toHaveTextContent('期权研究首读');
     expect(hero).toHaveTextContent('策略结构可比');
     expect(hero).toHaveTextContent('演示样本');
@@ -1686,7 +1687,8 @@ describe('OptionsLabPage', () => {
     mockHappyPath(buildOptionsResearchReadiness(), buildOptionsChainReadinessView());
     renderPage();
 
-    const hero = await screen.findByTestId('options-lab-product-hero');
+    await expectContractSymbolVisible('TEM260619C00055000');
+    const hero = screen.getByTestId('options-lab-product-hero');
     [
       '链部分可用',
       '到期覆盖可用',
@@ -1845,7 +1847,8 @@ describe('OptionsLabPage', () => {
   it('fails closed when additive readiness is missing', async () => {
     renderPage();
 
-    const hero = await screen.findByTestId('options-lab-product-hero');
+    await expectContractSymbolVisible('TEM260619C00055000');
+    const hero = screen.getByTestId('options-lab-product-hero');
     expect(hero).toHaveTextContent('期权研究首读');
     expect(hero).toHaveTextContent('策略结构可比');
     expect(hero).toHaveTextContent('下一步证据');
@@ -1871,7 +1874,8 @@ describe('OptionsLabPage', () => {
     }));
     renderPage();
 
-    const hero = await screen.findByTestId('options-lab-product-hero');
+    await expectContractSymbolVisible('TEM260619C00055000');
+    const hero = screen.getByTestId('options-lab-product-hero');
     expect(hero).toHaveTextContent('策略结构可比');
     expect(hero).toHaveTextContent('下一步证据');
     expect(hero).toHaveTextContent('补齐链路接入证据');

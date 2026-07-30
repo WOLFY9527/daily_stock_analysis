@@ -172,29 +172,30 @@ describe('PortfolioScenarioRiskPanel', () => {
       ],
     });
 
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('预估影响');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('-3.2%');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('-64.00');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('覆盖情况');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('显式映射');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('1 行');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('情景风险仅供观察');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('风险读数受限');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('部分输入缺失');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('证据不足，需补充输入');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('数据不足 / 需补充映射');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('BABA');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('portfolio_scenario_risk_advisory_v1');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('advisory_only_not_trade_execution');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('coverage_partial');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('missing_scenario_coverage');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('theme_mapping_pending');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('scenario_coverage_incomplete');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('backend_debug_warning_token');
-    expect(screen.getByTestId('portfolio-scenario-risk-result').textContent).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
+    const result = await screen.findByTestId('portfolio-scenario-risk-result');
+    expect(result).toHaveTextContent('预估影响');
+    expect(result).toHaveTextContent('-3.2%');
+    expect(result).toHaveTextContent('-64.00');
+    expect(result).toHaveTextContent('覆盖情况');
+    expect(result).toHaveTextContent('显式映射');
+    expect(result).toHaveTextContent('1 行');
+    expect(result).toHaveTextContent('情景风险仅供观察');
+    expect(result).toHaveTextContent('风险读数受限');
+    expect(result).toHaveTextContent('部分输入缺失');
+    expect(result).toHaveTextContent('证据不足，需补充输入');
+    expect(result).toHaveTextContent('数据不足 / 需补充映射');
+    expect(result).toHaveTextContent('BABA');
+    expect(result).not.toHaveTextContent('portfolio_scenario_risk_advisory_v1');
+    expect(result).not.toHaveTextContent('advisory_only_not_trade_execution');
+    expect(result).not.toHaveTextContent('coverage_partial');
+    expect(result).not.toHaveTextContent('missing_scenario_coverage');
+    expect(result).not.toHaveTextContent('theme_mapping_pending');
+    expect(result).not.toHaveTextContent('scenario_coverage_incomplete');
+    expect(result).not.toHaveTextContent('backend_debug_warning_token');
+    expect(result.textContent).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
+    expect(result).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
+    expect(result).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
+    expect(result).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
   });
 
   it('blocks a scenario when valued positions do not share one base currency', async () => {
@@ -294,7 +295,7 @@ describe('PortfolioScenarioRiskPanel', () => {
 
     await waitFor(() => expect(runScenario).toHaveBeenCalledTimes(1));
 
-    const result = screen.getByTestId('portfolio-scenario-risk-result');
+    const result = await screen.findByTestId('portfolio-scenario-risk-result');
     expect(result).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
     expect(result).not.toHaveTextContent('advisory_only_not_trade_execution');
     expect(result.textContent || '').not.toMatch(/accountingMutation|brokerIntegration|tradeExecution|noAccountingMutation|noBrokerSync|noOrderPlacement/);
@@ -351,7 +352,7 @@ describe('PortfolioScenarioRiskPanel', () => {
 
     await waitFor(() => expect(runScenario).toHaveBeenCalledTimes(1));
 
-    const result = screen.getByTestId('portfolio-scenario-risk-result');
+    const result = await screen.findByTestId('portfolio-scenario-risk-result');
     expect(result).toHaveTextContent('数据正在准备');
     expect(result).toHaveTextContent('数据可能延迟但仍可观察');
     expect(result).toHaveTextContent('证据不足，需补充输入');

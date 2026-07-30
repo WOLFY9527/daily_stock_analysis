@@ -66,6 +66,8 @@ class AuthApiTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         _reset_auth_globals()
+        self._inherited_env_file = os.environ.get("ENV_FILE")
+        self._inherited_database_path = os.environ.get("DATABASE_PATH")
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
@@ -97,8 +99,14 @@ class AuthApiTestCase(unittest.TestCase):
         self.coarse_fallback_patcher.stop()
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
+        if self._inherited_env_file is None:
+            os.environ.pop("ENV_FILE", None)
+        else:
+            os.environ["ENV_FILE"] = self._inherited_env_file
+        if self._inherited_database_path is None:
+            os.environ.pop("DATABASE_PATH", None)
+        else:
+            os.environ["DATABASE_PATH"] = self._inherited_database_path
         self.temp_dir.cleanup()
 
     def _read_auth_enabled_from_env(self) -> bool:
