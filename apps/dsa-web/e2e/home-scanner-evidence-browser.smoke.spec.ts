@@ -41,6 +41,16 @@ async function installHomeEvidenceOverrides(page: Page) {
     await fulfillJson(route, buildHomeHistoryPayload());
   });
 
+  await page.route('**/api/v1/stocks/ORCL/structure-decision', async (route) => {
+    await fulfillJson(route, {
+      ticker: 'ORCL',
+      symbol: 'ORCL',
+      observation_only: true,
+      decision_grade: false,
+      peer_correlation_snapshot: null,
+    });
+  });
+
   await page.route('**/api/v1/history/3', async (route) => {
     await fulfillJson(route, {
       meta: buildHomeReportMeta(),
@@ -176,12 +186,26 @@ async function installScannerEvidenceOverrides(page: Page) {
 }
 
 test.describe('Home and Scanner evidence browser smoke', () => {
+  test.use({ timezoneId: 'Asia/Shanghai' });
+
   test('Home shows evidence packet strip without raw leakage or trading wording', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installHomeEvidenceOverrides(page);
       await openSignedInRoute(page, '/zh');
       await appExpect(page.getByTestId('home-bento-dashboard')).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('button', { name: '历史记录' }).click();
+      await page.getByTestId('home-bento-history-item-3').click();
+      const researchBoundary = page.getByTestId('home-research-trust-strip');
+      await appExpect(researchBoundary).toBeVisible({ timeout: 15_000 });
+      await appExpect(researchBoundary).not.toHaveAttribute('open');
+      await page.getByTestId('home-research-boundary-disclosure').click();
+      await appExpect(researchBoundary).toHaveAttribute('open', '');
+      const researchPacket = page.getByTestId('home-research-packet-panel');
+      await appExpect(researchPacket).toBeVisible({ timeout: 15_000 });
+      await appExpect(researchPacket).toContainText('报告生成于 04/27 16:03');
+      await appExpect(researchPacket).not.toContainText('05/06');
+      await appExpect(researchPacket).not.toContainText('截至');
       await appExpect(page.getByTestId('home-evidence-packet-strip')).toBeVisible({ timeout: 15_000 });
       const strip = page.getByTestId('home-evidence-packet-strip');
       await appExpect(strip).toContainText('证据包摘要');
@@ -190,9 +214,9 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await appExpect(strip).toContainText('价格历史 可用');
       await appExpect(strip).toContainText('技术面 可用');
       await appExpect(strip).toContainText('基本面 降级');
-      await appExpect(strip).toContainText('财报 待补');
+      await appExpect(strip).toContainText('财报 正在等待数据确认');
       await appExpect(strip).toContainText('新闻 缺失');
-      await appExpect(strip).toContainText('催化 阻断');
+      await appExpect(strip).toContainText('催化 当前无法分析');
       await appExpect(strip).toContainText('估值 等待');
       await appExpect(strip).toContainText('基本面/财报：数据不足');
       await appExpect(strip).toContainText(/新闻\/催化：1\s*条新闻，催化待补/);
@@ -217,6 +241,7 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await page.unroute('**/api/v1/auth/me**');
       await page.unroute('**/api/v1/stocks/*/evidence**');
       await page.unroute('**/api/v1/stocks/ORCL/history**');
+      await page.unroute('**/api/v1/stocks/ORCL/structure-decision');
       await page.unroute('**/api/v1/history/3');
     }
   });
@@ -253,7 +278,7 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       });
       const workflowBox = await workflow.boundingBox();
       const rankedListBox = await page.getByTestId('scanner-ranked-list').boundingBox();
-      expect(workflowBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(rankedListBox?.y ?? Number.NEGATIVE_INFINITY);
+      expect(rankedListBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(workflowBox?.y ?? Number.NEGATIVE_INFINITY);
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);

@@ -1112,6 +1112,29 @@ describe('market snapshot normalization', () => {
 });
 
 describe('market auxiliary runtime contracts', () => {
+  it('retains an explicit partial briefing marker from the public contract', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'computed',
+        source_label: 'Public market summary',
+        freshness: 'fresh',
+        updated_at: '2026-07-16T10:00:00Z',
+        as_of: '2026-07-16T09:59:00Z',
+        is_partial: true,
+        items: [{
+          title: 'Partial market observation',
+          message: 'Some market evidence is still incomplete.',
+          severity: 'neutral',
+          category: 'risk',
+        }],
+      },
+    });
+
+    const briefing = await marketModule.marketApi.getMarketBriefing();
+
+    expect(briefing.isPartial).toBe(true);
+  });
+
   it('rejects malformed briefing, futures, and CN short sentiment contracts', async () => {
     vi.spyOn(apiClient, 'get')
       .mockResolvedValueOnce({ data: {} })

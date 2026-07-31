@@ -11,6 +11,8 @@ import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
 import { marketApi } from '../../api/market';
 import { DataFreshnessBadge, MarketDataRow, MarketOverviewPanelFooter } from '../../components/market-overview/marketOverviewPrimitives';
+import { MarketOverviewPanelStateNotice } from '../../components/market-overview/MarketOverviewCard';
+import { marketObservationState } from '../../components/market-overview/marketOverviewDecisionTypes';
 import { TerminalPageHeading } from '../../components/terminal/TerminalPrimitives';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
@@ -2038,7 +2040,7 @@ async function expandMarketEvidenceDetails() {
 
 async function expectCoverageSummarySettled() {
   await waitFor(() => {
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
+    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|本地快照保存：/);
   });
 }
 
@@ -2107,6 +2109,161 @@ function renderMarketOverviewWorkbenchWithPanels(
       ...panelOverrides,
     },
   });
+}
+
+function marketOverviewPanelsWithFreshness(freshness: 'live' | 'cached' | 'delayed') {
+  const panels = localSnapshotPayload().payload;
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({
+        ...(item as Record<string, unknown>),
+        source: (item as Record<string, unknown>).source === 'fallback' ? 'yahoo' : (item as Record<string, unknown>).source,
+        freshness,
+        isFallback: false,
+        isStale: false,
+        isPartial: false,
+        isUnavailable: false,
+      }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      source: panelValue.source === 'fallback' ? 'yahoo' : panelValue.source,
+      freshness,
+      isFallback: false,
+      isStale: false,
+      isPartial: false,
+      isUnavailable: false,
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithExplicitDegradation(
+  freshness: 'live' | 'cached',
+  flag: 'isFallback' | 'isStale' | 'isPartial' | 'isSynthetic' | 'isUnavailable',
+) {
+  const panels = marketOverviewPanelsWithFreshness(freshness);
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({ ...(item as Record<string, unknown>), [flag]: true }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      [flag]: true,
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithNestedFreshness(
+  state: 'delayed' | 'stale' | 'partial',
+) {
+  const panels = marketOverviewPanelsWithFreshness('live');
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const providerFreshness = { state, isStale: state === 'stale' };
+    const isPartial = state === 'delayed' || state === 'stale';
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({
+        ...(item as Record<string, unknown>),
+        providerFreshness,
+        ...(isPartial ? { isPartial: true } : {}),
+      }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      providerFreshness,
+      ...(isPartial ? { isPartial: true } : {}),
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithSeparateStaleAndPartialFreshness() {
+  const panels = marketOverviewPanelsWithFreshness('live');
+  const panelFreshness: Record<string, 'stale' | 'partial'> = {
+    indices: 'stale',
+    crypto: 'partial',
+  };
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const state = panelFreshness[key];
+    if (!state) return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const providerFreshness = { state, isStale: state === 'stale' };
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({
+        ...(item as Record<string, unknown>),
+        providerFreshness,
+      }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      providerFreshness,
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithTruthMetadata(metadata: Record<string, unknown>) {
+  const panels = marketOverviewPanelsWithFreshness('live');
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (key !== 'indices' || !value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({ ...(item as Record<string, unknown>), ...metadata }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      ...metadata,
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithNestedRefresh() {
+  const panels = marketOverviewPanelsWithFreshness('live');
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const providerHealth = { status: 'refreshing', isRefreshing: false };
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({ ...(item as Record<string, unknown>), providerHealth }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      providerHealth,
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
+}
+
+function marketOverviewPanelsWithSyntheticSample() {
+  const panels = marketOverviewPanelsWithFreshness('live');
+  return Object.fromEntries(Object.entries(panels).map(([key, value]) => {
+    if (!value || typeof value !== 'object') return [key, value];
+    const panelValue = value as Record<string, unknown>;
+    const items = Array.isArray(panelValue.items)
+      ? panelValue.items.map((item) => ({
+        ...(item as Record<string, unknown>),
+        isFixture: true,
+        isPartial: true,
+        sampleState: 'sample',
+      }))
+      : panelValue.items;
+    return [key, {
+      ...panelValue,
+      isFixture: true,
+      isPartial: true,
+      sampleState: 'sample',
+      ...(items ? { items } : {}),
+    }];
+  })) as unknown as Parameters<typeof MarketOverviewWorkbench>[0]['panels'];
 }
 
 const primaryMarketPanelRequests = [
@@ -2345,10 +2502,10 @@ const setupUnavailableDecisionReadiness = () => {
 
 const decisionReadinessScenarios: readonly DecisionReadinessScenario[] = [
   {
-    name: 'renders ready overview evidence without setup prompts or advice',
+    name: 'keeps noncurrent overview evidence as limited-confidence observation',
     expectedText: [
       ...decisionReadinessCommonCopy,
-      '中等',
+      '有限',
       /偏强观察|中性观察|偏弱观察|数据不足/,
     ],
     absentText: ['查看需配置的数据源', MARKET_OVERVIEW_NO_ADVICE_PATTERN],
@@ -3105,6 +3262,254 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();
   });
 
+  it('scopes the prominent Market Overview save time to the browser-local snapshot', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      localSnapshotSavedAt: '2026-05-04T10:15:00Z',
+    });
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+    expect(freshnessFacet).not.toBeNull();
+    expect(freshnessFacet).toHaveTextContent('本地快照保存');
+    expect(freshnessFacet).not.toHaveTextContent('最近更新');
+  });
+
+  it.each([
+    ['cached', '缓存可用', /[1-9]\d* 缓存/],
+    ['delayed', '延迟可用', /[1-9]\d* 延迟/],
+  ] as const)('keeps %s evidence distinct from fresh availability', (freshness, expectedStatus, expectedCoverage) => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithFreshness(freshness),
+    });
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+    const coverageFacet = within(quality).getByText('覆盖').closest('[data-quality-facet]');
+    expect(freshnessFacet).not.toBeNull();
+    expect(coverageFacet).not.toBeNull();
+    expect(freshnessFacet).toHaveTextContent(expectedStatus);
+    expect(coverageFacet).toHaveTextContent(expectedCoverage);
+  });
+
+  it.each([
+    ['isFallback', 'live', '备用', /实时/],
+    ['isStale', 'cached', '过期', /缓存/],
+    ['isPartial', 'live', '部分', /实时|不可用/],
+    ['isSynthetic', 'live', '样本', /实时|备用/],
+    ['isUnavailable', 'live', '不可用', /实时/],
+  ] as const)('lets explicit %s override optimistic %s freshness counts', (flag, freshness, expectedState, excludedState) => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithExplicitDegradation(freshness, flag),
+    });
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const coverageFacet = within(quality).getByText('覆盖').closest('[data-quality-facet]');
+    expect(coverageFacet).not.toBeNull();
+    expect(coverageFacet).toHaveTextContent(expectedState);
+    expect(coverageFacet).not.toHaveTextContent(excludedState);
+  });
+
+  it.each([
+    [
+      'isPartial',
+      'market-overview-data-state-partial-chip',
+      /部分可用/,
+      /样本观察 0.*备用数据 0/,
+      'Some evidence is partially available.',
+    ],
+    [
+      'isSynthetic',
+      'market-overview-data-state-synthetic-chip',
+      /样本 \/ 演示|样本观察/,
+      /部分可用 0.*备用数据 0/,
+      'Some entries are example observations, not observed market evidence.',
+    ],
+  ] as const)(
+    'keeps explicit %s degraded and distinct through cards, diagnostics, decisions, and export',
+    async (flag, debugChipTestId, expectedState, expectedZeroSummary, expectedExportLimit) => {
+      renderMarketOverviewWorkbenchWithProps({
+        panels: marketOverviewPanelsWithExplicitDegradation('live', flag),
+        showAdminDiagnostics: true,
+      });
+
+      expect(screen.getAllByTestId('market-overview-provider-state').some((notice) => (
+        expectedState.test(notice.textContent || '')
+      ))).toBe(true);
+      const details = expandMarketDecisionDetails();
+      expect(await within(details).findByTestId(debugChipTestId)).toHaveTextContent(expectedState);
+      const stateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+      expect(stateSummary).toHaveTextContent(expectedZeroSummary);
+      expect(stateSummary).not.toHaveTextContent('证据不足');
+      expect(screen.getByTestId('market-overview-decision-layer')).toHaveTextContent(/关键证据.*待补|评分待恢复|待补/);
+
+      fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+      await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+      expect(String(writeTextMock.mock.calls[0]?.[0] || '')).toContain(expectedExportLimit);
+    },
+  );
+
+  it.each([
+    ['delayed', 'data-freshness-badge-delayed', 'market-overview-data-state-delayed-chip', 'Some evidence is delayed.'],
+    ['partial', 'data-freshness-badge-partial', 'market-overview-data-state-partial-chip', 'Some evidence is partially available.'],
+  ] as const)('honors nested provider freshness %s over an optimistic top-level freshness', async (state, badgeTestId, debugChipTestId, expectedExportLimit) => {
+    if (state === 'delayed') {
+      expect(marketObservationState({
+        freshness: 'live',
+        isPartial: true,
+        providerFreshness: { state: 'delayed' },
+      })).toBe('delayed');
+    }
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithNestedFreshness(state),
+      showAdminDiagnostics: true,
+    });
+
+    if (state === 'delayed') {
+      const quality = screen.getByTestId('market-overview-data-quality-composition');
+      const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+      expect(freshnessFacet).toHaveAttribute('data-quality-facet', 'delayed');
+      expect(freshnessFacet).toHaveTextContent('延迟可用');
+    }
+    expect(screen.getAllByTestId(badgeTestId).length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('market-overview-provider-state').some((notice) => (
+      notice.textContent?.includes(state === 'delayed' ? '延迟' : state === 'stale' ? '过期' : '部分可用')
+    ))).toBe(true);
+    const details = expandMarketDecisionDetails();
+    const stateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+    expect(await within(details).findByTestId(debugChipTestId)).toBeInTheDocument();
+    expect(stateSummary).toHaveTextContent('实时 0');
+
+    fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(String(writeTextMock.mock.calls[0]?.[0] || '')).toContain(expectedExportLimit);
+  });
+
+  it('keeps nested stale evidence stale when the same payload is also partial', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithNestedFreshness('stale'),
+      showAdminDiagnostics: true,
+    });
+
+    expect(screen.getAllByTestId('data-freshness-badge-stale').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('market-overview-provider-state').some((notice) => (
+      notice.textContent?.includes('过期')
+    ))).toBe(true);
+    const details = expandMarketDecisionDetails();
+    const stateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+    expect(stateSummary).toHaveTextContent(/数据过期 [1-9]\d*/);
+    expect(stateSummary).toHaveTextContent('部分可用 0');
+
+    fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(String(writeTextMock.mock.calls[0]?.[0] || '')).toContain('Some evidence is stale and must not be treated as current.');
+  });
+
+  it('keeps separate stale evidence primary over partial evidence and blocks ready direction', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithSeparateStaleAndPartialFreshness(),
+      showAdminDiagnostics: true,
+    });
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+    expect(freshnessFacet).not.toBeNull();
+    expect(freshnessFacet).toHaveTextContent('过期数据可用');
+    expect(freshnessFacet).not.toHaveTextContent('部分可用');
+    const details = expandMarketDecisionDetails();
+    expect(await within(details).findByTestId('market-overview-setup-path')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(String(writeTextMock.mock.calls[0]?.[0] || '')).toContain('Some evidence is stale and must not be treated as current.');
+  });
+
+  it.each([
+    ['cached data quality', { dataQuality: { state: 'cached', label: 'Saved snapshot', available: true } }, 'cached', '部分可用', /缓存 [1-9]\d*/, 'Some evidence is partially available.'],
+    ['unavailable data quality', { dataQuality: { state: 'unavailable', label: 'Unavailable', available: false } }, 'unavailable', '部分可用', /证据不足 [1-9]\d*/, 'Some evidence is still unavailable.'],
+    ['no-evidence data quality', { dataQuality: { state: 'no_evidence', label: 'No evidence', available: false } }, 'unavailable', '部分可用', /证据不足 [1-9]\d*/, 'Some evidence is still unavailable.'],
+    ['synthetic source class', { sourceClass: 'synthetic' }, 'synthetic', '存在样本观察', /样本观察 [1-9]\d*/, 'Some entries are example observations, not observed market evidence.'],
+    ['fixture source type', { sourceType: 'fixture' }, 'synthetic', '存在样本观察', /样本观察 [1-9]\d*/, 'Some entries are example observations, not observed market evidence.'],
+  ] as const)('does not let optimistic live freshness override %s truth metadata', async (_label, metadata, expectedState, expectedFreshness, expectedCount, expectedExportLimit) => {
+    expect(marketObservationState({ source: 'provider', freshness: 'live', ...metadata })).toBe(expectedState);
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithTruthMetadata(metadata),
+      showAdminDiagnostics: true,
+    });
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+    expect(freshnessFacet).not.toBeNull();
+    expect(freshnessFacet).toHaveTextContent(expectedFreshness);
+    const details = expandMarketDecisionDetails();
+    const stateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+    expect(stateSummary).toHaveTextContent(expectedCount);
+    expect(await within(details).findByTestId('market-overview-setup-path')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(String(writeTextMock.mock.calls[0]?.[0] || '')).toContain(expectedExportLimit);
+  });
+
+  it('keeps nested provider refresh state visible without a redundant top-level refresh flag', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithNestedRefresh(),
+    });
+
+    expect(screen.getAllByTestId('market-overview-provider-state').some((notice) => (
+      notice.textContent?.includes('正在刷新')
+    ))).toBe(true);
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    const freshnessFacet = within(quality).getByText('新鲜度').closest('[data-quality-facet]');
+    expect(freshnessFacet).not.toBeNull();
+    expect(freshnessFacet).toHaveTextContent('正在更新');
+  });
+
+  it('keeps fixture samples synthetic ahead of partial, charts, and fallback coverage', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: marketOverviewPanelsWithSyntheticSample(),
+      showAdminDiagnostics: true,
+    });
+
+    expect(screen.getAllByTestId('market-overview-provider-state').some((notice) => (
+      /样本/.test(notice.textContent || '')
+    ))).toBe(true);
+    const chart = screen.getByTestId('market-overview-core-trend-chart');
+    expect(chart).not.toHaveTextContent('历史数据可用');
+    expect(chart).toHaveTextContent(/市场趋势暂不可用|报价延迟\/不可用/);
+    expect(screen.queryByTestId('market-overview-visual-card-core-trends-points')).not.toBeInTheDocument();
+
+    const details = expandMarketDecisionDetails();
+    const stateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+    expect(await within(details).findByTestId('market-overview-data-state-synthetic-chip')).toBeInTheDocument();
+    expect(stateSummary).toHaveTextContent(/样本观察 [1-9]\d*/);
+    expect(stateSummary).toHaveTextContent('部分可用 0');
+    expect(stateSummary).toHaveTextContent('备用数据 0');
+
+    fireEvent.click(screen.getByTestId('market-overview-export-summary'));
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    const exportText = String(writeTextMock.mock.calls[0]?.[0] || '');
+    expect(exportText).toContain('已观测 0');
+    expect(exportText).toContain('Some entries are example observations, not observed market evidence.');
+  });
+
+  it.each([
+    ['partial', 'Partially available'],
+    ['synthetic', 'Example observation'],
+  ] as const)('does not let optimistic provider health relabel %s evidence', (freshness, expectedLabel) => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+    render(
+      <UiLanguageProvider>
+        <DataFreshnessBadge freshness={freshness} status="live" />
+      </UiLanguageProvider>,
+    );
+
+    expect(screen.getByText(expectedLabel)).toBeInTheDocument();
+    expect(screen.queryByText('Live')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alternative snapshot')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saved snapshot')).not.toBeInTheDocument();
+  });
+
   it('adopts research anatomy composition for observation, quality, risk limits, and next research actions', async () => {
     useProductSurfaceMock.mockReturnValue({
       isAdminMode: false,
@@ -3128,7 +3533,7 @@ describe('MarketOverviewPage', () => {
 
     const quality = screen.getByTestId('market-overview-data-quality-composition');
     expect(quality).toHaveAttribute('data-research-anatomy', 'data-quality');
-    expect(quality.querySelectorAll('[data-quality-facet]').length).toBeGreaterThan(0);
+    expect(quality.querySelectorAll('[data-quality-facet]')).toHaveLength(3);
 
     const riskLimits = screen.getByTestId('market-overview-research-risk-limits');
     expect(riskLimits).toHaveAttribute('data-research-anatomy', 'risk-limits');
@@ -3559,7 +3964,7 @@ describe('MarketOverviewPage', () => {
     const cacheStatus = await within(details).findByTestId('market-overview-cache-status');
     expect(cacheStatus).toHaveTextContent(/刷新中/i);
     expect(cacheStatus).not.toHaveTextContent(/LOCAL CACHE/i);
-    expect(cacheStatus).toHaveTextContent(/更新时间/i);
+    expect(cacheStatus).toHaveTextContent(/本地快照保存/i);
     expect(screen.queryByText(/indices request timed out/i)).not.toBeInTheDocument();
     await runMarketOverviewAsyncStep(() => {
       indicesRequest.resolve(panel('IndexTrendsCard', 'SPX'));
@@ -3718,9 +4123,12 @@ describe('MarketOverviewPage', () => {
     const chart = await screen.findByTestId('market-overview-core-trend-chart');
     expect(chart).not.toHaveTextContent(/History available|历史数据可用/);
     expect(chart).toHaveTextContent(/市场趋势暂不可用|报价延迟\/不可用/);
-    expect(screen.getByTestId('market-overview-coverage-summary')).not.toHaveTextContent('数据可用');
+    expect(screen.queryByText('数据可用')).not.toBeInTheDocument();
     const details = expandMarketDecisionDetails();
-    expect(within(details).getByTestId('market-overview-data-state-summary')).toHaveTextContent('可用 0');
+    const dataStateSummary = await within(details).findByTestId('market-overview-data-state-summary');
+    expect(dataStateSummary).toHaveTextContent('实时 0');
+    expect(dataStateSummary).toHaveTextContent('缓存 0');
+    expect(dataStateSummary).toHaveTextContent('延迟 0');
   });
 
   it('preserves explicit backend unavailability as unavailable rather than authoritative empty', async () => {
@@ -4115,8 +4523,9 @@ describe('MarketOverviewPage', () => {
     expect(metadata).not.toHaveTextContent(/Yahoo Finance/);
     expect(metadata).not.toHaveTextContent(/Quote/);
     expect(metadata).not.toHaveTextContent(/Update/);
-    expect(metadata).toHaveAttribute('title', expect.stringContaining('2026'));
-    expect(metadata.getAttribute('title') || '').not.toMatch(/Yahoo Finance|Provider|source/i);
+    expect(metadata).toHaveAttribute('title', expect.stringContaining('行情截至 2026'));
+    expect(metadata).toHaveAttribute('title', expect.stringContaining('获取于 2026'));
+    expect(metadata.getAttribute('title') || '').not.toMatch(/Yahoo Finance|Provider|source|\bQuote\b|\bUpdate\b/i);
     expect(valueBlock).toHaveClass('col-start-4', 'text-right');
     expect(changeBlock).toHaveClass('col-start-5', 'text-right');
   });
@@ -5170,7 +5579,7 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
+      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|本地快照保存：/);
     });
     expect(screen.queryByTestId('market-overview-category-empty-state')).not.toBeInTheDocument();
   });
@@ -5194,7 +5603,7 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
+      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|本地快照保存：/);
     });
     expect(screen.getByTestId('market-overview-card-cryptoCore').closest('[data-testid="market-overview-first-workbench"]')).toBeTruthy();
   });
@@ -5424,6 +5833,7 @@ describe('MarketOverviewPage', () => {
     render(
       <UiLanguageProvider>
         <MarketOverviewPanelFooter
+          sourceLabel="公开行情摘要"
           panel={{
             panelName: 'MixedFamilyPanel',
             lastRefreshAt: '2026-04-29T10:20:00+08:00',
@@ -5452,7 +5862,43 @@ describe('MarketOverviewPage', () => {
       </UiLanguageProvider>,
     );
 
-    expect(screen.getByTestId('market-overview-footer-meta')).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
+    const footer = screen.getByTestId('market-overview-footer-meta');
+    expect(footer).toHaveTextContent('公开行情摘要');
+    expect(footer).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
+  });
+
+  it('keeps cached card state distinct from stale state', () => {
+    render(
+      <UiLanguageProvider>
+        <MarketOverviewPanelStateNotice
+          hasUsableData
+          panel={{
+            panelName: 'CachedPanel',
+            lastRefreshAt: '2026-04-29T10:20:00+08:00',
+            status: 'success',
+            source: 'saved_snapshot',
+            sourceLabel: '公开行情摘要',
+            updatedAt: '2026-04-29T10:20:00+08:00',
+            asOf: '2026-04-29T10:15:00+08:00',
+            freshness: 'cached',
+            isFallback: false,
+            isStale: false,
+            items: [{
+              symbol: 'SPX',
+              label: '标普 500',
+              value: 5100,
+              freshness: 'cached',
+              isFallback: false,
+              isStale: false,
+            }],
+          }}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const notice = screen.getByTestId('market-overview-provider-state');
+    expect(notice).toHaveTextContent('缓存');
+    expect(notice).not.toHaveTextContent('过期');
   });
 
   it('ignores update-only rows when building the evidence observation window', () => {
@@ -5493,6 +5939,29 @@ describe('MarketOverviewPage', () => {
     const footer = screen.getByTestId('market-overview-footer-meta');
     expect(footer).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
     expect(footer).not.toHaveTextContent('10:45:00');
+  });
+
+  it('labels a single footer observation with its source and as-of scope', () => {
+    render(
+      <UiLanguageProvider>
+        <MarketOverviewPanelFooter
+          sourceLabel="公开行情摘要"
+          panel={{
+            panelName: 'SingleObservationPanel',
+            lastRefreshAt: '2026-04-29T10:20:00+08:00',
+            status: 'success',
+            updatedAt: '2026-04-29T10:20:00+08:00',
+            asOf: '2026-04-29T10:15:00+08:00',
+            freshness: 'cached',
+            items: [],
+          }}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const footer = screen.getByTestId('market-overview-footer-meta');
+    expect(footer).toHaveTextContent('公开行情摘要');
+    expect(footer).toHaveTextContent('行情截至 2026-04-29 10:15:00');
   });
 
   it('shows stale card data as expired data', async () => {

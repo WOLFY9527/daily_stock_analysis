@@ -1035,11 +1035,13 @@ describe('StockStructureDecisionPage', () => {
     expect(riskTriggersWorkspace).toHaveTextContent('已观察风险与失效条件');
     expect(peerThemeWorkspace).toHaveTextContent('作为支持证据，而非零散组件');
     expect(nextChecksWorkspace).toHaveTextContent('明确限制与下一步检查');
-    expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
+    expect(quotePanel).toHaveTextContent('原子报价观察');
     expect(quotePanel).toHaveTextContent('报价可用');
-    expect(quotePanel).toHaveTextContent('来源已确认');
-    expect(quotePanel).toHaveTextContent('最新可用');
-    expect(quotePanel).toHaveTextContent('更新');
+    expect(quotePanel).toHaveTextContent('来源: Alpaca');
+    expect(quotePanel).toHaveTextContent('新鲜度: 新鲜');
+    expect(quotePanel).toHaveTextContent('市场截至');
+    expect(quotePanel).toHaveTextContent('缓存: 否');
+    expect(quotePanel).toHaveTextContent('替代路径: 否');
     expect(quotePanel).toHaveTextContent('05/28');
     expect(quotePanel).toHaveTextContent('17:30');
     const summary = within(page).getByTestId('stock-consumer-research-summary');
@@ -1050,11 +1052,25 @@ describe('StockStructureDecisionPage', () => {
     expect(summary).toHaveTextContent('US');
     expect(summary).toHaveTextContent('$214.6');
     expect(summary).toHaveTextContent('+1.11%');
-    expect(summary).toHaveTextContent('更新 05/28 17:30');
+    expect(summary).toHaveTextContent('市场截至 05/28 17:30');
+    const quoteObservation = within(summary).getByTestId('stock-quote-observation-strip');
+    const historyObservation = within(summary).getByTestId('stock-history-observation-strip');
+    expect(quoteObservation).toHaveTextContent('来源: Alpaca');
+    expect(quoteObservation).toHaveTextContent('新鲜度: 新鲜');
+    expect(quoteObservation).toHaveTextContent('缓存: 否');
+    expect(quoteObservation).toHaveTextContent('替代路径: 否');
+    expect(historyObservation).toHaveTextContent('来源: 本地历史数据');
+    expect(historyObservation).toHaveTextContent('返回区间');
+    expect(historyObservation).toHaveTextContent('可用 60');
+    expect(historyObservation).toHaveTextContent('所需 90');
+    expect(historyObservation).toHaveTextContent('缺口 30');
+    expect(historyObservation).toHaveTextContent('缓存: 否');
+    expect(historyObservation).toHaveTextContent('替代路径: 否');
+    expect(within(page).getByTestId('stock-deep-evidence-disclosure')).not.toHaveAttribute('open');
     expect(summary).toHaveTextContent('突破观察');
     expect(summary).toHaveTextContent('置信度：中');
     expect(summary).toHaveTextContent('置信度为中：报价、历史与结构证据可用，但基本面、事件或同业证据仍限制结论强度。');
-    expect(summary).toHaveTextContent('AAPL 当前呈现突破观察，报价最新可用，历史 K 线可用于查看走势。');
+    expect(summary).toHaveTextContent('AAPL 当前呈现突破观察，报价新鲜，历史 K 线可用于查看走势。');
     const conclusion = within(summary).getByTestId('stock-current-research-conclusion');
     expect(conclusion).toHaveTextContent('当前研究结论');
     expect(conclusion).toHaveTextContent('AAPL 当前为突破观察；置信度为中。');
@@ -1076,7 +1092,7 @@ describe('StockStructureDecisionPage', () => {
     expect(firstViewportPanel).toHaveTextContent('历史数据可用');
     const trustRow = within(page).getByTestId('stock-data-trust-row');
     expect(trustRow).toHaveTextContent('报价');
-    expect(trustRow).toHaveTextContent('最新可用');
+    expect(trustRow).toHaveTextContent('新鲜');
     expect(trustRow).toHaveTextContent('历史');
     expect(trustRow).toHaveTextContent('60 / 90 根');
     expect(trustRow).toHaveTextContent('技术指标');
@@ -1513,7 +1529,7 @@ describe('StockStructureDecisionPage', () => {
     expect(getHistoryMock).toHaveBeenCalledWith('600519', { period: 'daily', days: 180 });
     expect(page).toHaveTextContent('600519 研究工作区');
     expect(historyPanel).toHaveTextContent('600519 历史数据就绪度');
-    expect(historyPanel).toHaveTextContent('历史来源未启用');
+    expect(historyPanel).toHaveTextContent('历史数据不可用');
     expect(historyPanel).toHaveTextContent('结构样本不足');
     expect(historyPanel).toHaveTextContent('可用 K 线');
     expect(historyPanel).toHaveTextContent('0');
@@ -1567,6 +1583,11 @@ describe('StockStructureDecisionPage', () => {
   });
 
   it('renders provider-backed quote lineage without leaking raw provider internals', async () => {
+    getQuoteMock.mockResolvedValue({
+      ...baseQuote(),
+      isFallback: true,
+      sourceConfidence: baseQuote().sourceConfidence,
+    });
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
 
     renderRoutePattern(
@@ -1578,16 +1599,180 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
 
-    expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
-    expect(quotePanel).toHaveTextContent('报价可用');
-    expect(quotePanel).toHaveTextContent('来源已确认');
-    expect(quotePanel).toHaveTextContent('最新可用');
-    expect(quotePanel).toHaveTextContent('更新');
-    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/alpaca|provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
+    expect(quotePanel).toHaveTextContent('原子报价观察');
+    expect(quotePanel).toHaveTextContent('替代路径报价可用');
+    expect(quotePanel).toHaveTextContent('来源: Alpaca');
+    expect(quotePanel).toHaveTextContent('新鲜度: 新鲜');
+    expect(quotePanel).toHaveTextContent('替代路径: 是');
+    expect(quotePanel).toHaveTextContent('市场截至');
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
+  it.each(['providerState', 'availabilityState', 'source', 'sourceConfidence'] as const)('preserves %s fallback provenance through the quote boundary and exported evidence pack', async (fallbackMarker) => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      providerState: fallbackMarker === 'providerState' ? 'fallback' : quote.providerState,
+      availabilityState: fallbackMarker === 'availabilityState' ? 'fallback' : quote.availabilityState,
+      source: fallbackMarker === 'source' ? 'fallback' : quote.source,
+      isFallback: false,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        source: fallbackMarker === 'sourceConfidence' ? 'fallback' : quote.sourceConfidence?.source,
+        isFallback: false,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+    expect(quotePanel).toHaveTextContent('替代路径报价可用');
+    expect(quotePanel).toHaveTextContent('替代路径: 是');
+
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    expect(JSON.parse(copied).quoteLineage).toMatchObject({ fallback: true });
+  });
+
+  it('keeps cache provenance pending when only a quote source is known', async () => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      freshness: null,
+      availabilityState: null,
+      providerState: null,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        freshness: null,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+    expect(quotePanel).toHaveTextContent('缓存: 待确认');
+
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    expect(JSON.parse(copied).quoteLineage).toMatchObject({ cached: '待补证' });
+  });
+
+  it.each([
+    ['isUnavailable', '报价标记为不可用', '新鲜度: 不可用'],
+    ['isSynthetic', '样本报价', '新鲜度: 样本 / 演示'],
+    ['isStale', '过期报价可用', '新鲜度: 已过期'],
+    ['isPartial', '部分报价可用', '新鲜度: 部分可用'],
+  ] as const)('lets top-level %s=true override a nested false quote flag', async (flag, stateCopy, freshnessCopy) => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      [flag]: true,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        [flag]: false,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = within(page).getByTestId('stock-quote-boundary-panel');
+    expect(quotePanel).toHaveTextContent(stateCopy);
+    expect(quotePanel).toHaveTextContent(freshnessCopy);
+  });
+
+  it('lets nested isUnavailable=true override a top-level false quote flag', async () => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      isUnavailable: false,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        isUnavailable: true,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = within(page).getByTestId('stock-quote-boundary-panel');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    const registry = within(page).getByTestId('single-stock-evidence-pack-registry');
+    expect(quotePanel).toHaveTextContent('报价标记为不可用');
+    expect(quotePanel).toHaveTextContent('新鲜度: 不可用');
+    expect(summary).not.toHaveTextContent('$214.6');
+    expect(summary).not.toHaveTextContent('+1.11%');
+    expect(within(registry).getByTestId('single-stock-evidence-pack-copy-blocked')).toBeDisabled();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-copy')).not.toBeInTheDocument();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-download')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['unavailable', { isUnavailable: true, isSynthetic: true, isStale: true, freshness: 'fresh' }, '报价标记为不可用', '新鲜度: 不可用'],
+    ['synthetic', { isSynthetic: true, isStale: true, freshness: 'fresh' }, '样本报价', '新鲜度: 样本 / 演示'],
+    ['stale', { isStale: true, freshness: 'delayed' }, '过期报价可用', '新鲜度: 已过期'],
+    ['delayed', { isPartial: true, freshness: 'delayed' }, '延迟报价可用', '新鲜度: 延迟'],
+    ['partial', { isPartial: true, freshness: 'cached' }, '部分报价可用', '新鲜度: 部分可用'],
+    ['cached', { freshness: 'cached' }, '缓存报价可用', '新鲜度: 缓存'],
+  ] as const)('uses conservative %s quote freshness precedence when states conflict', async (_scenario, overrides, stateCopy, freshnessCopy) => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      ...overrides,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        freshness: overrides.freshness,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const quotePanel = await screen.findByTestId('stock-quote-boundary-panel');
+    expect(quotePanel).toHaveTextContent(stateCopy);
+    expect(quotePanel).toHaveTextContent(freshnessCopy);
+  });
+
   it('renders cached price-history technical indicator values as research-only context', async () => {
+    getQuoteMock.mockResolvedValue({
+      ...baseQuote(),
+      freshness: 'cached',
+      sourceConfidence: {
+        ...baseQuote().sourceConfidence,
+        freshness: 'cached',
+      },
+    });
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
     getTechnicalIndicatorsMock.mockResolvedValue({
       ...technicalIndicatorsAvailable(),
@@ -1604,12 +1789,18 @@ describe('StockStructureDecisionPage', () => {
 
       const page = await screen.findByTestId('stock-structure-decision-page');
       const panel = await within(page).findByTestId('stock-technical-indicators-panel');
+      const quoteObservation = within(page).getByTestId('stock-quote-observation-strip');
 
+      expect(quoteObservation).toHaveTextContent('新鲜度: 缓存');
+      expect(quoteObservation).toHaveTextContent('缓存: 是');
+      expect(quoteObservation).not.toHaveTextContent('新鲜度: 新鲜');
       expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('AAPL');
       expect(panel).toHaveTextContent('本地价格历史技术指标');
       expect(panel).toHaveTextContent('指标可用');
       expect(panel).toHaveTextContent('本地价格历史边界');
-      expect(panel).toHaveTextContent('更新');
+      expect(panel).toHaveTextContent('样本 / 演示');
+      expect(panel).toHaveTextContent('指标输入截至 05/28');
+      expect(panel).not.toHaveTextContent(/更新\s*05\/28/);
       expect(panel).toHaveTextContent('SMA 20');
       expect(panel).toHaveTextContent('210.12');
       expect(panel).toHaveTextContent('SMA 50');
@@ -1641,6 +1832,240 @@ describe('StockStructureDecisionPage', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it('does not promote history service success to freshness without freshness evidence', async () => {
+    const history = baseHistory('AAPL', 60);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      diagnostics: { ...history.diagnostics, status: 'success' },
+      sourceConfidence: { ...history.sourceConfidence, freshness: null, isPartial: false },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyObservation = within(page).getByTestId('stock-history-observation-strip');
+    expect(historyObservation).toHaveTextContent('新鲜度: 新鲜度待确认');
+    expect(historyObservation).toHaveTextContent('可用 60');
+    expect(historyObservation).toHaveTextContent('缺口 30');
+    expect(within(historyObservation).queryByText('新鲜度: 新鲜')).not.toBeInTheDocument();
+  });
+
+  it('lets explicit stale history override optimistic freshness', async () => {
+    const history = baseHistory('AAPL', 60);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      sourceConfidence: { ...history.sourceConfidence, freshness: 'fresh', isStale: true },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyObservation = within(page).getByTestId('stock-history-observation-strip');
+    expect(historyObservation).toHaveTextContent('新鲜度: 已过期');
+    expect(historyObservation).not.toHaveTextContent('新鲜度: 新鲜');
+  });
+
+  it('lets explicit partial history override optimistic freshness', async () => {
+    const history = baseHistory('AAPL', 60);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      sourceConfidence: { ...history.sourceConfidence, freshness: 'fresh', isPartial: true },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyObservation = within(page).getByTestId('stock-history-observation-strip');
+    expect(historyObservation).toHaveTextContent('新鲜度: 部分可用');
+    expect(historyObservation).toHaveTextContent('可用 60');
+    expect(historyObservation).toHaveTextContent('缺口 30');
+    expect(historyObservation).not.toHaveTextContent('新鲜度: 新鲜');
+  });
+
+  it.each([
+    ['isUnavailable', '历史数据不可用'],
+    ['isSynthetic', '样本历史已返回'],
+  ] as const)('excludes returned %s history bars from every consumer projection', async (flag, readinessCopy) => {
+    const history = baseHistory('AAPL', 60);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      sourceConfidence: { ...history.sourceConfidence, freshness: 'fresh', [flag]: true },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const observation = within(page).getByTestId('stock-history-observation-strip');
+    const readiness = within(page).getByTestId('stock-history-readiness-panel');
+    expect(observation).toHaveTextContent('可用 0');
+    expect(observation).toHaveTextContent('缺口 90');
+    const emptyChart = within(page).getByTestId('stock-history-empty-chart-state');
+    expect(emptyChart).toBeInTheDocument();
+    expect(within(page).queryByTestId('stock-history-core-chart')).not.toBeInTheDocument();
+    expect(readiness).toHaveTextContent(readinessCopy);
+    expect(readiness).toHaveTextContent('结构样本不足');
+    expect(readiness).not.toHaveTextContent('结构计算已返回');
+    if (flag === 'isSynthetic') {
+      expect(emptyChart).toHaveTextContent('已返回的样本历史仅供观察，不绘制图表。');
+    }
+  });
+
+  it('excludes source-only synthetic history from readiness counts and chart points', async () => {
+    const history = baseHistory('AAPL', 60);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      source: 'fixture',
+      sourceConfidence: { ...history.sourceConfidence, freshness: 'fresh', isSynthetic: false },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const observation = within(page).getByTestId('stock-history-observation-strip');
+    const readiness = within(page).getByTestId('stock-history-readiness-panel');
+    expect(observation).toHaveTextContent('新鲜度: 样本 / 演示');
+    expect(observation).toHaveTextContent('可用 0');
+    expect(readiness).toHaveTextContent('样本历史已返回');
+    expect(within(page).getByTestId('stock-history-empty-chart-state')).toHaveTextContent('已返回的样本历史仅供观察，不绘制图表。');
+    expect(within(page).queryByTestId('stock-history-core-chart')).not.toBeInTheDocument();
+  });
+
+  it('keeps a stale technical snapshot stale when an as-of timestamp is present', async () => {
+    const indicators = technicalIndicatorsAvailable();
+    getTechnicalIndicatorsMock.mockResolvedValue({
+      ...indicators,
+      freshness: 'stale',
+      dataQuality: { ...indicators.dataQuality, freshness: 'stale' },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const panel = await screen.findByTestId('stock-technical-indicators-panel');
+    expect(panel).toHaveTextContent('已过期');
+    expect(panel).toHaveTextContent('指标输入截至 05/28');
+    expect(panel).not.toHaveTextContent('最新可用');
+    expect(panel).not.toHaveTextContent(/更新\s*05\/28/);
+  });
+
+  it('does not borrow Structure Decision bar counts when the History request fails', async () => {
+    getHistoryMock.mockRejectedValue(new Error('history unavailable'));
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      dataQuality: {
+        ...baseStructureDecision().dataQuality,
+        requestedDays: 90,
+        observedBars: 90,
+        usableBars: 90,
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyObservation = within(page).getByTestId('stock-history-observation-strip');
+    const historyReadiness = within(page).getByTestId('stock-history-readiness-panel');
+    expect(historyObservation).toHaveTextContent('历史数据不可用');
+    expect(historyObservation).toHaveTextContent('可用 0');
+    expect(historyObservation).toHaveTextContent('所需 90');
+    expect(historyObservation).toHaveTextContent('缺口 90');
+    expect(historyObservation).not.toHaveTextContent('可用 90');
+    expect(historyReadiness).toHaveTextContent('历史数据不可用');
+    expect(historyReadiness).not.toHaveTextContent('历史数据可用');
+  });
+
+  it('keeps an explicitly disabled history source distinct from unavailable history', async () => {
+    const history = baseHistory('AAPL', 0);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      diagnostics: {
+        ...history.diagnostics,
+        status: 'disabled',
+        reason: 'not configured',
+      },
+      sourceConfidence: {
+        ...history.sourceConfidence,
+        freshness: 'unknown',
+        isUnavailable: false,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const readiness = within(page).getByTestId('stock-history-readiness-panel');
+    expect(readiness).toHaveTextContent('历史来源未启用');
+    expect(readiness).not.toHaveTextContent('历史数据不可用');
+  });
+
+  it.each(['missing', 'missing_cache'] as const)('keeps explicit %s history distinct from unavailable history', async (status) => {
+    const history = baseHistory('AAPL', 0);
+    getHistoryMock.mockResolvedValue({
+      ...history,
+      diagnostics: {
+        ...history.diagnostics,
+        status,
+      },
+      sourceConfidence: {
+        ...history.sourceConfidence,
+        freshness: 'fresh',
+        isUnavailable: false,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const observation = within(page).getByTestId('stock-history-observation-strip');
+    const readiness = within(page).getByTestId('stock-history-readiness-panel');
+    expect(observation).toHaveTextContent('新鲜度: 历史数据待补');
+    expect(readiness).toHaveTextContent('历史数据待补');
+    expect(readiness).not.toHaveTextContent('历史数据不可用');
   });
 
   it('renders missing-cache technical indicators without fabricating values', async () => {
@@ -1685,6 +2110,8 @@ describe('StockStructureDecisionPage', () => {
     );
 
     const panel = await screen.findByTestId('stock-technical-indicators-panel');
+    expect(panel).toHaveTextContent('技术指标来源待确认');
+    expect(panel).not.toHaveTextContent('本地价格历史边界');
 
     expect(panel).toHaveTextContent('历史样本不足，暂不计算指标');
     expect(panel).toHaveTextContent('所需历史');
@@ -1749,9 +2176,19 @@ describe('StockStructureDecisionPage', () => {
     expect(pack.appSurface).toBe('Single Stock / Structure');
     expect(pack.symbol).toBe('AAPL');
     expect(pack.quoteLineage).toMatchObject({
+      origin: 'providerQuote',
+      price: 214.55,
+      changePercent: 1.11,
       asOf: '2026-05-28T09:30:00Z',
+      timestampScope: 'marketAsOf',
       sourceLabel: 'Alpaca',
       freshness: 'live',
+      cached: false,
+      fallback: false,
+      stale: false,
+      partial: false,
+      synthetic: false,
+      unavailable: false,
       confidenceWeight: 1,
       coverage: 1,
     });
@@ -1799,10 +2236,10 @@ describe('StockStructureDecisionPage', () => {
     getResearchPacketMock.mockResolvedValue({
       ...partialResearchPacket(),
       quote: {
-        state: 'unknown',
-        price: null,
-        changePercent: null,
-        asOf: null,
+        state: 'available',
+        price: 999,
+        changePercent: 9.99,
+        asOf: '2026-06-01T08:00:00Z',
       },
     });
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
@@ -1813,7 +2250,16 @@ describe('StockStructureDecisionPage', () => {
       '/zh/stocks/:stockCode/structure-decision',
     );
 
-    const registry = await screen.findByTestId('single-stock-evidence-pack-registry');
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    const registry = within(page).getByTestId('single-stock-evidence-pack-registry');
+    const quoteLedgerRow = within(within(page).getByTestId('stock-evidence-ledger')).getByRole('row', { name: /^报价/ });
+    expect(summary).toHaveTextContent('$214.6');
+    expect(summary).not.toHaveTextContent('$999');
+    expect(summary).toHaveTextContent('报价时间待确认');
+    expect(summary).not.toHaveTextContent('06/01');
+    expect(quoteLedgerRow).toHaveTextContent('报价时间待确认');
+    expect(quoteLedgerRow).not.toHaveTextContent('06/01');
     fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
@@ -1821,13 +2267,19 @@ describe('StockStructureDecisionPage', () => {
     const pack = JSON.parse(copied);
 
     expect(pack.quoteLineage).toMatchObject({
+      origin: 'providerQuote',
+      price: 214.55,
+      changePercent: 1.11,
       asOf: '待补证',
+      timestampScope: 'none',
       sourceLabel: '待补证',
       freshness: '待补证',
+      cached: '待补证',
+      fallback: false,
       confidenceWeight: '待补证',
       coverage: '待补证',
     });
-    expect(pack.dataReadiness.quoteState).toBe('报价待补');
+    expect(pack.dataReadiness.quoteState).toBe('报价新鲜度待确认');
   });
 
   it('does not mark quote evidence exportable when current price is absent', async () => {
@@ -1838,15 +2290,15 @@ describe('StockStructureDecisionPage', () => {
       sourceConfidence: {
         ...baseQuote().sourceConfidence,
         freshness: 'live',
-        isUnavailable: false,
+        isUnavailable: true,
       },
     });
     getResearchPacketMock.mockResolvedValue({
       ...partialResearchPacket(),
       quote: {
         state: 'available',
-        price: null,
-        changePercent: null,
+        price: 214.55,
+        changePercent: 1.11,
         asOf: '2026-05-28T09:30:00Z',
       },
     });
@@ -1862,8 +2314,9 @@ describe('StockStructureDecisionPage', () => {
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
     const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
 
-    expect(quotePanel).toHaveTextContent('报价待补');
+    expect(quotePanel).toHaveTextContent('报价标记为不可用');
     expect(quotePanel).not.toHaveTextContent('报价可用');
+    expect(quotePanel).not.toHaveTextContent('$214.6');
     expect(registry).toHaveTextContent('待补证');
     expect(within(registry).getByTestId('single-stock-evidence-pack-copy-blocked')).toBeDisabled();
     expect(within(registry).queryByTestId('single-stock-evidence-pack-copy')).not.toBeInTheDocument();
@@ -1873,6 +2326,10 @@ describe('StockStructureDecisionPage', () => {
 
   it('does not export fake evidence when quote evidence is unavailable', async () => {
     getQuoteMock.mockRejectedValueOnce(new Error('quote unavailable'));
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      quote: { state: 'unknown', price: null, changePercent: null, asOf: null },
+    });
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
 
     renderRoutePattern(
@@ -1934,12 +2391,11 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
 
-    expect(quotePanel).toHaveTextContent('报价可能延迟');
-    expect(quotePanel).toHaveTextContent('来源待确认');
-    expect(quotePanel).toHaveTextContent('可能延迟');
-    expect(quotePanel).toHaveTextContent('报价已返回，但来源边界未提供。');
-    expect(quotePanel).not.toHaveTextContent('来源已确认');
-    expect(quotePanel).not.toHaveTextContent('最新可用');
+    expect(quotePanel).toHaveTextContent('过期报价可用');
+    expect(quotePanel).toHaveTextContent('来源: Alpaca');
+    expect(quotePanel).toHaveTextContent('新鲜度: 已过期');
+    expect(quotePanel).toHaveTextContent('该报价已经过期，不能视为当前状态。');
+    expect(quotePanel).not.toHaveTextContent('新鲜度: 新鲜');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
@@ -1984,7 +2440,6 @@ describe('StockStructureDecisionPage', () => {
     const stateChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-state');
     const sourceChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-source');
     const freshnessChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-freshness');
-    const sampleBadges = within(quotePanel).getAllByText('样本 / 演示');
     const duplicateKeyWarningSeen = consoleErrorSpy.mock.calls.some((call) => call.some((arg) => (
       typeof arg === 'string'
       && arg.includes('same key')
@@ -1992,16 +2447,51 @@ describe('StockStructureDecisionPage', () => {
     )));
 
     expect(stateChip).toHaveTextContent('样本报价');
-    expect(sourceChip).toHaveTextContent('样本 / 演示');
+    expect(sourceChip).toHaveTextContent('来源: Fixture');
     expect(freshnessChip).toHaveTextContent('样本 / 演示');
-    expect(sampleBadges).toHaveLength(2);
-    expect(sourceChip).toContainElement(sampleBadges[0]);
-    expect(freshnessChip).toContainElement(sampleBadges[1]);
     expect(sourceChip.compareDocumentPosition(freshnessChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(quotePanel).toHaveTextContent('当前为样本/演示数据，仅供观察。');
+    expect(quotePanel).toHaveTextContent('当前为样本或演示数据，仅供观察。');
     expect(duplicateKeyWarningSeen).toBe(false);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it.each([
+    ['source type', { sourceType: 'synthetic_placeholder' }, '样本报价'],
+    ['fixture source type', { sourceType: 'synthetic_fixture' }, '样本报价'],
+    ['source marker', { source: 'unavailable' }, '报价标记为不可用'],
+  ] as const)('fails closed on a %s quote classification token without relying on boolean flags', async (_label, overrides, expectedState) => {
+    const quote = baseQuote();
+    getQuoteMock.mockResolvedValue({
+      ...quote,
+      ...overrides,
+      freshness: 'live',
+      isSynthetic: false,
+      isUnavailable: false,
+      sourceConfidence: {
+        ...quote.sourceConfidence,
+        freshness: 'live',
+        isSynthetic: false,
+        isUnavailable: false,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    const registry = within(page).getByTestId('single-stock-evidence-pack-registry');
+    expect(quotePanel).toHaveTextContent(expectedState);
+    expect(summary).not.toHaveTextContent('$214.6');
+    expect(summary).not.toHaveTextContent('+1.11%');
+    expect(within(registry).getByTestId('single-stock-evidence-pack-copy-blocked')).toBeDisabled();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-copy')).not.toBeInTheDocument();
   });
 
   it('renders a compact fail-closed boundary when the quote call is unavailable', async () => {
@@ -2016,12 +2506,78 @@ describe('StockStructureDecisionPage', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    const registry = within(page).getByTestId('single-stock-evidence-pack-registry');
 
-    expect(quotePanel).toHaveTextContent('报价边界暂不可用');
-    expect(quotePanel).toHaveTextContent('仅观察');
-    expect(quotePanel).toHaveTextContent('来源待确认');
+    expect(quotePanel).toHaveTextContent('研究包报价可用');
+    expect(quotePanel).toHaveTextContent('研究包投影；提供方待确认');
+    expect(quotePanel).toHaveTextContent('研究包截至 05/28 17:30');
+    expect(quotePanel).toHaveTextContent('新鲜度: 新鲜度待确认');
+    expect(quotePanel).toHaveTextContent('缓存: 待确认');
+    expect(quotePanel).toHaveTextContent('替代路径: 待确认');
+    expect(quotePanel).toHaveTextContent('提供方、新鲜度、缓存与替代路径状态仍待确认');
+    expect(summary).toHaveTextContent('$214.6');
+    expect(summary).toHaveTextContent('+1.11%');
+    expect(summary).toHaveTextContent('研究包截至 05/28 17:30');
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    const pack = JSON.parse(copied);
+    expect(pack.quoteLineage).toMatchObject({
+      origin: 'researchPacket',
+      price: 214.55,
+      changePercent: 1.11,
+      asOf: '2026-05-28T09:30:00Z',
+      timestampScope: 'packetAsOf',
+      sourceLabel: '研究包投影；提供方待确认',
+      freshness: '待补证',
+      cached: '待补证',
+      fallback: '待补证',
+      stale: '待补证',
+      partial: '待补证',
+      synthetic: '待补证',
+    });
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('preserves stale research-packet quote state and lineage when the provider quote fails', async () => {
+    getQuoteMock.mockRejectedValueOnce(new Error('quote unavailable'));
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      quote: {
+        state: 'stale',
+        price: 214.55,
+        changePercent: 1.11,
+        asOf: '2026-05-28T09:30:00Z',
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = within(page).getByTestId('stock-quote-boundary-panel');
+    const registry = within(page).getByTestId('single-stock-evidence-pack-registry');
+    expect(quotePanel).toHaveTextContent('过期研究包报价可用');
+    expect(quotePanel).toHaveTextContent('新鲜度: 已过期');
+    expect(quotePanel).toHaveTextContent('研究包截至 05/28 17:30');
+    expect(quotePanel).not.toHaveTextContent('新鲜度: 新鲜度待确认');
+
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    const pack = JSON.parse(copied);
+    expect(pack.quoteLineage).toMatchObject({
+      origin: 'researchPacket',
+      freshness: 'stale',
+      stale: true,
+      timestampScope: 'packetAsOf',
+    });
   });
 
   it('shows the options structure provider-missing state without fake analytics', async () => {
@@ -2076,9 +2632,12 @@ describe('StockStructureDecisionPage', () => {
     const metrics = within(surface).getByTestId('stock-options-structure-metrics');
 
     expect(surface).toHaveTextContent('结构可用');
-    expect(surface).toHaveTextContent('结构来源已配置');
-    expect(surface).toHaveTextContent('更新');
-    expect(surface).toHaveTextContent('06/19');
+    expect(surface).toHaveTextContent('结构来源身份待确认');
+    expect(surface).not.toHaveTextContent('结构来源已配置');
+    expect(within(surface).getByText('结构来源身份待确认')).toHaveAttribute('data-status', 'unknown');
+    expect(surface).toHaveTextContent('新鲜');
+    expect(surface).toHaveTextContent('期权快照截至 06/19');
+    expect(surface).not.toHaveTextContent(/更新\s*06\/19/);
     expect(surface).toHaveAttribute('data-module-density', 'full');
     expect(metrics).toHaveAttribute('data-module-density', 'full');
     expect(metrics).toHaveTextContent('200,000');
@@ -2089,6 +2648,28 @@ describe('StockStructureDecisionPage', () => {
     expect(metrics).toHaveTextContent('成交 35%');
     expect(metrics).toHaveTextContent('2,000 / 560');
     expect(metrics).not.toHaveTextContent('待补证');
+  });
+
+  it('keeps a stale options snapshot stale when an as-of timestamp is present', async () => {
+    const structure = optionsStructurePopulated();
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getOptionsStructureMock.mockResolvedValue({
+      ...structure,
+      freshness: 'stale',
+      snapshot: { ...structure.snapshot, freshness: 'stale' },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const surface = await screen.findByTestId('stock-options-structure-surface');
+    expect(surface).toHaveTextContent('已过期');
+    expect(surface).toHaveTextContent('期权快照截至 06/19');
+    expect(surface).not.toHaveTextContent('新鲜度待确认');
+    expect(surface).not.toHaveTextContent(/更新\s*06\/19/);
   });
 
   it('renders an options structure endpoint failure state without raw diagnostics', async () => {
@@ -2150,6 +2731,14 @@ describe('StockStructureDecisionPage', () => {
   });
 
   it('renders delayed, missing, and partial evidence with consumer-safe labels', async () => {
+    getQuoteMock.mockResolvedValue({
+      ...baseQuote(),
+      isPartial: true,
+      sourceConfidence: {
+        ...baseQuote().sourceConfidence,
+        isPartial: true,
+      },
+    });
     getResearchPacketMock.mockResolvedValue({
       ...partialResearchPacket(),
       quote: {
@@ -2184,7 +2773,10 @@ describe('StockStructureDecisionPage', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const panel = await within(page).findByTestId('stock-research-packet-panel');
+    const quoteObservation = within(page).getByTestId('stock-quote-observation-strip');
 
+    expect(quoteObservation).toHaveTextContent('新鲜度: 部分可用');
+    expect(quoteObservation).toHaveTextContent('该报价为部分可用，不能支持完整市场判断。');
     expect(panel).toHaveTextContent('证据部分可用');
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('财报 / 催化证据待补');

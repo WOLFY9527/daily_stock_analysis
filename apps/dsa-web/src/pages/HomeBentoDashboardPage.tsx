@@ -97,6 +97,13 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import { resolveHomeDashboardSelection } from './homeDashboardSelection';
 import {
+  formatHistoryTimestamp,
+  resolveHistoryTimestampLabel,
+  resolveHomeMarketHealth,
+  type DashboardLocale,
+  type HomeMarketHealthState,
+} from './homeObservationBoundary';
+import {
   MetaLabel,
   NextResearchAction,
   ObservationHead,
@@ -130,7 +137,6 @@ type DrawerPayload = {
   modules: DrawerModule[];
 };
 
-type DashboardLocale = 'zh' | 'en';
 type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
 type PendingHistoryDelete =
   | { mode: 'single'; recordIds: number[] }
@@ -147,7 +153,9 @@ type GuestMarketSnapshotView = {
   status: string;
   summary: string;
   state: GuestMarketSnapshotState;
-  asOf?: string;
+  asOfLabel?: string;
+  freshnessLabel?: string;
+  healthLabels?: string[];
   sourceLabel?: string;
   items: Array<{ title: string; message: string }>;
   note: string;
@@ -161,6 +169,8 @@ type MemberMarketBriefView = {
   summary: string;
   reliabilityLabel: string;
   reliabilityDetail: string;
+  reliabilityState: HomeMarketHealthState;
+  healthFacets: ResearchQualityFacet[];
   evidence: Array<{ key: string; label: string; value: string; detail: string }>;
   actions: Array<{ key: string; label: string; href: string; primary?: boolean }>;
   safety: string;
@@ -197,6 +207,7 @@ type HomeDailyResearchView = {
   why: string;
   reliabilityLabel: string;
   reliabilityDetail: string;
+  healthFacets: ResearchQualityFacet[];
   nextCheck: string;
   queue: HomeResearchQueueItemView[];
   queueEmptyTitle: string;
@@ -1424,6 +1435,12 @@ function summarizeHomeSourceProvenance(entries: SourceProvenanceEntry[]) {
   const scoreContributionAllowedCount = entries.filter((item) => item.scoreContributionAllowed === true).length;
   const observationOnlyCount = entries.filter((item) => item.observationOnly === true).length;
   const fallbackOrProxyCount = entries.filter((item) => item.fallbackOrProxy === true).length;
+  const fallbackCount = entries.filter((item) => item.freshnessState === 'fallback').length;
+  const cachedCount = entries.filter((item) => item.freshnessState === 'cached').length;
+  const staleCount = entries.filter((item) => item.freshnessState === 'stale').length;
+  const partialCount = entries.filter((item) => item.freshnessState === 'partial').length;
+  const syntheticCount = entries.filter((item) => item.freshnessState === 'synthetic').length;
+  const unavailableCount = entries.filter((item) => item.freshnessState === 'unavailable').length;
   const missingCount = entries.filter((item) => (
     item.sourceId === 'unknown_source'
     || item.authorityTier === 'unknown'
@@ -1432,23 +1449,35 @@ function summarizeHomeSourceProvenance(entries: SourceProvenanceEntry[]) {
     || item.limitations?.includes('unknown_source')
   )).length;
 
-  const freshnessState = entries.some((item) => item.freshnessState === 'fallback')
-    ? 'fallback'
-    : entries.some((item) => item.freshnessState === 'stale')
-      ? 'stale'
-      : entries.some((item) => item.freshnessState === 'delayed')
-        ? 'delayed'
-        : entries.some((item) => item.freshnessState === 'cached')
-          ? 'cached'
-          : entries.some((item) => item.freshnessState === 'fresh')
-            ? 'fresh'
-            : 'unknown';
+  const freshnessState = unavailableCount > 0
+    ? 'unavailable'
+    : entries.some((item) => item.freshnessState === 'synthetic')
+      ? 'synthetic'
+      : entries.some((item) => item.freshnessState === 'fallback')
+        ? 'fallback'
+        : entries.some((item) => item.freshnessState === 'stale')
+          ? 'stale'
+          : entries.some((item) => item.freshnessState === 'delayed')
+            ? 'delayed'
+            : entries.some((item) => item.freshnessState === 'partial')
+              ? 'partial'
+              : entries.some((item) => item.freshnessState === 'cached')
+                ? 'cached'
+                : entries.some((item) => item.freshnessState === 'fresh')
+                  ? 'fresh'
+                  : 'unknown';
 
   return {
     entryCount,
     scoreContributionAllowedCount,
     observationOnlyCount,
     fallbackOrProxyCount,
+    fallbackCount,
+    cachedCount,
+    staleCount,
+    partialCount,
+    syntheticCount,
+    unavailableCount,
     missingCount,
     freshnessState,
   };
@@ -1471,9 +1500,12 @@ function homeSourceProvenanceAuthorityLabel(
 
 function homeSourceProvenanceFreshnessLabel(locale: DashboardLocale, freshnessState: string) {
   const isEnglish = locale === 'en';
+  if (freshnessState === 'unavailable') return isEnglish ? 'Freshness: includes unavailable evidence' : '时效：含不可用';
+  if (freshnessState === 'synthetic') return isEnglish ? 'Freshness: includes sample / demo' : '时效：含样本';
   if (freshnessState === 'fallback') return isEnglish ? 'Freshness: includes fallback' : '时效：含回退';
   if (freshnessState === 'stale') return isEnglish ? 'Freshness: includes stale' : '时效：含过期';
   if (freshnessState === 'delayed') return isEnglish ? 'Freshness: includes delay' : '时效：含延迟';
+  if (freshnessState === 'partial') return isEnglish ? 'Freshness: includes partial evidence' : '时效：含部分可用';
   if (freshnessState === 'cached') return isEnglish ? 'Freshness: cached' : '时效：缓存';
   if (freshnessState === 'fresh') return isEnglish ? 'Freshness: fresh' : '时效：新鲜';
   return isEnglish ? 'Freshness: pending' : '时效：待确认';
@@ -1538,6 +1570,12 @@ function HomeSourceProvenanceStrip({
           freshnessLabel,
           isEnglish ? `Observe-only ${summary.observationOnlyCount}` : `观察级 ${summary.observationOnlyCount} 项`,
           isEnglish ? `Fallback / proxy ${summary.fallbackOrProxyCount}` : `回退/代理 ${summary.fallbackOrProxyCount} 项`,
+          isEnglish ? `Cached ${summary.cachedCount}` : `缓存 ${summary.cachedCount} 项`,
+          isEnglish ? `Fallback ${summary.fallbackCount}` : `回退 ${summary.fallbackCount} 项`,
+          isEnglish ? `Stale ${summary.staleCount}` : `过期 ${summary.staleCount} 项`,
+          isEnglish ? `Partial ${summary.partialCount}` : `部分可用 ${summary.partialCount} 项`,
+          isEnglish ? `Sample / demo ${summary.syntheticCount}` : `样本 / 演示 ${summary.syntheticCount} 项`,
+          isEnglish ? `Unavailable ${summary.unavailableCount}` : `不可用 ${summary.unavailableCount} 项`,
           isEnglish ? `Awaiting verification ${summary.missingCount}` : `待核验 ${summary.missingCount} 项`,
         ].map((label) => (
           <span
@@ -1562,7 +1600,7 @@ type HomeResearchPacketView = {
   statusLabel: string;
   tone: 'neutral' | 'used' | 'warning' | 'missing';
   explanation: string;
-  asOfLabel: string | null;
+  lifecycleLabel: string | null;
   observationBoundary: string;
   nextEvidence: string;
   judgmentBoundary: string;
@@ -1876,19 +1914,29 @@ function collectHomeResearchPacketNextEvidence(
     : '等待完整研究证据后再阅读。';
 }
 
-function resolveHomeResearchPacketAsOf(
+function resolveHomeResearchPacketLifecycle(
   locale: DashboardLocale,
   report: AnalysisReport | null | undefined,
-  dataQualityReport: DataQualityReport | undefined,
 ): string | null {
-  const value = dataQualityReport?.enrichmentAsOf
-    || dataQualityReport?.enrichmentUpdatedAt
-    || report?.meta.reportGeneratedAt
-    || report?.meta.createdAt
-    || report?.decisionTrace?.generatedAt;
-  const formatted = formatHistoryTimestamp(value || undefined, locale);
-  if (!formatted) return null;
-  return locale === 'en' ? `As of ${formatted}` : `截至 ${formatted}`;
+  const candidates = [
+    {
+      value: report?.meta.reportGeneratedAt,
+      label: locale === 'en' ? 'Report generated' : '报告生成于',
+    },
+    {
+      value: report?.meta.createdAt,
+      label: locale === 'en' ? 'Report created' : '报告创建于',
+    },
+    {
+      value: report?.decisionTrace?.generatedAt,
+      label: locale === 'en' ? 'Decision trace generated' : '决策轨迹生成于',
+    },
+  ];
+  for (const candidate of candidates) {
+    const formatted = formatHistoryTimestamp(candidate.value || undefined, locale);
+    if (formatted) return `${candidate.label} ${formatted}`;
+  }
+  return null;
 }
 
 function buildHomeResearchPacketView({
@@ -1926,6 +1974,8 @@ function buildHomeResearchPacketView({
     || item.observationOnly === true
     || item.freshnessState === 'fallback'
     || item.freshnessState === 'stale'
+    || item.freshnessState === 'partial'
+    || item.freshnessState === 'synthetic'
     || item.freshnessState === 'unknown'
     || item.freshnessState === 'unavailable'
   )));
@@ -1978,7 +2028,7 @@ function buildHomeResearchPacketView({
     statusLabel: homeResearchPacketStatusLabel(locale, status),
     tone,
     explanation: explanationByStatus[status],
-    asOfLabel: resolveHomeResearchPacketAsOf(locale, report, dataQualityReport),
+    lifecycleLabel: resolveHomeResearchPacketLifecycle(locale, report),
     observationBoundary: isEnglish
       ? 'Observation only'
       : '仅供观察',
@@ -2033,7 +2083,7 @@ function HomeResearchPacketPanel({
           {isEnglish ? 'Research packet' : '研究包'}
         </p>
         <TraceBadge tone={view.tone}>{view.statusLabel}</TraceBadge>
-        {view.asOfLabel ? <TraceBadge tone="neutral">{view.asOfLabel}</TraceBadge> : null}
+        {view.lifecycleLabel ? <TraceBadge tone="neutral">{view.lifecycleLabel}</TraceBadge> : null}
       </div>
       <p className="mt-3 min-w-0 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
         {view.explanation}
@@ -4774,41 +4824,6 @@ function polishHomeNarrativeCopy(locale: DashboardLocale, raw: string, context: 
   return sanitizeHomeConsumerActionCopy(locale, sanitized);
 }
 
-const HISTORY_TIMESTAMP_FORMATTERS = {
-  en: new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }),
-  zh: new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }),
-} as const;
-
-function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
-  const text = String(value || '').trim();
-  if (!text) {
-    return '';
-  }
-
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) {
-    return text;
-  }
-
-  const parts = HISTORY_TIMESTAMP_FORMATTERS[locale].formatToParts(date);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
-  return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
-}
-
 function buildGuestMarketSnapshotView(
   locale: DashboardLocale,
   briefing: MarketBriefingResponse | null,
@@ -4816,6 +4831,7 @@ function buildGuestMarketSnapshotView(
   isUnavailable: boolean,
 ): GuestMarketSnapshotView {
   const isEnglish = locale === 'en';
+  const health = resolveHomeMarketHealth(locale, briefing, isLoading, isUnavailable);
   const note = isEnglish
     ? 'Research observation, not investment advice.'
     : '研究观察，不构成投资建议。';
@@ -4841,10 +4857,10 @@ function buildGuestMarketSnapshotView(
       }))
       .filter((item) => item.title || item.message)
       .slice(0, 2);
-    const isUnavailableSnapshot = items.length === 0 && (briefing.isFallback || briefing.isReliable === false);
+    const isUnavailableSnapshot = items.length === 0 && health.state === 'unavailable';
     const state: GuestMarketSnapshotState = isUnavailableSnapshot
       ? 'unavailable'
-      : (briefing.isFallback || briefing.isStale || briefing.isReliable === false ? 'limited' : 'ready');
+      : (health.state === 'ready' ? 'ready' : 'limited');
     const summary = String(briefing.warning || items[0]?.message || '').trim()
       || (state === 'unavailable'
         ? (isEnglish ? 'The guest route is showing product preview only until a public-safe market snapshot is available.' : '公开市场快照尚未可用，当前游客路由仅展示产品预览。')
@@ -4854,16 +4870,24 @@ function buildGuestMarketSnapshotView(
 
     return {
       title: isEnglish ? 'Current market observation' : '当前市场观察',
-      status: state === 'unavailable'
+      status: health.state === 'synthetic'
+        ? health.label
+        : state === 'unavailable'
         ? (isEnglish ? 'Public market observation unavailable right now' : '当前未取到公开市场观察')
         : state === 'limited'
         ? (isEnglish ? 'Latest available market observation' : '最近可用市场观察')
         : (isEnglish ? 'Public market observation ready' : '公开市场观察已准备'),
       summary,
       state,
-      asOf: formatHistoryTimestamp(briefing.asOf || briefing.updatedAt, locale),
+      asOfLabel: briefing.asOf
+        ? `${isEnglish ? 'Observation as of' : '观察截至'} ${formatHistoryTimestamp(briefing.asOf, locale)}`
+        : (isEnglish ? 'Observation time pending' : '观察时间待确认'),
+      freshnessLabel: health.freshnessLabel,
+      healthLabels: health.healthFacets
+        .filter((facet) => facet.key !== 'freshness')
+        .map((facet) => `${String(facet.label)}：${String(facet.value || '')}`),
       sourceLabel: (() => {
-        const rawSource = String(briefing.sourceLabel || '').trim();
+        const rawSource = String(briefing.sourceLabel || briefing.providerHealth?.sourceLabel || '').trim();
         if (!rawSource) return undefined;
         const localeMismatch = isEnglish ? /[\u3400-\u9fff]/.test(rawSource) : /\b(?:model|feed|fixture|provider|source)\b/i.test(rawSource);
         return localeMismatch ? (isEnglish ? 'Public market model' : '公开市场模型') : rawSource;
@@ -4907,6 +4931,7 @@ function buildMemberMarketBriefView(
   overview: DashboardMarketIntelligenceOverview | null,
 ): MemberMarketBriefView {
   const isEnglish = locale === 'en';
+  const marketHealth = resolveHomeMarketHealth(locale, briefing, isLoading, isUnavailable);
   const buildHref = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
   const productReadModel = overview?.productReadModel ?? null;
   const productReadBlocking = productReadModelIsBlocking(productReadModel);
@@ -4923,7 +4948,7 @@ function buildMemberMarketBriefView(
   const severityText = safeItems.map((item) => `${item.severity} ${item.title} ${item.message}`).join(' ');
   const riskOff = /negative|bear|volatility|pressure|stress|回落|压力|风险|波动|走弱|防守/i.test(severityText);
   const riskOn = /positive|bull|breadth|flow|improve|走强|改善|资金|广度|修复/i.test(severityText);
-  const limited = Boolean(briefing?.isFallback || briefing?.isStale || briefing?.isReliable === false || isUnavailable || productReadBlocking);
+  const limited = marketHealth.state !== 'ready' || productReadBlocking;
   const regimeLabel = isLoading && !briefing
     ? (isEnglish ? 'Updating' : '更新中')
     : productReadBlocking && productStateLabel
@@ -4951,12 +4976,10 @@ function buildMemberMarketBriefView(
     : productReadBlocking && productStateLabel
       ? productStateLabel
     : limited
-      ? (isEnglish ? 'Partially usable' : '部分可用')
+      ? marketHealth.label
       : (isEnglish ? 'Research-ready' : '研究可读');
   const reliabilityDetail = limited
-    ? (isEnglish
-      ? 'Returned price bars and market facts can still be read; some prices may be delayed or incomplete.'
-      : '已返回的价格走势与市场事实仍可阅读；部分报价可能延迟或不完整。')
+    ? marketHealth.detail
     : isLoading && !briefing
       ? (isEnglish ? 'Waiting for the latest returned market snapshot.' : '等待最新市场快照返回。')
       : (isEnglish ? 'Returned market facts are fresh enough for research observation.' : '已返回市场事实足以支持研究观察。');
@@ -4995,6 +5018,8 @@ function buildMemberMarketBriefView(
     summary,
     reliabilityLabel,
     reliabilityDetail,
+    reliabilityState: productReadBlocking ? 'unavailable' : marketHealth.state,
+    healthFacets: marketHealth.healthFacets,
     evidence,
     // Journey handoffs: Market → Radar / Stock Research / Watchlist (not a feature directory).
     actions: [
@@ -5136,12 +5161,18 @@ function buildHomeDailyResearchView(
           detail: normalizeHomeDailyText(overview?.dataQuality.summary || brief.reliabilityDetail),
         },
       ];
+  const briefingLimitsReliability = brief.reliabilityState !== 'ready';
 
   return {
     observation: normalizeHomeDailyText(overview?.marketBrief.headline) || brief.regimeDetail,
     why: normalizeHomeDailyText(overview?.marketBrief.summary) || brief.summary,
-    reliabilityLabel: normalizeHomeDailyText(overview?.dataQuality.label) || brief.reliabilityLabel,
-    reliabilityDetail: normalizeHomeDailyText(overview?.dataQuality.summary) || brief.reliabilityDetail,
+    reliabilityLabel: briefingLimitsReliability
+      ? brief.reliabilityLabel
+      : normalizeHomeDailyText(overview?.dataQuality.label) || brief.reliabilityLabel,
+    reliabilityDetail: briefingLimitsReliability
+      ? brief.reliabilityDetail
+      : normalizeHomeDailyText(overview?.dataQuality.summary) || brief.reliabilityDetail,
+    healthFacets: brief.healthFacets,
     nextCheck: queue[0]?.action || (isEnglish ? 'Start with the market path, then open Research Radar if a candidate appears.' : '先复核市场路径；若出现真实候选，再进入研究雷达继续检查。'),
     queue,
     queueEmptyTitle: isEnglish ? 'No real research candidates yet' : '当前没有真实研究候选',
@@ -5152,10 +5183,6 @@ function buildHomeDailyResearchView(
     indexPath,
     dataLedger,
   };
-}
-
-function resolveHistoryGeneratedAt(historyItem: HistoryItem, locale: DashboardLocale): string {
-  return formatHistoryTimestamp(historyItem.generatedAt || historyItem.createdAt, locale);
 }
 
 function resolveHistoryCompanyLabel(historyItem: HistoryItem): string {
@@ -7621,22 +7648,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 const researchLocale = locale === 'en' ? 'en' : 'zh';
                 const isEnglish = locale === 'en';
                 // Compact briefing: no ObservationHead fact wall (avoids restating queue/changes/ledger).
-                const reliabilityTone: ResearchQualityFacet['tone'] =
-                  /partial|limited|部分|受限|updating|更新/i.test(homeDailyResearch.reliabilityLabel)
-                    ? 'caution'
-                    : /unavailable|不可用|blocking|阻断/i.test(homeDailyResearch.reliabilityLabel)
-                      ? 'danger'
-                      : 'success';
-                // One primary facet only in the strip — ledger domains remain in data-ledger below.
-                const qualityFacets: ResearchQualityFacet[] = [
-                  {
-                    key: 'reliability',
-                    kind: reliabilityTone === 'danger' ? 'unavailable' : reliabilityTone === 'caution' ? 'partial' : 'freshness',
-                    label: isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度',
-                    value: homeDailyResearch.reliabilityLabel,
-                    tone: reliabilityTone,
-                  },
-                ];
+                const qualityFacets = homeDailyResearch.healthFacets;
                 const firstQueueWithSymbol = homeDailyResearch.queue.find((item) => item.href && item.symbol);
                 const radarAction = memberMarketBrief.actions.find((action) => action.key === 'research-radar');
                 const marketAction = memberMarketBrief.actions.find((action) => action.key === 'market-overview');
@@ -8158,11 +8170,24 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       <h2 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{guestMarketSnapshot?.status}</h2>
                     </div>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      {guestMarketSnapshot?.asOf ? (
+                      {guestMarketSnapshot?.asOfLabel ? (
                         <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">
-                          {guestMarketSnapshot.asOf}
+                          {guestMarketSnapshot.asOfLabel}
                         </span>
                       ) : null}
+                      {guestMarketSnapshot?.freshnessLabel ? (
+                        <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">
+                          {guestMarketSnapshot.freshnessLabel}
+                        </span>
+                      ) : null}
+                      {(guestMarketSnapshot?.healthLabels || []).map((label) => (
+                        <span
+                          key={label}
+                          className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]"
+                        >
+                          {label}
+                        </span>
+                      ))}
                       {guestMarketSnapshot?.sourceLabel ? (
                         <span className="shrink-0 text-[10px] text-[color:var(--wolfy-text-muted)]">
                           {locale === 'en' ? 'Source' : '来源'}: {guestMarketSnapshot.sourceLabel}
@@ -8579,7 +8604,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           {recentHistoryItems.length > 0 ? recentHistoryItems.map((item) => {
             const ticker = normalizeTickerQuery(item.stockCode);
             const isSelected = selectedReport?.meta.id === item.id;
-            const generatedAt = resolveHistoryGeneratedAt(item, locale);
+            const historyTimestamp = resolveHistoryTimestampLabel(item, locale);
             const companyLabel = resolveHistoryCompanyLabel(item);
             const shouldShowTickerMeta = ticker && companyLabel.toUpperCase() !== ticker;
             const itemQuality = item.reportQuality || reportQualityFallback();
@@ -8611,9 +8636,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                       {shouldShowTickerMeta ? `${ticker} · ` : ''}{locale === 'en' ? 'Recent analysis' : '最近分析'}
                     </p>
-                    {generatedAt ? (
+                    {historyTimestamp ? (
                       <p className="mt-1 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
-                        {generatedAt}
+                        {historyTimestamp}
                       </p>
                     ) : null}
                     <div className="mt-2 flex min-w-0 max-w-full flex-wrap gap-1.5" data-testid={`home-bento-history-quality-${item.id}`}>

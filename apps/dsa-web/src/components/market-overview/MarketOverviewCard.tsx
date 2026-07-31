@@ -4,6 +4,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
+import { marketObservationCollectionState, marketObservationState } from './marketOverviewDecisionTypes';
 import {
   MarketOverviewCardFrame,
   MarketOverviewDataRow,
@@ -12,7 +13,7 @@ import {
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 
-type MarketOverviewProviderState = 'unconfigured' | 'refreshing' | 'refreshFailed' | 'stale' | 'noData' | null;
+type MarketOverviewProviderState = 'unconfigured' | 'refreshing' | 'refreshFailed' | 'cached' | 'delayed' | 'stale' | 'partial' | 'synthetic' | 'noData' | null;
 
 function hasNotConfiguredReason(panel?: MarketOverviewPanel): boolean {
   if (!panel) return false;
@@ -40,18 +41,8 @@ function hasProviderFailure(panel?: MarketOverviewPanel): boolean {
       || panel.refreshError
       || panel.lastError
       || panel.providerHealth?.status === 'error'
+      || panel.providerFreshness?.state === 'error'
       || panel.providerHealth?.errorSummary,
-  );
-}
-
-function hasStaleSnapshot(panel?: MarketOverviewPanel): boolean {
-  if (!panel) return false;
-  return Boolean(
-    panel.isStale
-      || panel.freshness === 'stale'
-      || panel.freshness === 'cached'
-      || panel.providerHealth?.status === 'stale'
-      || panel.providerHealth?.isStale,
   );
 }
 
@@ -61,10 +52,21 @@ function resolveMarketOverviewProviderState(
   refreshing: boolean,
 ): MarketOverviewProviderState {
   if (hasNotConfiguredReason(panel)) return 'unconfigured';
-  if (refreshing || panel?.isRefreshing || panel?.providerHealth?.isRefreshing) return 'refreshing';
+  if (
+    refreshing
+    || panel?.isRefreshing
+    || panel?.providerHealth?.isRefreshing
+    || panel?.providerHealth?.status === 'refreshing'
+  ) return 'refreshing';
   if (!hasUsableData) return 'noData';
   if (hasProviderFailure(panel)) return 'refreshFailed';
-  if (hasStaleSnapshot(panel)) return 'stale';
+  const state = marketObservationCollectionState([panel, ...(panel?.items || [])]);
+  if (state === 'synthetic') return 'synthetic';
+  if (state === 'partial') return 'partial';
+  if (state === 'unavailable' || state === 'error') return 'refreshFailed';
+  if (state === 'stale') return 'stale';
+  if (state === 'delayed') return 'delayed';
+  if (state === 'cached') return 'cached';
   return hasUsableData ? null : 'noData';
 }
 
@@ -86,7 +88,11 @@ export const MarketOverviewPanelStateNotice: React.FC<{
         refreshingWithData: 'Refreshing; showing the latest available data',
         refreshingWithoutData: 'Refreshing market data',
         refreshFailed: 'Refresh failed; showing the retained usable snapshot',
+        cached: 'Showing the saved cached snapshot',
         stale: 'Data is stale; showing the latest snapshot',
+        delayed: 'Data is delayed; keep this observation bounded',
+        partial: 'Evidence is partially available; keep this observation bounded',
+        synthetic: 'Showing an example observation, not observed market evidence',
         noDataAfterFailure: 'Refresh failed; no usable data',
         noData: 'No usable market data',
       }
@@ -95,7 +101,11 @@ export const MarketOverviewPanelStateNotice: React.FC<{
         refreshingWithData: '正在刷新，当前显示最近可用数据',
         refreshingWithoutData: '正在刷新市场数据',
         refreshFailed: '刷新失败，继续显示可用快照',
+        cached: '当前显示已保存的缓存快照',
         stale: '数据已过期，显示最近快照',
+        delayed: '当前数据存在延迟，仅作有限观察',
+        partial: '当前证据部分可用，仅作有限观察',
+        synthetic: '当前显示样本观察，不代表已观测市场证据',
         noDataAfterFailure: '刷新失败，暂无可用数据',
         noData: '暂无可用数据',
       };
@@ -119,6 +129,22 @@ export const MarketOverviewPanelStateNotice: React.FC<{
     message = copy.stale;
     badge = isEnglish ? 'Latest snapshot' : '最近快照';
     variant = 'neutral';
+  } else if (state === 'cached') {
+    message = copy.cached;
+    badge = isEnglish ? 'Cached snapshot' : '缓存快照';
+    variant = 'info';
+  } else if (state === 'delayed') {
+    message = copy.delayed;
+    badge = isEnglish ? 'Delayed' : '延迟';
+    variant = 'caution';
+  } else if (state === 'partial') {
+    message = copy.partial;
+    badge = isEnglish ? 'Partially available' : '部分可用';
+    variant = 'caution';
+  } else if (state === 'synthetic') {
+    message = copy.synthetic;
+    badge = isEnglish ? 'Example observation' : '样本 / 演示';
+    variant = 'caution';
   } else {
     message = copy.refreshFailed;
     badge = isEnglish ? 'Refresh failed' : '刷新失败';
@@ -146,34 +172,16 @@ function isFallbackOnlyPanel(panel?: MarketOverviewPanel): boolean {
   )));
 }
 
-function resolveMetaStatus(meta?: Pick<MarketOverviewPanel, 'providerHealth' | 'isRefreshing' | 'source' | 'freshness' | 'isFallback' | 'isStale' | 'isUnavailable'>): string {
-  if (meta?.providerHealth?.status) {
-    return meta.providerHealth.status;
-  }
-  if (meta?.isRefreshing) {
+function resolveMetaStatus(meta?: Pick<MarketOverviewPanel, 'providerHealth' | 'providerFreshness' | 'isRefreshing' | 'source' | 'freshness' | 'isFallback' | 'isStale' | 'isPartial' | 'isSynthetic' | 'isFixture' | 'sampleState' | 'isUnavailable'>): string {
+  if (meta?.isRefreshing || meta?.providerHealth?.isRefreshing || meta?.providerHealth?.status === 'refreshing') {
     return 'refreshing';
   }
-  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
-    return 'unavailable';
-  }
-  if (meta?.freshness === 'error') {
-    return 'error';
-  }
-  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
-    return 'fallback';
-  }
-  if (meta?.isStale || meta?.freshness === 'stale') {
-    return 'stale';
-  }
-  if (meta?.freshness === 'live') {
-    return 'live';
-  }
-  return 'cache';
+  return marketObservationState(meta);
 }
 
 function shouldSuppressRepeatedItemState(panel: MarketOverviewPanel | undefined, item: MarketOverviewPanel['items'][number]): boolean {
   const panelStatus = resolveMetaStatus(panel);
-  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial'].includes(panelStatus)) {
+  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial', 'synthetic'].includes(panelStatus)) {
     return false;
   }
   return resolveMetaStatus(item) === panelStatus;

@@ -121,8 +121,8 @@ const MarketOverviewDataStateStrip: React.FC<{
           data-testid="market-overview-data-state-summary"
           className="mt-2 min-w-0 text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]"
         >
-          <span className="truncate font-mono">
-            可用 {dataState.availableCount} · 备用数据 {dataState.fallbackCount} · 数据过期 {dataState.staleCount}
+          <span className="font-mono">
+            实时 {dataState.availableCount} · 缓存 {dataState.cachedCount} · 延迟 {dataState.delayedCount} · 部分可用 {dataState.partialCount} · 样本观察 {dataState.syntheticCount} · 备用数据 {dataState.fallbackCount} · 数据过期 {dataState.staleCount}
             {dataState.hasUnavailable ? ` · 证据不足 ${dataState.unavailableCount}` : ''}
           </span>
         </TerminalDenseList>
@@ -152,6 +152,26 @@ const MarketOverviewDataStateStrip: React.FC<{
             备用数据
           </TerminalChip>
         ) : null}
+        {dataState.cachedCount > 0 ? (
+          <TerminalChip data-testid="market-overview-data-state-cached-chip" variant="info">
+            缓存数据
+          </TerminalChip>
+        ) : null}
+        {dataState.delayedCount > 0 ? (
+          <TerminalChip data-testid="market-overview-data-state-delayed-chip" variant="caution">
+            延迟数据
+          </TerminalChip>
+        ) : null}
+        {dataState.partialCount > 0 ? (
+          <TerminalChip data-testid="market-overview-data-state-partial-chip" variant="caution">
+            部分可用
+          </TerminalChip>
+        ) : null}
+        {dataState.syntheticCount > 0 ? (
+          <TerminalChip data-testid="market-overview-data-state-synthetic-chip" variant="caution">
+            样本 / 演示
+          </TerminalChip>
+        ) : null}
         {dataState.hasUnavailable ? (
           <TerminalChip
             data-testid="market-overview-data-state-unavailable-chip"
@@ -162,9 +182,9 @@ const MarketOverviewDataStateStrip: React.FC<{
         ) : null}
         <TerminalChip
           data-testid="market-overview-data-state-updated-chip"
-          variant={dataState.updatedAtLabel ? 'neutral' : 'info'}
+          variant={dataState.localSnapshotSavedAtLabel ? 'neutral' : 'info'}
         >
-          {dataState.updatedAtLabel ? <>更新时间 <span className="font-mono">{dataState.updatedAtLabel}</span></> : '待刷新'}
+          {dataState.localSnapshotSavedAtLabel ? <>本地快照保存 <span className="font-mono">{dataState.localSnapshotSavedAtLabel}</span></> : '待刷新'}
         </TerminalChip>
       </div>
     </div>

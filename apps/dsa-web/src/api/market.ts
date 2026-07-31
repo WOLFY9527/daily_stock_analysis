@@ -4291,6 +4291,7 @@ export type MarketBriefingResponse = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isPartial?: boolean;
   isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;

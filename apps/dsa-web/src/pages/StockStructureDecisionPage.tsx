@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Copy, Download } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -53,6 +53,29 @@ import {
   RoughSectionCard,
   RoughSurfaceIntro,
 } from './roughShellShared';
+import {
+  buildQuoteBoundaryView,
+  buildStockHistoryObservationView,
+  formatQuoteTimestamp,
+  historyBarsCount,
+  historyMissingBars,
+  isSyntheticStockHistory,
+  historyRangeLabel,
+  latestHistoryDate,
+  optionsStructureFreshnessLabel,
+  optionsStructureSourceLabel,
+  quoteBooleanStateLabel,
+  requiredHistoryBars,
+  resolveStockQuoteObservation,
+  selectAdmissibleStockHistoryPoints,
+  stockHistoryFreshnessLabel,
+  stockHistoryReadinessState,
+  stockHistorySourceLabel,
+  technicalFreshnessLabel,
+  technicalSourceBoundaryLabel,
+  type QuoteBoundaryChipVariant,
+  type StockQuoteObservationView,
+} from './stockObservationBoundary';
 
 const COMPONENT_LABELS = {
   trend: { zh: '趋势', en: 'Trend' },
@@ -285,41 +308,6 @@ function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): 
   return String(period);
 }
 
-const QUOTE_TIMESTAMP_FORMATTERS = {
-  en: new Intl.DateTimeFormat('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }),
-  zh: new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }),
-} as const;
-
-type QuoteBoundaryChipVariant = 'success' | 'caution' | 'danger' | 'info' | 'neutral';
-
-type QuoteBoundaryChip = {
-  id: 'state' | 'source' | 'freshness' | 'updated';
-  label: string;
-  variant: QuoteBoundaryChipVariant;
-};
-
-type QuoteBoundaryView = {
-  title: string;
-  detail: string;
-  chips: QuoteBoundaryChip[];
-};
-
-function formatQuoteTimestamp(value: string | null | undefined, language: 'zh' | 'en'): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return QUOTE_TIMESTAMP_FORMATTERS[language].format(date);
-}
 
 const OPTIONS_STRUCTURE_NUMBER_FORMATTERS = {
   en: new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }),
@@ -401,21 +389,11 @@ function optionsStructureStatusCopy(
   };
 }
 
-function optionsStructureSourceLabel(structure: OptionsStructureSummary, language: 'zh' | 'en'): string {
-  return structure.providerConfigured
-    ? (language === 'en' ? 'Structure source configured' : '结构来源已配置')
-    : (language === 'en' ? 'Structure source needed' : '结构来源待配置');
-}
 
-function optionsStructureFreshnessLabel(structure: OptionsStructureSummary, language: 'zh' | 'en'): string {
+function optionsStructureAsOfLabel(structure: OptionsStructureSummary, language: 'zh' | 'en'): string | null {
   const timestamp = formatQuoteTimestamp(structure.asOf || structure.snapshot.asOf || null, language);
-  const freshness = normalizeStockConsumerToken(structure.freshness || structure.snapshot.freshness);
-  if (timestamp) return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
-  if (freshness && freshness !== 'unknown') {
-    if (freshness === 'live' || freshness === 'fresh') return language === 'en' ? 'Latest available' : '最新可用';
-    if (freshness === 'stale' || freshness === 'delayed') return language === 'en' ? 'May be delayed' : '可能延迟';
-  }
-  return language === 'en' ? 'Freshness pending' : '新鲜度待确认';
+  if (!timestamp) return null;
+  return `${language === 'en' ? 'Options snapshot as of' : '期权快照截至'} ${timestamp}`;
 }
 
 function optionsStructureReasonLabel(value: string, language: 'zh' | 'en'): string {
@@ -603,6 +581,7 @@ function OptionsStructureSurface({
     .filter((metric) => !isPlaceholderMetricValue(metric.value, language));
   const density = resolveModuleDensity(metrics.length);
   const isCompact = density !== 'full';
+  const snapshotAsOf = optionsStructureAsOfLabel(structure, language);
 
   return (
     <div
@@ -616,8 +595,9 @@ function OptionsStructureSurface({
       >
         <div className="flex flex-wrap gap-2">
           <StatusBadge status={status.badge} label={status.label} size="sm" />
-          <StatusBadge status={structure.providerConfigured ? 'success' : 'caution'} label={optionsStructureSourceLabel(structure, language)} size="sm" />
+          <StatusBadge status="unknown" label={optionsStructureSourceLabel(structure, language)} size="sm" />
           <StatusBadge status="neutral" label={optionsStructureFreshnessLabel(structure, language)} size="sm" />
+          {snapshotAsOf ? <StatusBadge status="neutral" label={snapshotAsOf} size="sm" /> : null}
           {structure.observationOnly || !structure.decisionGrade ? (
             <StatusBadge status="neutral" label={language === 'en' ? 'Observation only' : '仅观察'} size="sm" />
           ) : null}
@@ -662,193 +642,6 @@ function OptionsStructureSurface({
   );
 }
 
-function normalizeQuoteBoundaryToken(value: string | null | undefined): string {
-  return String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
-}
-
-function hasQuoteCurrentPrice(quote: StockQuote | null | undefined): boolean {
-  return typeof quote?.currentPrice === 'number' && Number.isFinite(quote.currentPrice);
-}
-
-function quoteBoundaryStateLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
-  const sourceConfidence = quote.sourceConfidence;
-  const freshness = normalizeQuoteBoundaryToken(sourceConfidence?.freshness || quote.freshness);
-  const synthetic = Boolean(sourceConfidence?.isSynthetic || quote.isSynthetic || freshness === 'synthetic');
-  const stale = Boolean(sourceConfidence?.isStale || quote.isStale || freshness === 'stale' || freshness === 'delayed');
-  const unavailable = Boolean(sourceConfidence?.isUnavailable || quote.isUnavailable || freshness === 'unavailable' || !hasQuoteCurrentPrice(quote));
-  const partial = Boolean(sourceConfidence?.isPartial || quote.isPartial);
-
-  if (synthetic) {
-    return {
-      label: language === 'en' ? 'Sample quote' : '样本报价',
-      variant: 'info',
-    };
-  }
-  if (unavailable) {
-    return {
-      label: language === 'en' ? 'Quote needed' : '报价待补',
-      variant: 'caution',
-    };
-  }
-  if (stale || partial) {
-    return {
-      label: language === 'en' ? 'Quote may be delayed' : '报价可能延迟',
-      variant: 'caution',
-    };
-  }
-  if (normalizeQuoteBoundaryToken(quote.freshness) || hasQuoteCurrentPrice(quote)) {
-    return {
-      label: language === 'en' ? 'Quote ready' : '报价可用',
-      variant: 'success',
-    };
-  }
-  return {
-    label: language === 'en' ? 'Quote pending' : '报价待确认',
-    variant: 'caution',
-  };
-}
-
-function quoteBoundarySourceLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
-  const sourceConfidence = quote.sourceConfidence;
-  if (!sourceConfidence) {
-    return {
-      label: language === 'en' ? 'Source pending' : '来源待确认',
-      variant: 'caution',
-    };
-  }
-
-  if (sourceConfidence.isSynthetic || normalizeQuoteBoundaryToken(sourceConfidence.freshness) === 'synthetic') {
-    return {
-      label: language === 'en' ? 'Sample / demo' : '样本 / 演示',
-      variant: 'info',
-    };
-  }
-  if (sourceConfidence.isUnavailable || sourceConfidence.isPartial) {
-    return {
-      label: language === 'en' ? 'Source pending' : '来源待确认',
-      variant: 'caution',
-    };
-  }
-  if (sourceConfidence.isStale || normalizeQuoteBoundaryToken(sourceConfidence.freshness) === 'stale') {
-    return {
-      label: language === 'en' ? 'Source may be delayed' : '来源可能延迟',
-      variant: 'caution',
-    };
-  }
-  return {
-    label: language === 'en' ? 'Source confirmed' : '来源已确认',
-    variant: 'success',
-  };
-}
-
-function quoteBoundaryFreshnessLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
-  const sourceConfidence = quote.sourceConfidence;
-  const freshness = normalizeQuoteBoundaryToken(sourceConfidence?.freshness || quote.freshness);
-
-  if (sourceConfidence?.isSynthetic || freshness === 'synthetic') {
-    return {
-      label: language === 'en' ? 'Sample / demo' : '样本 / 演示',
-      variant: 'info',
-    };
-  }
-  if (sourceConfidence?.isUnavailable || quote.isUnavailable || freshness === 'unavailable' || !hasQuoteCurrentPrice(quote)) {
-    return {
-      label: language === 'en' ? 'Unavailable' : '暂不可用',
-      variant: 'danger',
-    };
-  }
-  if (sourceConfidence?.isStale || quote.isStale || freshness === 'stale' || freshness === 'delayed') {
-    return {
-      label: language === 'en' ? 'May be delayed' : '可能延迟',
-      variant: 'caution',
-    };
-  }
-  if (freshness === 'live' || freshness === 'fresh') {
-    return {
-      label: language === 'en' ? 'Latest available' : '最新可用',
-      variant: 'success',
-    };
-  }
-  return {
-    label: language === 'en' ? 'Freshness pending' : '新鲜度待确认',
-    variant: 'caution',
-  };
-}
-
-function buildQuoteBoundaryView(
-  quote: StockQuote | null,
-  quoteFailed: boolean,
-  language: 'zh' | 'en',
-): QuoteBoundaryView | null {
-  if (!quote && !quoteFailed) return null;
-  if (!quote) {
-    return {
-      title: language === 'en' ? 'Quote boundary unavailable' : '报价边界暂不可用',
-      detail: language === 'en'
-        ? 'The quote boundary is unavailable, so keep this symbol in observation mode.'
-        : '报价边界暂不可用，先按观察处理。',
-      chips: [
-        {
-          id: 'source',
-          label: language === 'en' ? 'Source pending' : '来源待确认',
-          variant: 'caution',
-        },
-        {
-          id: 'state',
-          label: language === 'en' ? 'Observation only' : '仅观察',
-          variant: 'neutral',
-        },
-      ],
-    };
-  }
-
-  const state = quoteBoundaryStateLabel(quote, language);
-  const source = quoteBoundarySourceLabel(quote, language);
-  const freshness = quoteBoundaryFreshnessLabel(quote, language);
-  const asOf = formatQuoteTimestamp(
-    quote.sourceConfidence?.asOf || quote.marketTimestamp || quote.observedAt || quote.updateTime || null,
-    language,
-  );
-  const detail = source.label === (language === 'en' ? 'Sample / demo' : '样本 / 演示')
-    ? (language === 'en'
-      ? 'Sample or demo data is visible for observation only.'
-      : '当前为样本/演示数据，仅供观察。')
-    : source.label === (language === 'en' ? 'Source pending' : '来源待确认')
-      ? (language === 'en'
-        ? 'The quote was returned, but the source boundary was not provided.'
-        : '报价已返回，但来源边界未提供。')
-      : state.label === (language === 'en' ? 'Quote may be delayed' : '报价可能延迟')
-        ? (language === 'en'
-          ? 'The quote boundary may be delayed, so read it as observation only.'
-          : '报价边界可能延迟，先按观察处理。')
-        : (language === 'en'
-          ? 'This quote boundary is for research observation only.'
-          : '该报价边界仅供研究观察。');
-
-  return {
-    title: language === 'en' ? 'Quote source and freshness' : '报价来源与新鲜度',
-    detail,
-    chips: [
-      {
-        id: 'state',
-        ...state,
-      },
-      {
-        id: 'source',
-        ...source,
-      },
-      {
-        id: 'freshness',
-        ...freshness,
-      },
-      asOf ? {
-        id: 'updated',
-        label: `${language === 'en' ? 'Updated' : '更新'} ${asOf}`,
-        variant: 'neutral',
-      } : null,
-    ].filter(Boolean) as QuoteBoundaryChip[],
-  };
-}
 
 function barsRangeLabel(min: unknown, max: unknown, language: 'zh' | 'en'): string | null {
   const minValue = Number(min);
@@ -1508,8 +1301,7 @@ function firstSafeLedgerText(values: Array<string | null | undefined>, language:
 
 function buildStockEvidenceLedgerRows({
   data,
-  quote,
-  quoteFailed,
+  quoteObservation,
   history,
   historyFailed,
   technicalIndicators,
@@ -1521,8 +1313,7 @@ function buildStockEvidenceLedgerRows({
   language,
 }: {
   data: StockStructureDecisionResponse;
-  quote: StockQuote | null;
-  quoteFailed: boolean;
+  quoteObservation: StockQuoteObservationView;
   history: StockHistoryResponse | null;
   historyFailed: boolean;
   technicalIndicators: StockTechnicalIndicatorsResponse | null;
@@ -1536,12 +1327,6 @@ function buildStockEvidenceLedgerRows({
   const fallback = formatLedgerFallback(language);
   const evidenceItem = stockEvidenceItemForSymbol(stockEvidence, data.ticker);
   const evidenceReadiness = evidenceItem?.symbolEvidenceReadiness;
-  const quoteFreshness = quote ? quoteBoundaryFreshnessLabel(quote, language) : null;
-  const quoteState = quote ? quoteBoundaryStateLabel(quote, language) : null;
-  const quoteTimestamp = formatQuoteTimestamp(
-    quote?.sourceConfidence?.asOf || quote?.marketTimestamp || quote?.observedAt || quote?.updateTime || researchPacket?.quote.asOf || null,
-    language,
-  );
   const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
   const technicalState = technicalIndicators
     ? technicalStatusLabel(technicalIndicators.status, language)
@@ -1565,7 +1350,7 @@ function buildStockEvidenceLedgerRows({
   const evidenceStatus = evidenceReadiness
     ? readinessTierStatus(evidenceReadiness.readinessTier)
     : stockEvidenceFailed ? 'error' : 'warning';
-  const historyAsOf = latestHistoryDate(history) || history?.sourceConfidence?.asOf || '';
+  const historyAsOf = latestHistoryDate(history, historyFailed) || '';
   const technicalAsOf = technicalIndicators ? technicalAsOfLabel(technicalIndicators, language) : null;
   const packetFreshness = productReadFreshnessLabel(researchPacket?.productReadModel || null, language);
   const stockEvidenceAsOf = stockEvidence?.meta?.generatedAt ? formatQuoteTimestamp(stockEvidence.meta.generatedAt, language) : '';
@@ -1574,13 +1359,25 @@ function buildStockEvidenceLedgerRows({
     {
       key: 'quote',
       identity: language === 'en' ? 'Quote' : '报价',
-      state: quoteState?.label || (quoteFailed ? (language === 'en' ? 'Quote unavailable' : '报价暂不可用') : fallback),
-      status: quote ? toneFor(quote.sourceConfidence?.freshness || quote.freshness || 'available') : (quoteFailed ? 'error' : 'warning'),
-      freshness: quoteFreshness?.label || fallback,
-      asOf: quoteTimestamp || fallback,
-      scope: language === 'en' ? 'Latest available price' : '最新可用价格',
-      limitation: quoteState?.label || (quoteFailed ? (language === 'en' ? 'Quote request failed.' : '报价请求失败。') : fallback),
-      provenance: language === 'en' ? 'Quote read boundary' : '报价读取边界',
+      state: quoteObservation.stateLabel,
+      status: quoteObservation.stateVariant === 'danger'
+        ? 'error'
+        : quoteObservation.stateVariant === 'success'
+          ? 'success'
+          : 'warning',
+      freshness: [
+        quoteObservation.freshnessLabel,
+        quoteBooleanStateLabel({ zh: '缓存', en: 'Cached' }, quoteObservation.cached, language),
+        quoteBooleanStateLabel({ zh: '替代路径', en: 'Alternate path' }, quoteObservation.fallback, language),
+      ].join(' · '),
+      asOf: quoteObservation.timestampLabel,
+      scope: quoteObservation.origin === 'providerQuote'
+        ? (language === 'en' ? 'Atomic provider price observation' : '原子提供方价格观察')
+        : quoteObservation.origin === 'researchPacket'
+          ? (language === 'en' ? 'Atomic research-packet price projection' : '原子研究包价格投影')
+          : (language === 'en' ? 'No usable quote observation' : '无可用报价观察'),
+      limitation: quoteObservation.limitation,
+      provenance: quoteObservation.sourceLabel,
     },
     {
       key: 'history',
@@ -1768,18 +1565,14 @@ function evidencePackValue<T extends string | number | boolean>(
   return value;
 }
 
-function isQuoteExportable(quote: StockQuote | null): quote is StockQuote {
-  if (!quote) return false;
-  const freshness = normalizeQuoteBoundaryToken(quote.sourceConfidence?.freshness || quote.freshness);
-  return !(
-    !hasQuoteCurrentPrice(quote)
-    || quote.sourceConfidence?.isUnavailable
-    || quote.sourceConfidence?.isSynthetic
-    || quote.isSynthetic
-    || quote.isUnavailable
-    || freshness === 'unavailable'
-    || freshness === 'synthetic'
-  );
+function isQuoteExportable(observation: StockQuoteObservationView): boolean {
+  return typeof observation.price === 'number'
+    && Number.isFinite(observation.price)
+    && observation.origin !== 'unavailable'
+    && observation.unavailable !== true
+    && observation.synthetic !== true
+    && observation.freshness !== 'unavailable'
+    && observation.freshness !== 'synthetic';
 }
 
 function compactEvidencePackSummary(facts: StockResearchFact[], language: 'zh' | 'en') {
@@ -1797,7 +1590,7 @@ function compactEvidencePackSummary(facts: StockResearchFact[], language: 'zh' |
 
 function buildSingleStockEvidencePackContent({
   data,
-  quote,
+  quoteObservation,
   researchPacket,
   facts,
   stackRows,
@@ -1805,16 +1598,13 @@ function buildSingleStockEvidencePackContent({
   language,
 }: {
   data: StockStructureDecisionResponse;
-  quote: StockQuote;
+  quoteObservation: StockQuoteObservationView;
   researchPacket: SymbolResearchPacket | null;
   facts: StockResearchFact[];
   stackRows: EvidenceStackRow[];
   counts: Record<EvidenceStackBucket, number>;
   language: 'zh' | 'en';
 }): string {
-  const sourceConfidence = quote.sourceConfidence;
-  const asOf = sourceConfidence?.asOf || quote.marketTimestamp || quote.observedAt || quote.updateTime || researchPacket?.quote.asOf;
-  const freshness = sourceConfidence?.freshness || quote.freshness;
   const warnings = compactUnique([
     ...buildEvidenceGapLabels(researchPacket ?? {
       symbol: data.ticker,
@@ -1848,16 +1638,24 @@ function buildSingleStockEvidencePackContent({
     symbol: data.ticker,
     suppliedSymbol: data.ticker,
     quoteLineage: {
-      asOf: evidencePackValue(asOf, language),
-      sourceLabel: evidencePackValue(safeOptionalConsumerText(sourceConfidence?.sourceLabel, language), language),
-      freshness: evidencePackValue(freshness, language),
-      confidenceWeight: evidencePackValue(sourceConfidence?.confidenceWeight, language),
-      coverage: evidencePackValue(sourceConfidence?.coverage, language),
-      stale: Boolean(sourceConfidence?.isStale || quote.isStale),
-      partial: Boolean(sourceConfidence?.isPartial || quote.isPartial),
+      origin: quoteObservation.origin,
+      price: evidencePackValue(quoteObservation.price, language),
+      changePercent: evidencePackValue(quoteObservation.changePercent, language),
+      asOf: evidencePackValue(quoteObservation.rawTimestamp, language),
+      timestampScope: quoteObservation.timestampScope,
+      sourceLabel: evidencePackValue(quoteObservation.sourceKnown ? quoteObservation.sourceLabel : null, language),
+      freshness: evidencePackValue(quoteObservation.freshness, language),
+      cached: evidencePackValue(quoteObservation.cached, language),
+      fallback: evidencePackValue(quoteObservation.fallback, language),
+      stale: evidencePackValue(quoteObservation.stale, language),
+      partial: evidencePackValue(quoteObservation.partial, language),
+      synthetic: evidencePackValue(quoteObservation.synthetic, language),
+      unavailable: evidencePackValue(quoteObservation.unavailable, language),
+      confidenceWeight: evidencePackValue(quoteObservation.confidenceWeight, language),
+      coverage: evidencePackValue(quoteObservation.coverage, language),
     },
     dataReadiness: {
-      quoteState: researchPacket ? quoteEvidenceLabel(researchPacket.quote.state, language) : quoteBoundaryStateLabel(quote, language).label,
+      quoteState: quoteObservation.stateLabel,
       researchState: evidenceCompletenessLabel(counts, language),
       evidenceStates: stateLabels,
       observationOnly: researchPacket?.observationOnly ?? true,
@@ -1871,14 +1669,14 @@ function buildSingleStockEvidencePackContent({
 
 function buildSingleStockEvidencePackEntry({
   data,
-  quote,
+  quoteObservation,
   quoteFailed,
   researchPacket,
   facts,
   language,
 }: {
   data: StockStructureDecisionResponse;
-  quote: StockQuote | null;
+  quoteObservation: StockQuoteObservationView;
   quoteFailed: boolean;
   researchPacket: SymbolResearchPacket | null;
   facts: StockResearchFact[];
@@ -1886,12 +1684,14 @@ function buildSingleStockEvidencePackEntry({
 }): SingleStockEvidencePackEntry {
   const stackRows = researchPacket ? buildEvidenceStackRows(researchPacket, language) : [];
   const counts = evidenceStackCounts(stackRows);
-  const canExport = isQuoteExportable(quote);
+  const canExport = isQuoteExportable(quoteObservation);
   const contents = [
     language === 'en' ? 'Quote lineage' : '报价',
     language === 'en' ? 'Freshness' : '新鲜度',
     language === 'en' ? 'Evidence state' : '证据状态',
-    ...(quoteFailed || !quote ? [language === 'en' ? 'Pending quote evidence' : '报价待补证'] : []),
+    ...(quoteFailed && quoteObservation.origin === 'unavailable'
+      ? [language === 'en' ? 'Pending quote evidence' : '报价待补证']
+      : []),
   ];
 
   return {
@@ -1909,7 +1709,7 @@ function buildSingleStockEvidencePackEntry({
     exportContent: canExport
       ? buildSingleStockEvidencePackContent({
         data,
-        quote,
+        quoteObservation,
         researchPacket,
         facts,
         stackRows,
@@ -2021,78 +1821,12 @@ function numericValue(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function positiveInteger(value: unknown): number | null {
-  const numeric = Number(value);
-  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
-}
-
-function historyBarsCount(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
-  if (history?.data.length) return history.data.length;
-  return positiveInteger(data.dataQuality.usableBars) ?? positiveInteger(data.dataQuality.observedBars) ?? 0;
-}
-
-function requiredHistoryBars(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
-  return positiveInteger(data.dataQuality.requestedDays)
-    ?? positiveInteger(history?.diagnostics?.requestedDays)
-    ?? 90;
-}
-
-function historyMissingBars(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
-  return Math.max(requiredHistoryBars(history, data) - historyBarsCount(history, data), 0);
-}
-
-function latestHistoryDate(history: StockHistoryResponse | null): string | null {
-  const latest = history?.data.at(-1)?.date || history?.sourceConfidence?.asOf || history?.diagnostics?.localFallback?.latestTradeDate;
-  return safeOptionalConsumerText(latest, 'en');
-}
-
-function stockHistorySourceLabel(history: StockHistoryResponse | null, language: 'zh' | 'en'): string {
-  const source = normalizeStockConsumerToken(history?.source || history?.diagnostics?.source);
-  const explicit = safeOptionalConsumerText(history?.sourceConfidence?.sourceLabel, language);
-  const explicitToken = normalizeStockConsumerToken(explicit);
-  if (source.includes('local') || source.includes('cache') || explicitToken.includes('local')) {
-    return language === 'en' ? 'Local history data' : '本地历史数据';
-  }
-  if (/fixture|mock|test/.test(source) || /fixture|mock|test/.test(explicitToken)) {
-    return language === 'en' ? 'History source pending' : '历史来源待确认';
-  }
-  if (explicit) return explicit;
-  if (source.includes('yahoo')) {
-    return 'Yahoo Finance';
-  }
-  if (source.includes('alpaca')) {
-    return 'Alpaca';
-  }
-  return language === 'en' ? 'History source pending' : '历史来源待确认';
-}
-
-function stockHistoryFreshnessLabel(history: StockHistoryResponse | null, failed: boolean, language: 'zh' | 'en'): string {
-  if (failed) return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
-  const token = normalizeStockConsumerToken(history?.sourceConfidence?.freshness || history?.diagnostics?.status);
-  if (['fresh', 'current', 'live', 'available', 'success'].includes(token)) {
-    return language === 'en' ? 'History available' : '历史数据可用';
-  }
-  if (['stale', 'delayed', 'cached', 'partial'].includes(token) || history?.sourceConfidence?.isStale || history?.sourceConfidence?.isPartial) {
-    return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
-  }
-  if (history?.data.length) {
-    return language === 'en' ? 'History available' : '历史数据可用';
-  }
-  return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
-}
-
 function chartCoverageLabel(availableBars: number, requiredBars: number, language: 'zh' | 'en'): string {
   return language === 'en'
     ? `${availableBars} / ${requiredBars} bars`
     : `${availableBars} / ${requiredBars} 根`;
 }
 
-function historyRangeLabel(points: StockHistoryPoint[], language: 'zh' | 'en'): string {
-  const first = points[0]?.date;
-  const last = points.at(-1)?.date;
-  if (!first || !last) return language === 'en' ? 'Range pending' : '区间待确认';
-  return `${first} → ${last}`;
-}
 
 function normalizeChartPoints(points: StockHistoryPoint[]): CoreMarketChartPoint[] {
   return points
@@ -2129,18 +1863,18 @@ function stockConfidenceExplanation(
 
 function stockConsumerSummarySentence({
   data,
-  quote,
+  quoteObservation,
   history,
   historyFailed,
   language,
 }: {
   data: StockStructureDecisionResponse;
-  quote: StockQuote | null;
+  quoteObservation: StockQuoteObservationView;
   history: StockHistoryResponse | null;
   historyFailed: boolean;
   language: 'zh' | 'en';
 }): string {
-  const hasHistory = historyBarsCount(history, data) > 0;
+  const hasHistory = historyBarsCount(history, historyFailed) > 0;
   if (!hasHistory || historyFailed) {
     return language === 'en'
       ? 'Historical data is not available yet, so the price history visual is unavailable.'
@@ -2150,7 +1884,7 @@ function stockConsumerSummarySentence({
     ? data.structureState
     : (productReadClassificationDisplayState(data.productReadModel) || 'withheld');
   const state = stockStructureStateLabel(displayState, language) || (language === 'en' ? 'under review' : '待确认');
-  const freshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : (language === 'en' ? 'pending' : '待确认');
+  const freshness = quoteObservation.freshnessLabel;
   return language === 'en'
     ? `${data.ticker} is currently ${state}; quote freshness is ${freshness}, and historical bars can be reviewed for price context.`
     : `${data.ticker} 当前呈现${state}，报价${freshness}，历史 K 线可用于查看走势。`;
@@ -2174,7 +1908,7 @@ function evidencePackTrustLabel(entry: SingleStockEvidencePackEntry | null, lang
 
 function buildStockResearchConclusionView({
   data,
-  quote,
+  quoteObservation,
   history,
   historyFailed,
   researchPacket,
@@ -2182,7 +1916,7 @@ function buildStockResearchConclusionView({
   language,
 }: {
   data: StockStructureDecisionResponse;
-  quote: StockQuote | null;
+  quoteObservation: StockQuoteObservationView;
   history: StockHistoryResponse | null;
   historyFailed: boolean;
   researchPacket: SymbolResearchPacket | null;
@@ -2196,10 +1930,10 @@ function buildStockResearchConclusionView({
     || (language === 'en' ? 'Under review' : '待确认');
   const confidenceValue = data.productReadModel?.confidence?.label || data.confidence;
   const confidence = confidenceLabel(confidenceValue, language);
-  const availableBars = historyBarsCount(history, data);
+  const availableBars = historyBarsCount(history, historyFailed);
   const requiredBars = requiredHistoryBars(history, data);
   const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
-  const quoteFreshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : null;
+  const quoteFreshness = quoteObservation.freshnessLabel;
   const confirms = safeConsumerList(data.explanation.whatConfirmsIt ?? [], language)
     .map((item) => localizedStockNarrative(item, language, '支持证据已记录，具体表述可在证据明细中核对。'));
   const risks = safeConsumerList([
@@ -2416,6 +2150,7 @@ function StockEvidenceLedger({
 function StockConsumerResearchSummary({
   data,
   quote,
+  quoteObservation,
   history,
   historyFailed,
   technicalIndicators,
@@ -2427,6 +2162,7 @@ function StockConsumerResearchSummary({
 }: {
   data: StockStructureDecisionResponse;
   quote: StockQuote | null;
+  quoteObservation: StockQuoteObservationView;
   history: StockHistoryResponse | null;
   historyFailed: boolean;
   technicalIndicators: StockTechnicalIndicatorsResponse | null;
@@ -2439,29 +2175,26 @@ function StockConsumerResearchSummary({
   const market = formatStockMarketLabel(researchPacket?.market || '', language);
   const exchange = safeOptionalConsumerText(researchPacket?.identity?.exchange, language);
   const name = safeOptionalConsumerText(researchPacket?.identity?.name || quote?.stockName, language);
-  const price = formatStockPrice(quote?.currentPrice ?? researchPacket?.quote.price ?? null, researchPacket?.market || market);
-  const change = formatSignedPercent(quote?.changePercent ?? researchPacket?.quote.changePercent ?? null);
-  const timestamp = formatQuoteTimestamp(
-    quote?.sourceConfidence?.asOf || quote?.marketTimestamp || quote?.observedAt || quote?.updateTime || researchPacket?.quote.asOf || null,
-    language,
-  );
+  const price = formatStockPrice(quoteObservation.price, researchPacket?.market || market);
+  const change = formatSignedPercent(quoteObservation.changePercent);
   const displayStructureState = productReadStrongConclusionAllowed(data.productReadModel)
     ? data.structureState
     : (productReadClassificationDisplayState(data.productReadModel) || 'withheld');
   const structureState = stockStructureStateLabel(displayStructureState, language) || (language === 'en' ? 'Under review' : '待确认');
-  const summary = stockConsumerSummarySentence({ data, quote, history, historyFailed, language });
+  const summary = stockConsumerSummarySentence({ data, quoteObservation, history, historyFailed, language });
   const confidenceValue = data.productReadModel?.confidence?.label || data.confidence;
   const confidence = confidenceLabel(confidenceValue, language);
   const confidenceText = stockConfidenceExplanation(confidenceValue, language);
   const productFreshness = productReadFreshnessLabel(data.productReadModel || researchPacket?.productReadModel || null, language);
   const canCopyEvidence = Boolean(evidenceEntry?.exportContent);
-  const availableBars = historyBarsCount(history, data);
+  const availableBars = historyBarsCount(history, historyFailed);
   const requiredBars = requiredHistoryBars(history, data);
-  const missingBars = historyMissingBars(history, data);
+  const missingBars = historyMissingBars(history, data, historyFailed);
   const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
+  const historyObservation = buildStockHistoryObservationView(history, historyFailed, data, language, { safeOptionalConsumerText });
   const technicalTrust = stockTechnicalTrustLabel(technicalIndicators, technicalFailed, language);
   const evidenceTrust = evidencePackTrustLabel(evidenceEntry, language);
-  const quoteTrust = quote ? quoteBoundaryFreshnessLabel(quote, language).label : (language === 'en' ? 'Quote pending' : '报价待确认');
+  const quoteTrust = quoteObservation.freshnessLabel;
   const topScore = Object.entries(data.componentScores ?? {})
     .sort(([, left], [, right]) => (right ?? 0) - (left ?? 0))
     .map(([key, value]) => ({
@@ -2470,7 +2203,7 @@ function StockConsumerResearchSummary({
     }))[0];
   const conclusionView = buildStockResearchConclusionView({
     data,
-    quote,
+    quoteObservation,
     history,
     historyFailed,
     researchPacket,
@@ -2533,7 +2266,7 @@ function StockConsumerResearchSummary({
   };
 
   const trustItems = [
-    { key: 'quote', label: language === 'en' ? 'Quote' : '报价', value: quoteTrust, meaningful: Boolean(quote) },
+    { key: 'quote', label: language === 'en' ? 'Quote' : '报价', value: quoteTrust, meaningful: quoteObservation.origin !== 'unavailable' },
     {
       key: 'history',
       label: language === 'en' ? 'History' : '历史',
@@ -2568,7 +2301,7 @@ function StockConsumerResearchSummary({
           <h2 className="stock-research-identity-header__ticker text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
           {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
           <span className="text-xs text-[color:var(--wolfy-text-muted)]">{[market, exchange].filter(Boolean).join(' · ') || '--'}</span>
-          <span className="text-xs text-[color:var(--wolfy-text-muted)]">{timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}</span>
+          <span className="text-xs text-[color:var(--wolfy-text-muted)]">{quoteObservation.timestampLabel}</span>
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
           <span className="stock-research-identity-header__price text-3xl font-semibold tabular-nums text-[color:var(--wolfy-text-primary)]">{price}</span>
@@ -2577,6 +2310,46 @@ function StockConsumerResearchSummary({
       </div>
 
       <div className="mt-3 flex min-w-0 flex-col gap-3">
+        <div
+          className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-3 lg:grid-cols-2"
+          data-testid="stock-observation-boundary-strips"
+        >
+          <section className="min-w-0 lg:border-r lg:border-[color:var(--wolfy-divider)] lg:pr-3" data-testid="stock-quote-observation-strip">
+            <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
+              {language === 'en' ? 'Quote observation' : '报价观察'}
+            </p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+              <span className="min-w-0 break-words">{language === 'en' ? 'Source' : '来源'}: {quoteObservation.sourceLabel}</span>
+              <span>{quoteObservation.timestampLabel}</span>
+              <span>{language === 'en' ? 'Freshness' : '新鲜度'}: {quoteObservation.freshnessLabel}</span>
+              <span>{quoteBooleanStateLabel({ zh: '缓存', en: 'Cached' }, quoteObservation.cached, language)}</span>
+              <span>{quoteBooleanStateLabel({ zh: '替代路径', en: 'Alternate path' }, quoteObservation.fallback, language)}</span>
+            </div>
+            <p className="mt-2 min-w-0 break-words text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+              {quoteObservation.limitation}
+            </p>
+          </section>
+
+          <section className="min-w-0" data-testid="stock-history-observation-strip">
+            <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
+              {language === 'en' ? 'History observation' : '历史观察'}
+            </p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+              <span className="min-w-0 break-words">{language === 'en' ? 'Source' : '来源'}: {historyObservation.sourceLabel}</span>
+              <span>{language === 'en' ? 'Freshness' : '新鲜度'}: {historyObservation.freshnessLabel}</span>
+              <span>{language === 'en' ? 'Returned range' : '返回区间'}: {historyObservation.rangeLabel}</span>
+              <span>{language === 'en' ? 'Usable' : '可用'} {historyObservation.availableBars}</span>
+              <span>{language === 'en' ? 'Required' : '所需'} {historyObservation.requiredBars}</span>
+              <span>{language === 'en' ? 'Missing' : '缺口'} {historyObservation.missingBars}</span>
+              <span>{quoteBooleanStateLabel({ zh: '缓存', en: 'Cached' }, historyObservation.cached, language)}</span>
+              <span>{quoteBooleanStateLabel({ zh: '替代路径', en: 'Alternate path' }, historyObservation.fallback, language)}</span>
+            </div>
+            <p className="mt-2 min-w-0 break-words text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+              {historyObservation.limitation}
+            </p>
+          </section>
+        </div>
+
         <StockCurrentConclusionPanel view={conclusionView} language={language} />
 
         <div
@@ -2680,66 +2453,6 @@ function StockConsumerResearchSummary({
   );
 }
 
-function hasDisabledHistoryBoundary(history: StockHistoryResponse | null, failed: boolean): boolean {
-  if (failed) return true;
-  if (!history) return false;
-  if (history.sourceConfidence?.isUnavailable) return true;
-  const boundaryText = [
-    history.diagnostics?.status,
-    history.diagnostics?.reason,
-    history.diagnostics?.message,
-    history.diagnostics?.error,
-    history.sourceConfidence?.degradationReason,
-    history.sourceConfidence?.capReason,
-  ].filter(Boolean).join(' ').toLowerCase();
-  return /disabled|unavailable|not_configured|not configured|cache_miss|cache miss|missing|provider/.test(boundaryText)
-    && history.data.length === 0;
-}
-
-function stockHistoryReadinessState({
-  history,
-  failed,
-  data,
-  language,
-}: {
-  history: StockHistoryResponse | null;
-  failed: boolean;
-  data: StockStructureDecisionResponse;
-  language: 'zh' | 'en';
-}): StockHistoryComputationState {
-  const isEnglish = language === 'en';
-  const bars = historyBarsCount(history, data);
-  const missing = historyMissingBars(history, data);
-  if (bars > 0) {
-    return {
-      label: isEnglish ? 'History available' : '历史数据可用',
-      detail: missing > 0
-        ? (isEnglish
-          ? 'Historical bars are present, but the structure read still needs more bars.'
-          : '历史 K 线已返回，但结构计算仍缺少部分样本。')
-        : (isEnglish
-          ? 'Historical bars are present for this symbol.'
-          : '该标的已有历史 K 线可用于页面展示。'),
-      tone: missing > 0 ? 'caution' : 'success',
-    };
-  }
-  if (hasDisabledHistoryBoundary(history, failed)) {
-    return {
-      label: isEnglish ? 'History source disabled' : '历史来源未启用',
-      detail: isEnglish
-        ? 'No historical bars were returned from the configured source or local store.'
-        : '当前历史来源或本地存储未返回 K 线数据。',
-      tone: 'danger',
-    };
-  }
-  return {
-    label: isEnglish ? 'History missing' : '历史数据待补',
-    detail: isEnglish
-      ? 'The page did not receive historical bars for this symbol.'
-      : '页面暂未收到该标的历史 K 线。',
-    tone: 'caution',
-  };
-}
 
 function structureComputationState(
   data: StockStructureDecisionResponse,
@@ -2831,21 +2544,6 @@ function technicalStatusLabel(status: string | null | undefined, language: 'zh' 
   return { label: language === 'en' ? 'Indicators pending' : '指标待确认', status: 'info' };
 }
 
-function technicalFreshnessLabel(
-  indicators: StockTechnicalIndicatorsResponse,
-  language: 'zh' | 'en',
-): string {
-  const freshness = normalizeStockConsumerToken(indicators.freshness || indicators.dataQuality.freshness || indicators.dataQuality.freshnessState);
-  if (freshness === 'current' || freshness === 'fresh' || freshness === 'live') {
-    return language === 'en' ? 'Latest available' : '最新可用';
-  }
-  if (freshness === 'stale' || freshness === 'delayed') {
-    return language === 'en' ? 'May be delayed' : '可能延迟';
-  }
-  const timestamp = formatQuoteTimestamp(indicators.asOf, language);
-  if (timestamp) return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
-  return language === 'en' ? 'Freshness pending' : '新鲜度待确认';
-}
 
 function technicalAsOfLabel(
   indicators: StockTechnicalIndicatorsResponse,
@@ -2853,7 +2551,7 @@ function technicalAsOfLabel(
 ): string | null {
   const timestamp = formatQuoteTimestamp(indicators.asOf, language);
   if (!timestamp) return null;
-  return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
+  return `${language === 'en' ? 'Indicator inputs as of' : '指标输入截至'} ${timestamp}`;
 }
 
 function StockHistoryCoreChart({
@@ -2868,11 +2566,12 @@ function StockHistoryCoreChart({
   language: 'zh' | 'en';
 }) {
   const isEnglish = language === 'en';
-  const availableBars = historyBarsCount(history, data);
+  const availableBars = historyBarsCount(history, failed);
   const requiredBars = requiredHistoryBars(history, data);
-  const missingBars = historyMissingBars(history, data);
-  const latestDate = latestHistoryDate(history);
-  const chartPoints = history?.data ?? [];
+  const missingBars = historyMissingBars(history, data, failed);
+  const latestDate = latestHistoryDate(history, failed);
+  const chartPoints = selectAdmissibleStockHistoryPoints(history, failed);
+  const syntheticHistory = isSyntheticStockHistory(history, failed);
   const chartStatusLabel = availableBars > 0
     ? (isEnglish ? 'History available' : '历史数据可用')
     : (isEnglish ? 'History missing' : '历史数据待补');
@@ -2887,9 +2586,13 @@ function StockHistoryCoreChart({
         data-testid="stock-history-empty-chart-state"
         title={isEnglish ? 'Chart unavailable' : '图表暂不可用'}
       >
-        {isEnglish
-          ? 'History missing. No historical bars were returned, so the page shows readiness counts only.'
-          : '历史数据待补。未返回历史 K 线，页面仅展示就绪度计数。'}
+        {syntheticHistory
+          ? (isEnglish
+            ? 'Returned sample history is for observation only and is not charted.'
+            : '已返回的样本历史仅供观察，不绘制图表。')
+          : (isEnglish
+            ? 'History missing. No historical bars were returned, so the page shows readiness counts only.'
+            : '历史数据待补。未返回历史 K 线，页面仅展示就绪度计数。')}
       </TerminalEmptyState>
     );
   }
@@ -2904,7 +2607,7 @@ function StockHistoryCoreChart({
       language={language}
       statusLabel={chartStatusLabel}
       statusTone={missingBars > 0 ? 'warning' : 'success'}
-      sourceLabel={stockHistorySourceLabel(history, language)}
+      sourceLabel={stockHistorySourceLabel(history, language, { safeOptionalConsumerText })}
       freshnessLabel={stockHistoryFreshnessLabel(history, failed, language)}
       rangeLabel={historyRangeLabel(chartPoints, language)}
       latestLabel={latestDate || undefined}
@@ -2917,14 +2620,6 @@ function StockHistoryCoreChart({
   );
 }
 
-function technicalSourceBoundaryLabel(
-  indicators: StockTechnicalIndicatorsResponse,
-  language: 'zh' | 'en',
-): string {
-  const safeLabel = safeOptionalConsumerText(indicators.sourceLabel, language);
-  if (safeLabel) return safeLabel;
-  return language === 'en' ? 'Local price-history boundary' : '本地价格历史边界';
-}
 
 function technicalHistoryRows(
   indicators: StockTechnicalIndicatorsResponse | null,
@@ -3032,7 +2727,7 @@ function StockTechnicalIndicatorsPanel({
   const isAvailable = statusToken === 'available' || statusToken === 'ready';
   const timeframe = periodLabel(indicators.timeframe, language) || indicators.timeframe || (isEnglish ? 'Daily' : '日线');
   const boundaryChips = [
-    { id: 'source', label: technicalSourceBoundaryLabel(indicators, language) },
+    { id: 'source', label: technicalSourceBoundaryLabel(indicators, language, { safeOptionalConsumerText }) },
     { id: 'freshness', label: technicalFreshnessLabel(indicators, language) },
     { id: 'as-of', label: technicalAsOfLabel(indicators, language) },
     { id: 'timeframe', label: timeframe },
@@ -3082,6 +2777,9 @@ function StockTechnicalIndicatorsPanel({
       <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={title}>
         <div className="mb-3 flex flex-wrap gap-2">
           <StatusBadge status={status.status} label={status.label} size="sm" />
+          {boundaryChips.map(({ id, label }) => (
+            <TerminalChip key={id} variant="neutral">{label}</TerminalChip>
+          ))}
           <TerminalChip variant="neutral">{isEnglish ? 'No inferred values' : '不推断指标'}</TerminalChip>
           <TerminalChip variant="neutral">{isEnglish ? 'Research observation only' : '仅研究观察'}</TerminalChip>
         </div>
@@ -3106,12 +2804,12 @@ function StockHistoryReadinessPanel({
   showChart?: boolean;
 }) {
   const isEnglish = language === 'en';
-  const availableBars = historyBarsCount(history, data);
+  const availableBars = historyBarsCount(history, failed);
   const requiredBars = requiredHistoryBars(history, data);
-  const missingBars = historyMissingBars(history, data);
+  const missingBars = historyMissingBars(history, data, failed);
   const historyState = stockHistoryReadinessState({ history, failed, data, language });
   const computationState = structureComputationState(data, missingBars, language);
-  const latestDate = latestHistoryDate(history);
+  const latestDate = latestHistoryDate(history, failed);
 
   return (
     <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-history-readiness-panel">
@@ -4002,7 +3700,8 @@ export default function StockStructureDecisionPage() {
   );
   const benchmark = searchParams.get('benchmark')?.trim() || undefined;
   const maxItems = parsePositiveInteger(searchParams.get('maxItems'));
-  const [canonicalSymbols, setCanonicalSymbols] = useState<string[]>([]);
+  const canonicalSymbolsRef = useRef<string[]>([]);
+  const canonicalSymbols = canonicalSymbolsRef.current;
   const isCompareRequest = canonicalSymbols.length > 1;
   const primarySymbol = canonicalSymbols[0] || '';
   const titleSymbol = canonicalSymbols.join(' / ');
@@ -4028,7 +3727,7 @@ export default function StockStructureDecisionPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setCanonicalSymbols([]);
+    canonicalSymbolsRef.current = [];
     setSymbolNotFound(null);
     setResearchPacket(null);
     setResearchPacketFailed(false);
@@ -4090,7 +3789,7 @@ export default function StockStructureDecisionPage() {
       }
 
       const seenCanonicalSymbols = new Set<string>();
-      const resolvedSymbols = canonicalInputs
+      const validatedSymbols = canonicalInputs
         .slice(0, requestedSymbols.length)
         .filter((identity) => {
           const key = `${identity.market}\u0000${identity.symbol}`;
@@ -4099,32 +3798,32 @@ export default function StockStructureDecisionPage() {
           return true;
         })
         .map((identity) => identity.symbol);
-      const resolvedBenchmark = benchmark ? canonicalInputs.at(-1)?.symbol : undefined;
-      if (!resolvedSymbols.length) {
+      const validatedBenchmark = benchmark ? canonicalInputs.at(-1)?.symbol : undefined;
+      if (!validatedSymbols.length) {
         setData(null);
         setSymbolNotFound({ symbol: '' });
         return;
       }
 
-      setCanonicalSymbols(resolvedSymbols);
+      canonicalSymbolsRef.current = validatedSymbols;
       const canonicalPath = localize(buildCanonicalStockStructurePath(
-        resolvedSymbols,
+        validatedSymbols,
         location.search,
-        resolvedBenchmark,
+        validatedBenchmark,
       ));
       if (canonicalPath !== `${location.pathname}${location.search}`) {
         navigate(canonicalPath, { replace: true });
         return;
       }
 
-      const canonicalPrimarySymbol = resolvedSymbols[0];
-      const canonicalIsCompareRequest = resolvedSymbols.length > 1;
+      const canonicalPrimarySymbol = validatedSymbols[0];
+      const canonicalIsCompareRequest = validatedSymbols.length > 1;
       if (canonicalIsCompareRequest) {
         const [packetResult, responseResult] = await Promise.allSettled([
           stocksApi.getResearchPacket(canonicalPrimarySymbol),
           stocksApi.getStructureDecisionsBatch({
-            stockCodes: resolvedSymbols,
-            benchmark: resolvedBenchmark,
+            stockCodes: validatedSymbols,
+            benchmark: validatedBenchmark,
             maxItems,
           }),
         ]);
@@ -4229,9 +3928,16 @@ export default function StockStructureDecisionPage() {
     [data, locale, scoreRows],
   );
   const missingDataSummary = data ? buildMissingDataSummary(data, locale) : null;
+  const quoteObservation = useMemo(
+    () => resolveStockQuoteObservation(quote, quoteFailed, researchPacket, locale, {
+      safeOptionalConsumerText,
+      compactUnique,
+    }),
+    [locale, quote, quoteFailed, researchPacket],
+  );
   const quoteBoundaryView = useMemo(
-    () => buildQuoteBoundaryView(quote, quoteFailed, locale),
-    [locale, quote, quoteFailed],
+    () => buildQuoteBoundaryView(quoteObservation, locale),
+    [locale, quoteObservation],
   );
   const stockWorkflowKnownEvidence = data ? safeConsumerList([
     data.structureState ? (locale === 'en' ? `Structure: ${stockStructureStateLabel(data.structureState, locale)}` : `结构：${stockStructureStateLabel(data.structureState, locale)}`) : null,
@@ -4301,19 +4007,18 @@ export default function StockStructureDecisionPage() {
   const singleStockEvidencePackEntry = useMemo(
     () => (data ? buildSingleStockEvidencePackEntry({
       data,
-      quote,
+      quoteObservation,
       quoteFailed,
       researchPacket,
       facts: packetFacts,
       language: locale,
     }) : null),
-    [data, locale, packetFacts, quote, quoteFailed, researchPacket],
+    [data, locale, packetFacts, quoteFailed, quoteObservation, researchPacket],
   );
   const stockEvidenceLedgerRows = useMemo(
     () => (data ? buildStockEvidenceLedgerRows({
       data,
-      quote,
-      quoteFailed,
+      quoteObservation,
       history,
       historyFailed,
       technicalIndicators,
@@ -4329,8 +4034,7 @@ export default function StockStructureDecisionPage() {
       history,
       historyFailed,
       locale,
-      quote,
-      quoteFailed,
+      quoteObservation,
       researchPacket,
       researchPacketFailed,
       stockEvidence,
@@ -4438,6 +4142,7 @@ export default function StockStructureDecisionPage() {
                 <StockConsumerResearchSummary
                   data={data}
                   quote={quote}
+                  quoteObservation={quoteObservation}
                   history={history}
                   historyFailed={historyFailed}
                   technicalIndicators={technicalIndicators}
@@ -4469,8 +4174,17 @@ export default function StockStructureDecisionPage() {
                       >
                         <div className="flex flex-wrap gap-2">
                           {quoteBoundaryView.chips.map((chip) => (
-                            <span key={chip.id} data-testid={`stock-quote-boundary-chip-${chip.id}`}>
-                              <StatusBadge status={chip.variant} label={chip.label} size="sm" />
+                            <span
+                              key={chip.id}
+                              className={chip.id === 'source' ? 'min-w-0 max-w-full' : undefined}
+                              data-testid={`stock-quote-boundary-chip-${chip.id}`}
+                            >
+                              <StatusBadge
+                                status={chip.variant}
+                                label={chip.label}
+                                size="sm"
+                                className={chip.id === 'source' ? 'min-w-0 max-w-full whitespace-normal break-words text-center leading-4' : undefined}
+                              />
                             </span>
                           ))}
                         </div>

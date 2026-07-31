@@ -535,7 +535,12 @@ function buildCompactMissingSummary(params: {
   if (summary.state === 'unavailable' || view?.insufficient) {
     return marketNarrativeCopy(`可见事实有限：${missingButObservable.join(' / ')}；当前只保留已返回市场事实。`);
   }
-  if (summary.state === 'observe' && (dataState.hasFallback || dataState.hasUnavailable)) {
+  if (summary.state === 'observe' && (
+    dataState.partialCount > 0
+    || dataState.syntheticCount > 0
+    || dataState.hasFallback
+    || dataState.hasUnavailable
+  )) {
     return '部分证据待补；当前只保留已返回市场事实。';
   }
   return null;
@@ -935,8 +940,22 @@ function overviewReadinessState(params: {
   const scoreGradeCount = readiness?.scoreGradeCount ?? (decisionReliable ? 3 : 0);
   const observationOnlyCount = readiness?.observationOnlyCount ?? 0;
   const missingCount = readiness?.missingCount ?? 0;
+  const usableDataCount = dataState.availableCount
+    + dataState.cachedCount
+    + dataState.delayedCount
+    + dataState.partialCount
+    + dataState.syntheticCount
+    + dataState.fallbackCount
+    + dataState.staleCount;
+  const hasDecisionLimitedEvidence = dataState.hasUnavailable
+    || dataState.syntheticCount > 0
+    || dataState.staleCount > 0
+    || dataState.partialCount > 0
+    || dataState.hasFallback
+    || dataState.delayedCount > 0
+    || dataState.cachedCount > 0;
 
-  if (dataState.isRefreshing && dataState.availableCount === 0) {
+  if (dataState.isRefreshing && usableDataCount === 0) {
     return 'waiting';
   }
   if (
@@ -944,6 +963,7 @@ function overviewReadinessState(params: {
     && decisionReliable
     && !view?.insufficient
     && scoreGradeCount >= 3
+    && !hasDecisionLimitedEvidence
   ) {
     return 'ready';
   }
@@ -951,7 +971,7 @@ function overviewReadinessState(params: {
     readiness?.status === 'data_insufficient'
     && scoreGradeCount <= 0
   ) {
-    if (dataState.availableCount > 0 && !dataState.hasUnavailable) {
+    if (usableDataCount > 0 && !dataState.hasUnavailable) {
       return 'observe';
     }
     if (missingCount > 0 || dataState.hasFallback || dataState.hasUnavailable) {
@@ -962,7 +982,7 @@ function overviewReadinessState(params: {
     readiness?.status === 'partial_context_only'
     || scoreGradeCount > 0
     || observationOnlyCount > 0
-    || dataState.availableCount > 0
+    || usableDataCount > 0
   ) {
     return 'observe';
   }
@@ -986,7 +1006,11 @@ function buildOverviewDecisionReadiness(params: {
     ...(readiness?.blockingReasons || []).map((reason) => marketIntelligenceReasonLabel(reason)),
     ...(readiness?.missingPillars || []).map((pillar) => pillar.label),
     ...(view?.dataGaps || []).map((gap) => gap.label),
-    dataState.hasFallback ? '当前为延迟可用或部分可用状态' : '',
+    dataState.cachedCount > 0 ? '部分证据来自缓存，不能视为实时' : '',
+    dataState.delayedCount > 0 ? '部分证据存在延迟' : '',
+    dataState.partialCount > 0 ? '当前存在部分可用证据' : '',
+    dataState.syntheticCount > 0 ? '当前存在样本观察，不能视为已观测市场证据' : '',
+    dataState.hasFallback ? '当前存在备用数据' : '',
     dataState.staleCount > 0 ? '存在过期数据' : '',
     dataState.hasUnavailable ? '部分数据暂不可用' : '',
   ];
@@ -1110,8 +1134,23 @@ function dataStatusLabel(
   if (dataState.hasUnavailable) {
     return locale === 'en' ? 'Partially available' : '部分可用';
   }
-  if (dataState.staleCount > 0 || dataState.hasFallback) {
+  if (dataState.syntheticCount > 0) {
+    return locale === 'en' ? 'Example observations only' : '存在样本观察';
+  }
+  if (dataState.staleCount > 0) {
+    return locale === 'en' ? 'Stale data available' : '过期数据可用';
+  }
+  if (dataState.delayedCount > 0) {
     return locale === 'en' ? 'Delayed data available' : '延迟可用';
+  }
+  if (dataState.partialCount > 0) {
+    return locale === 'en' ? 'Partially available' : '部分可用';
+  }
+  if (dataState.hasFallback) {
+    return locale === 'en' ? 'Fallback data available' : '备用数据可用';
+  }
+  if (dataState.cachedCount > 0) {
+    return locale === 'en' ? 'Cached data available' : '缓存可用';
   }
   return locale === 'en' ? 'Available' : '可用';
 }
@@ -1123,29 +1162,71 @@ function buildMarketOverviewQualityFacets(params: {
   locale: 'zh' | 'en';
 }): ResearchQualityFacet[] {
   const { summary, dataState, confidenceSummary, locale } = params;
+  const freshnessKind = dataState.syntheticCount > 0
+    ? 'degraded'
+    : dataState.staleCount > 0
+      ? 'stale'
+      : dataState.delayedCount > 0
+        ? 'delayed'
+        : dataState.partialCount > 0
+          ? 'partial'
+          : dataState.hasFallback
+            ? 'degraded'
+            : dataState.cachedCount > 0
+              ? 'cached'
+              : 'freshness';
+  const freshnessTone = dataState.syntheticCount > 0 || dataState.partialCount > 0 || dataState.staleCount > 0 || dataState.hasFallback || dataState.delayedCount > 0
+    ? 'caution'
+    : dataState.cachedCount > 0 || dataState.isRefreshing
+      ? 'info'
+      : 'success';
+  const coverageParts = locale === 'en'
+    ? [
+        dataState.availableCount > 0 ? `${dataState.availableCount} live` : '',
+        dataState.cachedCount > 0 ? `${dataState.cachedCount} cached` : '',
+        dataState.delayedCount > 0 ? `${dataState.delayedCount} delayed` : '',
+        dataState.partialCount > 0 ? `${dataState.partialCount} partial` : '',
+        dataState.syntheticCount > 0 ? `${dataState.syntheticCount} example` : '',
+        dataState.fallbackCount > 0 ? `${dataState.fallbackCount} fallback` : '',
+        dataState.staleCount > 0 ? `${dataState.staleCount} stale` : '',
+        dataState.unavailableCount > 0 ? `${dataState.unavailableCount} unavailable` : '',
+      ]
+    : [
+        dataState.availableCount > 0 ? `${dataState.availableCount} 实时` : '',
+        dataState.cachedCount > 0 ? `${dataState.cachedCount} 缓存` : '',
+        dataState.delayedCount > 0 ? `${dataState.delayedCount} 延迟` : '',
+        dataState.partialCount > 0 ? `${dataState.partialCount} 部分` : '',
+        dataState.syntheticCount > 0 ? `${dataState.syntheticCount} 样本` : '',
+        dataState.fallbackCount > 0 ? `${dataState.fallbackCount} 备用` : '',
+        dataState.staleCount > 0 ? `${dataState.staleCount} 过期` : '',
+        dataState.unavailableCount > 0 ? `${dataState.unavailableCount} 不可用` : '',
+      ];
   const facets: ResearchQualityFacet[] = [
     {
       key: 'freshness',
-      kind: dataState.staleCount > 0 ? 'stale' : dataState.isRefreshing ? 'freshness' : 'freshness',
-      tone: dataState.staleCount > 0 ? 'caution' : dataState.isRefreshing ? 'info' : 'success',
+      kind: freshnessKind,
+      tone: freshnessTone,
       label: locale === 'en' ? 'Freshness' : '新鲜度',
       value: dataStatusLabel(summary, dataState, locale),
-      detail: dataState.updatedAtLabel
-        ? (locale === 'en' ? `Updated ${dataState.updatedAtLabel}` : `最近更新 ${dataState.updatedAtLabel}`)
+      detail: dataState.localSnapshotSavedAtLabel
+        ? (locale === 'en' ? `Browser snapshot saved ${dataState.localSnapshotSavedAtLabel}` : `本地快照保存 ${dataState.localSnapshotSavedAtLabel}`)
         : undefined,
     },
     {
       key: 'coverage',
       kind: dataState.hasUnavailable || dataState.unavailableCount > 0
         ? 'partial'
-        : dataState.hasFallback
+        : dataState.partialCount > 0 || dataState.syntheticCount > 0 || dataState.hasFallback || dataState.staleCount > 0
           ? 'partial'
           : 'coverage',
-      tone: dataState.hasUnavailable ? 'caution' : dataState.hasFallback ? 'info' : 'success',
+      tone: dataState.hasUnavailable || dataState.partialCount > 0 || dataState.syntheticCount > 0 || dataState.hasFallback || dataState.staleCount > 0 || dataState.delayedCount > 0
+        ? 'caution'
+        : dataState.cachedCount > 0
+          ? 'info'
+          : 'success',
       label: locale === 'en' ? 'Coverage' : '覆盖',
-      value: locale === 'en'
-        ? `${dataState.availableCount} available · ${dataState.fallbackCount} delayed · ${dataState.unavailableCount} unavailable`
-        : `${dataState.availableCount} 可用 · ${dataState.fallbackCount} 延迟 · ${dataState.unavailableCount} 不可用`,
+      value: coverageParts.filter(Boolean).join(' · ')
+        || (locale === 'en' ? 'No usable state reported' : '暂无可用状态'),
     },
     {
       key: 'observation-only',
@@ -1156,30 +1237,6 @@ function buildMarketOverviewQualityFacets(params: {
       detail: confidenceSummary.detail,
     },
   ];
-
-  if (dataState.hasFallback) {
-    facets.push({
-      key: 'delayed',
-      kind: 'delayed',
-      tone: 'caution',
-      label: locale === 'en' ? 'Delayed / proxy' : '延迟 / 代理',
-      value: locale === 'en'
-        ? `${dataState.fallbackCount} delayed or partial modules`
-        : `${dataState.fallbackCount} 个延迟或部分可用模块`,
-    });
-  }
-
-  if (dataState.hasUnavailable || dataState.unavailableCount > 0) {
-    facets.push({
-      key: 'unavailable',
-      kind: 'unavailable',
-      tone: 'danger',
-      label: locale === 'en' ? 'Unavailable' : '不可用',
-      value: locale === 'en'
-        ? `${dataState.unavailableCount} modules unavailable`
-        : `${dataState.unavailableCount} 个模块暂不可用`,
-    });
-  }
 
   return facets;
 }
@@ -1400,10 +1457,30 @@ const MarketOverviewConclusionLayer: React.FC<{
             body: marketNarrativeCopy(body, 'Market evidence pending', researchLocale),
           }))}
           dataLimitations={[
+            dataState.cachedCount > 0
+              ? (isEnglishRoute
+                ? 'Cached modules are usable evidence but do not prove live market freshness.'
+                : '缓存模块可用于研究，但不能证明实时市场新鲜度。')
+              : null,
+            dataState.delayedCount > 0
+              ? (isEnglishRoute
+                ? 'Delayed modules remain usable only within their returned observation window.'
+                : '延迟模块只能在其返回的观察时间范围内使用。')
+              : null,
+            dataState.partialCount > 0
+              ? (isEnglishRoute
+                ? 'Partially available modules cannot support complete cross-market confirmation.'
+                : '部分可用模块不能支持完整的跨市场确认。')
+              : null,
+            dataState.syntheticCount > 0
+              ? (isEnglishRoute
+                ? 'Example observations are not observed market evidence or source authority.'
+                : '样本观察不代表已观测市场证据或来源权威。')
+              : null,
             dataState.hasFallback
               ? (isEnglishRoute
-                ? 'Some modules are delayed, cached, or partial and must not be treated as live authority.'
-                : '部分模块为延迟、缓存或部分可用，不能当作实时权威。')
+                ? 'Fallback modules must not be treated as primary source authority.'
+                : '备用模块不能当作主要来源权威。')
               : null,
             dataState.staleCount > 0
               ? (isEnglishRoute

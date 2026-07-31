@@ -249,6 +249,7 @@ async function collectContainmentMetrics(page: Page) {
         scrollWidth: element.scrollWidth,
         clientWidth: element.clientWidth,
         overflow: Math.max(0, element.scrollWidth - element.clientWidth),
+        overflowX: window.getComputedStyle(element).overflowX,
       };
     };
     const visible = (element: Element) => {
@@ -263,7 +264,12 @@ async function collectContainmentMetrics(page: Page) {
       .filter((element) => visible(element));
     const clippedFocusables = focusables.filter((element) => {
       const rect = element.getBoundingClientRect();
-      return rect.left < -1 || rect.right > window.innerWidth + 1 || rect.top < -1 || rect.bottom > document.documentElement.scrollHeight + 1;
+      const documentTop = rect.top + window.scrollY;
+      const documentBottom = rect.bottom + window.scrollY;
+      return rect.left < -1
+        || rect.right > window.innerWidth + 1
+        || documentTop < -1
+        || documentBottom > document.documentElement.scrollHeight + 1;
     }).map((element) => {
       const rect = element.getBoundingClientRect();
       return {
@@ -279,11 +285,27 @@ async function collectContainmentMetrics(page: Page) {
         overflow: Math.max(0, element.scrollWidth - element.clientWidth),
       }))
       .sort((left, right) => right.overflow - left.overflow)[0] || null;
+    const pageOwner = document.querySelector<HTMLElement>('[data-testid="stock-structure-decision-page"]');
+    const pageOwnerRect = pageOwner?.getBoundingClientRect();
+    const overflowingPageOwnerDescendants = pageOwner && pageOwnerRect
+      ? Array.from(pageOwner.querySelectorAll<HTMLElement>('*'))
+        .filter((element) => visible(element))
+        .filter((element) => !element.closest('[data-testid="stock-evidence-ledger-scroll"]'))
+        .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.right > pageOwnerRect.right + 1)
+        .map(({ element, rect }) => ({
+          testId: element.getAttribute('data-testid'),
+          className: element.className,
+          right: Math.round(rect.right),
+          text: element.textContent?.trim().slice(0, 120),
+        }))
+      : [];
 
     return {
       document: pick(document.documentElement),
       body: pick(document.body),
-      pageOwner: pick(document.querySelector('[data-testid="stock-structure-decision-page"]')),
+      pageOwner: pick(pageOwner),
+      overflowingPageOwnerDescendants,
       localHorizontalScrollOwnerCount: localScrollOwners.length,
       localHorizontalScrollOwners: localScrollOwners.map((element) => element.getAttribute('data-testid')).filter(Boolean),
       largestOverflowingDescendant,
@@ -304,17 +326,49 @@ test.describe('T242 Structure Decision responsive containment', () => {
         await page.goto(path);
         await page.getByTestId('stock-structure-decision-page').waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
-        await page.getByTestId('stock-evidence-ledger-scroll').focus();
+        const isEnglish = path.startsWith('/en');
+        const quoteStrip = page.getByTestId('stock-quote-observation-strip');
+        await expect(quoteStrip).toBeVisible();
+        await expect(quoteStrip).toBeInViewport();
+        await expect(quoteStrip).toContainText(isEnglish ? 'Source: Playwright Fixture With Very Long Identity Label For Width Probe' : '来源: Playwright Fixture With Very Long Identity Label For Width Probe');
+        await expect(quoteStrip).toContainText(isEnglish ? 'Market as of' : '市场截至');
+        await expect(quoteStrip).toContainText(isEnglish ? 'Freshness: Delayed' : '新鲜度: 延迟');
+        await expect(quoteStrip).toContainText(isEnglish ? 'Cached: no' : '缓存: 否');
+        await expect(quoteStrip).toContainText(isEnglish ? 'Alternate path: pending' : '替代路径: 待确认');
+
+        const historyStrip = page.getByTestId('stock-history-observation-strip');
+        await expect(historyStrip).toBeVisible();
+        await expect(historyStrip).toBeInViewport();
+        await expect(historyStrip).toContainText(isEnglish ? 'Source: History source pending' : '来源: 历史来源待确认');
+        await expect(historyStrip).toContainText(isEnglish ? 'Freshness: Delayed' : '新鲜度: 延迟');
+        await expect(historyStrip).toContainText(isEnglish ? 'Returned range: 2026-07-01 → 2026-07-03' : '返回区间: 2026-07-01 → 2026-07-03');
+        await expect(historyStrip).toContainText(isEnglish ? 'Usable 3' : '可用 3');
+        await expect(historyStrip).toContainText(isEnglish ? 'Required 120' : '所需 120');
+        await expect(historyStrip).toContainText(isEnglish ? 'Missing 117' : '缺口 117');
+
+        const deepDisclosure = page.getByTestId('stock-deep-evidence-disclosure');
+        await expect(deepDisclosure).not.toHaveAttribute('open');
+        await deepDisclosure.locator(':scope > summary').click();
+        await expect(deepDisclosure).toHaveAttribute('open', '');
 
         const metrics = await collectContainmentMetrics(page);
+        const isMobileViewport = (page.viewportSize()?.width ?? 0) < 768;
 
         expect(metrics.document?.overflow).toBe(0);
         expect(metrics.body?.overflow).toBe(0);
-        expect(metrics.pageOwner?.overflow).toBe(0);
-        expect(metrics.localHorizontalScrollOwners).toContain('stock-evidence-ledger-scroll');
-        expect(metrics.largestOverflowingDescendant?.testId).toBeTruthy();
+        expect(metrics.pageOwner?.overflow, JSON.stringify(metrics)).toBe(0);
+        expect(metrics.localHorizontalScrollOwnerCount).toBe(metrics.localHorizontalScrollOwners.length);
+        expect(metrics.localHorizontalScrollOwners.length).toBeLessThanOrEqual(1);
+        expect(metrics.localHorizontalScrollOwners.every((owner) => owner === 'stock-evidence-ledger-scroll')).toBe(true);
+        if (isMobileViewport) {
+          expect(metrics.localHorizontalScrollOwners).toContain('stock-evidence-ledger-scroll');
+        }
+        if (metrics.largestOverflowingDescendant) {
+          expect(metrics.largestOverflowingDescendant.testId).toBe('stock-evidence-ledger-scroll');
+        }
         expect(metrics.clippedFocusableCount, JSON.stringify(metrics.clippedFocusables)).toBe(0);
         expect(metrics.actionReachability).toBe(true);
+        await page.getByTestId('stock-evidence-ledger-scroll').focus();
         await expect(page.getByTestId('stock-evidence-ledger-scroll')).toBeFocused();
     });
   }

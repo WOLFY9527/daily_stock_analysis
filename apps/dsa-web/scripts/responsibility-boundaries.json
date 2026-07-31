@@ -229,7 +229,7 @@
     {
       "path": "src/pages/HomeBentoDashboardPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 34, "effects": 21, "apiCalls": 6, "effectApiCalls": 5, "truthCalls": 28, "domainCalls": 59 },
+      "maxSignals": { "stateCalls": 34, "effects": 21, "apiCalls": 6, "effectApiCalls": 5, "truthCalls": 28, "domainCalls": 57 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["market", "research"],
       "staleProtection": "observed",
@@ -359,7 +359,7 @@
     {
       "path": "src/pages/StockStructureDecisionPage.tsx",
       "profile": "cohesive-owner",
-      "maxSignals": { "stateCalls": 18, "effects": 1, "apiCalls": 10, "effectApiCalls": 0, "truthCalls": 43, "domainCalls": 13 },
+      "maxSignals": { "stateCalls": 18, "effects": 1, "apiCalls": 10, "effectApiCalls": 0, "truthCalls": 34, "domainCalls": 13 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["options", "research"],
       "staleProtection": "not-applicable",

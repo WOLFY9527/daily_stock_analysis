@@ -30,7 +30,7 @@ async function installPartialTemperaturePayload(page: Page) {
       body: JSON.stringify({
         source: 'computed',
         sourceLabel: 'Mock model',
-        updatedAt: '2026-05-02T09:00:00Z',
+        updatedAt: '2026-05-04T09:00:00Z',
         asOf: '2026-05-02T09:00:00Z',
         freshness: 'mock',
         isFallback: false,
@@ -297,6 +297,8 @@ test.describe('scanner smoke', () => {
 });
 
 test.describe('market overview smoke', () => {
+  test.use({ timezoneId: 'Asia/Shanghai' });
+
   test('market overview request fan-out stays bounded across initial load, idle, and reload', async ({ page }) => {
     const apiRequests: string[] = [];
     page.on('request', (request) => {
@@ -565,11 +567,22 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/缺少充分证据|待补/);
       await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
       await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/偏强观察|中性观察|偏弱观察|数据不足/);
+      const quality = page.getByTestId('market-overview-data-quality-composition');
+      const facets = quality.locator('[data-quality-facet]');
+      const freshnessFacet = facets.filter({ hasText: '新鲜度' }).first();
+      await expect(facets).toHaveCount(3);
+      await expect(freshnessFacet).toContainText('本地快照保存');
+      await expect(freshnessFacet).not.toContainText('最近更新');
+      await expect(freshnessFacet).not.toContainText('2026-05-04 17:00:00');
+      expect(await quality.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
       const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
       const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();
       expect(verdictBox).not.toBeNull();
       expect(mainGridBox).not.toBeNull();
       expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (mainGridBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+      if (viewport.width >= 1024) {
+        expect((verdictBox?.y ?? 0) + (verdictBox?.height ?? 0)).toBeLessThanOrEqual(viewport.height - 8);
+      }
       const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
       await expect(evidenceDetails).toContainText(/当前市场：证据不足|Current market: Evidence insufficient/);
       await expect(evidenceDetails).toContainText(/支持证据|反证 \/ 风险|下一步观察/);

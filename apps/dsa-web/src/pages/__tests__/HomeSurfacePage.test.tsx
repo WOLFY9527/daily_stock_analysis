@@ -352,7 +352,7 @@ const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
 const HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN =
   /provider|cache|trace|token|env|raw payload|schema|class|买入|卖出|持有|目标价|止损|止盈|buy|sell|hold|target price|stop loss/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
-  /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
+  /provider|cache[_\s-]?(?:key|id|path|backend|internal|entry)|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
   /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
 
@@ -812,6 +812,232 @@ describe('HomeSurfacePage', () => {
     expect(guestSurface.textContent).not.toMatch(/\bNVDA\b|NVIDIA|TSLA|Tesla/i);
   });
 
+  it('keeps a cached guest briefing distinct and never substitutes fetched time for missing as-of time', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      freshness: 'cached',
+      isFallback: false,
+      isReliable: true,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'cache',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '缓存市场观察', message: '当前仅展示已保存的市场观察。', severity: 'neutral', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('最近可用市场观察'));
+    expect(strip).toHaveTextContent('观察时间待确认');
+    expect(strip).toHaveTextContent('新鲜度：缓存');
+    expect(strip).toHaveTextContent('缓存：是');
+    expect(strip).toHaveTextContent('替代路径：否');
+    expect(strip).toHaveTextContent('可用性：已返回');
+    expect(strip).not.toHaveTextContent('观察截至');
+    expect(strip).not.toHaveTextContent('06/09 18:45');
+    expect(strip).not.toHaveTextContent('公开市场观察已准备');
+  });
+
+  it('keeps stale freshness and fallback authority visible as separate guest health facets', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'fallback',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness: 'stale',
+      isFallback: true,
+      isStale: true,
+      isReliable: false,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'stale',
+        isFallback: true,
+        isStale: true,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '旧市场观察', message: '当前仅保留最近一次观察。', severity: 'warning', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('新鲜度：过期'));
+    expect(strip).toHaveTextContent('缓存：否');
+    expect(strip).toHaveTextContent('替代路径：是');
+    expect(strip).toHaveTextContent('可用性：部分可用');
+    expect(strip).not.toHaveTextContent('新鲜度：替代');
+  });
+
+  it('preserves an unavailable marker when retained guest observations remain visible', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isReliable: false,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'unavailable',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '保留的市场观察', message: '当前仅保留既有观察。', severity: 'warning', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('新鲜度：不可用'));
+    expect(strip).toHaveTextContent('可用性：不可用标记；仅保留既有观察');
+    expect(strip).not.toHaveTextContent('公开市场观察已准备');
+  });
+
+  it('does not promote a fresh but empty guest briefing to a ready market observation', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isReliable: true,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'live',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('当前未取到公开市场观察'));
+    expect(strip).toHaveTextContent('新鲜度：新鲜');
+    expect(strip).toHaveTextContent('可用性：不可用');
+    expect(strip).not.toHaveTextContent('公开市场观察已准备');
+    expect(strip).not.toHaveTextContent('研究可读');
+  });
+
+  it('keeps synthetic guest evidence distinct and uses the consumer-safe health source label', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'computed',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness: 'synthetic',
+      isFallback: false,
+      isReliable: false,
+      providerHealth: {
+        provider: 'must-not-render',
+        status: 'live',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开样本摘要',
+      },
+      items: [{ title: '样本市场观察', message: '当前仅展示样本状态。', severity: 'neutral', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('样本市场证据'));
+    expect(strip).toHaveTextContent('新鲜度：样本 / 演示');
+    expect(strip).toHaveTextContent('替代路径：否');
+    expect(strip).toHaveTextContent('来源: 公开样本摘要');
+    expect(strip).not.toHaveTextContent('新鲜度：新鲜');
+    expect(strip).not.toHaveTextContent('新鲜度：替代');
+    expect(strip).not.toHaveTextContent('must-not-render');
+  });
+
+  it.each([
+    ['isPartial', 'computed'],
+    ['mixed source', 'mixed'],
+  ] as const)('keeps fresh briefing evidence partial when marked by %s', async (marker, source) => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source,
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isPartial: marker === 'isPartial',
+      isReliable: true,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'live',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '部分市场观察', message: '当前覆盖仍不完整。', severity: 'neutral', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('新鲜度：部分可用'));
+    expect(strip).toHaveTextContent('可用性：部分可用');
+    expect(strip).not.toHaveTextContent('公开市场观察已准备');
+    expect(strip).not.toHaveTextContent('研究可读');
+  });
+
+  it.each([
+    ['cached', 'computed', true],
+    ['delayed', 'mixed', false],
+  ] as const)('keeps an explicitly partial %s guest briefing out of the healthy freshness state', async (freshness, source, isPartial) => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source,
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-09T10:45:00Z',
+      asOf: '2026-06-09T10:30:00Z',
+      freshness,
+      isFallback: false,
+      isPartial,
+      isReliable: true,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: freshness === 'cached' ? 'cache' : 'live',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '部分市场观察', message: '当前覆盖仍不完整。', severity: 'neutral', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => expect(strip).toHaveTextContent('新鲜度：部分可用'));
+    expect(strip).toHaveTextContent('可用性：部分可用');
+    expect(strip).not.toHaveTextContent(`新鲜度：${freshness === 'cached' ? '缓存' : '延迟'}`);
+    expect(strip).not.toHaveTextContent('研究可读');
+  });
+
   it('keeps the English guest value proposition and sign-in next step visible', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     const originalPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -824,7 +1050,9 @@ describe('HomeSurfacePage', () => {
       expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
       expect(screen.getByText('WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.')).toBeInTheDocument();
       expect(await screen.findByText('Public market observation ready')).toBeInTheDocument();
-      expect(screen.getByTestId('guest-home-market-preview-strip')).toHaveTextContent('Current market observation');
+      const marketPreview = screen.getByTestId('guest-home-market-preview-strip');
+      expect(marketPreview).toHaveTextContent('Current market observation');
+      expect(marketPreview).toHaveTextContent(/Cache[:：]\s*no/);
       expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('Available after sign-in');
       expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('reopen the last research context');
       expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('Safe next step');
@@ -2484,9 +2712,102 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('时效：含回退');
     expect(strip).toHaveTextContent('观察级 2 项');
     expect(strip).toHaveTextContent('回退/代理 2 项');
+    expect(strip).toHaveTextContent('缓存 1 项');
+    expect(strip).toHaveTextContent('回退 1 项');
+    expect(strip).toHaveTextContent('过期 0 项');
     expect(strip).toHaveTextContent('待核验 1 项');
     expect(strip.textContent).not.toMatch(HOME_PROVENANCE_INTERNAL_COPY_PATTERN);
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
+  it('keeps partial and synthetic provenance distinct from fresh and fallback evidence', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      sourceProvenanceFrame: [
+        {
+          sourceId: 'partial_market_observation',
+          sourceLabel: 'Partial market observation',
+          evidenceDomain: 'market_data',
+          authorityTier: 'observation_only',
+          freshnessState: 'partial',
+          sourceTier: 'stored_snapshot',
+          fallbackOrProxy: false,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['partial_coverage'],
+          nextEvidenceNeeded: ['complete_market_coverage'],
+        },
+        {
+          sourceId: 'synthetic_research_observation',
+          sourceLabel: 'Synthetic research observation',
+          evidenceDomain: 'research',
+          authorityTier: 'fixture',
+          freshnessState: 'synthetic',
+          sourceTier: 'fixture',
+          fallbackOrProxy: false,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['synthetic_evidence'],
+          nextEvidenceNeeded: ['observed_research_evidence'],
+        },
+      ],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+    await expandHomeResearchBoundary();
+
+    const strip = screen.getByTestId('home-provenance-strip');
+    expect(strip).toHaveTextContent('时效：含样本');
+    expect(strip).toHaveTextContent('部分可用 1 项');
+    expect(strip).toHaveTextContent('样本 / 演示 1 项');
+    expect(strip).toHaveTextContent('回退 0 项');
+    expect(strip).not.toHaveTextContent('时效：新鲜');
+  });
+
+  it('does not promote mixed fresh and unavailable provenance to fresh', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      sourceProvenanceFrame: [
+        {
+          sourceId: 'fresh_market_observation',
+          sourceLabel: 'Fresh market observation',
+          evidenceDomain: 'market_data',
+          authorityTier: 'score_grade',
+          freshnessState: 'fresh',
+          sourceTier: 'provider',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+        },
+        {
+          sourceId: 'unavailable_market_observation',
+          sourceLabel: 'Unavailable market observation',
+          evidenceDomain: 'market_data',
+          authorityTier: 'unknown',
+          freshnessState: 'unavailable',
+          sourceTier: 'provider',
+          fallbackOrProxy: false,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['source_unavailable'],
+          nextEvidenceNeeded: ['market_observation'],
+        },
+      ],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+    await expandHomeResearchBoundary();
+
+    const strip = screen.getByTestId('home-provenance-strip');
+    expect(strip).toHaveTextContent('时效：含不可用');
+    expect(strip).toHaveTextContent('不可用 1 项');
+    expect(strip).not.toHaveTextContent('时效：新鲜');
   });
 
   it('shows a bounded Home research packet panel when all sidecars are present', async () => {
@@ -2566,8 +2887,69 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('当前研究包可用于观察性阅读。');
     expect(panel).toHaveTextContent('观察边界');
     expect(panel).toHaveTextContent('证据结构可用于观察性阅读，结论仍需保持边界。');
-    expect(panel).toHaveTextContent('截至');
+    expect(panel).toHaveTextContent('报告生成于 04/27 16:03');
+    expect(panel).not.toHaveTextContent('截至');
+    expect(panel).not.toHaveTextContent('05/06');
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
+  });
+
+  it.each(['partial', 'synthetic'] as const)('keeps %s provenance from promoting a Home research packet to available', async (freshnessState) => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      researchReadiness: {
+        researchReady: true,
+        readinessState: 'ready',
+        verdictLabel: '研究证据可用',
+        sourceAuthority: 'scoreGradeAllowed',
+        freshnessFloor: 'fresh',
+      },
+      evidenceCoverageFrame: {
+        technicals: { status: 'available' },
+        fundamentals: { status: 'available' },
+        news: { status: 'available' },
+        catalysts: { status: 'available' },
+        earnings: { status: 'available' },
+        valuation: { status: 'available' },
+      },
+      singleStockEvidencePacket: {
+        ...orclPartialEvidencePacket,
+        packetState: 'available',
+        fundamentals: { status: 'available' },
+        earnings: { status: 'available' },
+        news: { status: 'available' },
+        catalysts: { status: 'available' },
+      },
+      evidenceCitationFrame: {
+        frameState: 'ready',
+        citedEvidence: [],
+        domainCoverage: [{ domain: 'fundamentals', status: 'available' }],
+        missingEvidence: [],
+        nextEvidenceNeeded: [],
+        noAdviceBoundary: true,
+      },
+      sourceProvenanceFrame: [{
+        sourceId: `${freshnessState}_source`,
+        sourceLabel: `${freshnessState} source`,
+        evidenceDomain: 'market_data',
+        authorityTier: 'score_grade',
+        freshnessState,
+        sourceTier: 'authorized_feed',
+        fallbackOrProxy: false,
+        observationOnly: false,
+        scoreContributionAllowed: true,
+        limitations: [],
+        nextEvidenceNeeded: [],
+      }],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+    await expandHomeResearchBoundary();
+
+    const panel = screen.getByTestId('home-research-packet-panel');
+    expect(panel).toHaveTextContent('部分可用');
+    expect(panel).not.toHaveTextContent('当前研究包可用于观察性阅读。');
   });
 
   it('fails the Home research packet panel closed for partial sidecars', async () => {
@@ -2635,7 +3017,8 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('部分可用');
     expect(panel).toHaveTextContent('当前真实证据不足，系统有意不生成强市场判断。');
     expect(panel).toHaveTextContent('下一步证据：补充基本面证据');
-    expect(panel).toHaveTextContent('截至');
+    expect(panel).toHaveTextContent('报告生成于 04/27 16:03');
+    expect(panel).not.toHaveTextContent('05/06');
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
@@ -3161,6 +3544,44 @@ describe('HomeSurfacePage', () => {
     );
   });
 
+  it('keeps member market health degraded when provider health reports timeout or cooldown', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({ total: 0, page: 1, limit: 20, items: [] });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-08T08:01:00Z',
+      asOf: '2026-06-08T08:00:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isReliable: true,
+      providerHealth: {
+        provider: 'consumer-safe-fixture',
+        status: 'partial',
+        errorSummary: 'timeout cooldown',
+        isFallback: false,
+        isStale: false,
+        isRefreshing: false,
+        sourceLabel: '公开市场摘要',
+      },
+      items: [{ title: '市场观察待复核', message: '部分证据仍待返回。', severity: 'warning', category: 'risk' }],
+    });
+
+    renderSurface();
+
+    const reliability = await screen.findByTestId('member-home-market-reliability');
+    expect(reliability).toHaveTextContent('部分可用');
+    expect(reliability).toHaveTextContent('新鲜度');
+    expect(reliability).toHaveTextContent('新鲜');
+    expect(reliability).toHaveTextContent('缓存');
+    expect(reliability).toHaveTextContent('否');
+    expect(reliability).toHaveTextContent('替代路径');
+    expect(reliability).toHaveTextContent('可用性');
+    expect(reliability).not.toHaveTextContent('Research-ready');
+    expect(reliability).not.toHaveTextContent('研究可读');
+    expect(reliability).not.toHaveTextContent(/timeout|cooldown|provider/i);
+  });
+
   it('keeps analysis loading inside the compact Linear workspace', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
@@ -3666,17 +4087,27 @@ describe('HomeSurfacePage', () => {
     });
   });
 
-  it('shows canonical generated timestamps in the history drawer', async () => {
+  it('labels generated and created lifecycle timestamps in the history drawer', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 2,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', isTest: false },
+      ],
+    });
     renderSurface();
 
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
 
     expect(await screen.findByText('Oracle (ORCL)')).toBeInTheDocument();
     expect(screen.getByText('Tesla (TSLA)')).toBeInTheDocument();
-    expect(screen.getByText('NVIDIA (NVDA)')).toBeInTheDocument();
-    expect(screen.getByText('04/27 16:03')).toBeInTheDocument();
-    expect(screen.getByText('04/27 15:05')).toBeInTheDocument();
+    expect(screen.getByText('报告生成于 04/27 16:03')).toBeInTheDocument();
+    expect(screen.getByText('记录创建于 04/27 15:00')).toBeInTheDocument();
+    expect(screen.queryByText(/^04\/27 16:03$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^04\/27 15:00$/)).not.toBeInTheDocument();
   });
 
   it('hides test history rows and falls back to ticker when company name is missing', async () => {

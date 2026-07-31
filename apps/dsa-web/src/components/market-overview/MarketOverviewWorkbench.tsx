@@ -56,6 +56,10 @@ import {
   type MarketOverviewTemperatureSummaryView,
   type MarketOverviewVisualEvidenceCardView,
 } from './MarketOverviewWorkbenchTopSurface';
+import {
+  marketObservationCollectionState,
+  marketObservationState,
+} from './marketOverviewDecisionTypes';
 import type { MarketRegimeSynthesisEvidenceView, MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
@@ -156,7 +160,8 @@ type MetricRegistryEntry = {
   symbols: string[];
   panelKeys: CardKey[];
 };
-type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
+type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'partial' | 'synthetic' | 'fallback' | 'error' | 'unavailable';
+type MarketOverviewResolvedProviderStatus = MarketProviderHealthStatus | 'synthetic';
 type DataQualitySummary = {
   status: string;
   counts: Record<FreshnessCountKey, number>;
@@ -529,14 +534,17 @@ function findMetricItem(panels: PanelState, metricId: MarketOverviewPulseMetricI
 }
 
 function marketTrendFreshnessLabel(item: MarketOverviewItem, language: 'zh' | 'en'): string {
-  const freshness = String(item.freshness || '').toLowerCase();
-  if (freshness === 'live' || freshness === 'fresh') {
+  const freshness = marketObservationState(item);
+  if (freshness === 'live') {
     return language === 'en' ? 'History available' : '历史数据可用';
   }
-  if (['delayed', 'cached', 'stale', 'fallback'].includes(freshness) || item.isStale || item.isFallback) {
+  if (freshness === 'synthetic') {
+    return language === 'en' ? 'Example observation' : '样本观察';
+  }
+  if (['delayed', 'cached', 'stale', 'fallback', 'partial'].includes(freshness)) {
     return language === 'en' ? 'Quote delayed' : '报价延迟';
   }
-  if (item.isUnavailable) {
+  if (freshness === 'unavailable' || freshness === 'error' || freshness === 'unknown') {
     return language === 'en' ? 'Quote unavailable' : '报价不可用';
   }
   return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
@@ -584,18 +592,19 @@ function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): M
     freshness: sourceItem.freshness || panel.freshness,
     isFallback: sourceItem.isFallback ?? panel.isFallback,
     isStale: sourceItem.isStale ?? panel.isStale,
+    isPartial: sourceItem.isPartial ?? panel.isPartial,
+    isSynthetic: sourceItem.isSynthetic ?? panel.isSynthetic,
+    isFixture: sourceItem.isFixture ?? panel.isFixture,
+    sampleState: sourceItem.sampleState ?? panel.sampleState,
     isUnavailable: sourceItem.isUnavailable ?? panel.isUnavailable,
+    providerHealth: sourceItem.providerHealth ?? panel.providerHealth,
+    providerFreshness: sourceItem.providerFreshness ?? panel.providerFreshness,
   };
   if (!Array.isArray(item.trend) || item.trend.filter((value) => Number.isFinite(value)).length < 2) {
     return null;
   }
-  if (
-    item.isUnavailable
-    || !item.source
-    || ['unavailable', 'error'].includes(item.source)
-    || !item.freshness
-    || ['unavailable', 'error', 'unknown'].includes(item.freshness)
-  ) {
+  const observationState = marketObservationState(item);
+  if (!item.source || ['unavailable', 'error'].includes(item.source) || ['unavailable', 'error', 'unknown', 'synthetic'].includes(observationState)) {
     return null;
   }
   const symbol = String(item.symbol || '').toUpperCase();
@@ -615,7 +624,7 @@ function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): M
     : (language === 'en' ? 'Latest value pending' : '最新值待确认');
   const changeText = formatHeroChange(item.changePct, language);
   const changeLabel = language === 'en' ? `Latest change ${changeText}` : `最新涨跌 ${changeText}`;
-  const liveHistory = item.freshness === 'live' || item.freshness === 'fresh';
+  const liveHistory = observationState === 'live';
   return {
     item,
     title,
@@ -746,8 +755,16 @@ function buildMetricPanel(
     updatedAt: basePanel?.updatedAt || '',
     asOf: basePanel?.asOf,
     freshness: basePanel?.freshness || 'unavailable',
+    providerHealth: basePanel?.providerHealth,
+    providerFreshness: basePanel?.providerFreshness,
+    dataQuality: basePanel?.dataQuality,
+    isRefreshing: basePanel?.isRefreshing,
     isFallback: basePanel?.isFallback,
     isStale: basePanel?.isStale,
+    isPartial: basePanel?.isPartial,
+    isSynthetic: basePanel?.isSynthetic,
+    isFixture: basePanel?.isFixture,
+    sampleState: basePanel?.sampleState,
     isUnavailable: basePanel?.isUnavailable ?? !basePanel,
     warning: basePanel?.warning,
     items: buildMetricItems(panels, metricIds),
@@ -1125,6 +1142,7 @@ function buildHeroAnchors(panels: PanelState, metricIds: MarketOverviewPulseMetr
 function canRenderVisualEvidencePoint(item?: MarketOverviewItem): item is MarketOverviewItem {
   return Boolean(
     item
+      && !['unavailable', 'error', 'unknown', 'synthetic'].includes(marketObservationState(item))
       && typeof item.value === 'number'
       && Number.isFinite(item.value)
       && Array.isArray(item.trend)
@@ -1303,7 +1321,12 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     ...(decisionSemantics?.dataGaps.map((item) => item.meta || item.label) ?? []),
     ...missingPillars,
     dataState.hasUnavailable ? 'Some evidence is still unavailable.' : '',
-    dataState.hasFallback ? 'Some data is delayed or partial.' : '',
+    dataState.staleCount > 0 ? 'Some evidence is stale and must not be treated as current.' : '',
+    dataState.cachedCount > 0 ? 'Some evidence is available from cache, not live.' : '',
+    dataState.delayedCount > 0 ? 'Some evidence is delayed.' : '',
+    dataState.partialCount > 0 ? 'Some evidence is partially available.' : '',
+    dataState.syntheticCount > 0 ? 'Some entries are example observations, not observed market evidence.' : '',
+    dataState.hasFallback ? 'Some data uses fallback coverage.' : '',
   ];
   const nextSteps = [
     ...directionalSummary.watchItems,
@@ -1314,9 +1337,19 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     ? (language === 'en' ? 'Refresh in progress' : '正在刷新')
     : dataState.hasUnavailable
       ? (language === 'en' ? 'Some evidence unavailable' : '部分证据暂不可用')
-      : dataState.staleCount > 0 || dataState.hasFallback
-        ? (language === 'en' ? 'Delayed or partial data' : '数据存在延迟或部分缺失')
-        : (language === 'en' ? 'Loaded evidence current' : '证据数据已就绪');
+      : dataState.syntheticCount > 0
+        ? (language === 'en' ? 'Example observations only' : '存在样本观察')
+        : dataState.staleCount > 0
+          ? (language === 'en' ? 'Stale evidence available' : '存在过期证据')
+        : dataState.delayedCount > 0
+          ? (language === 'en' ? 'Delayed evidence available' : '存在延迟证据')
+          : dataState.partialCount > 0
+            ? (language === 'en' ? 'Partially available evidence' : '存在部分可用证据')
+            : dataState.hasFallback
+              ? (language === 'en' ? 'Fallback data available' : '存在备用数据')
+              : dataState.cachedCount > 0
+                  ? (language === 'en' ? 'Cached evidence available' : '存在缓存证据')
+                  : (language === 'en' ? 'Loaded evidence current' : '证据数据已就绪');
   const consumerDataQualityLabel = mapConsumerStatusText(dataQuality.status, language);
 
   return buildMarketIntelligenceEvidenceMarkdown({
@@ -1348,8 +1381,8 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       {
         label: language === 'en' ? 'Data quality' : '数据质量',
         meta: language === 'en'
-          ? `${consumerDataQualityLabel} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`
-          : `${consumerDataQualityLabel} · ${activeCategoryLabel}：可用 ${coverageSummary.real}，部分 ${coverageSummary.mixed}，延迟 ${coverageSummary.fallback}`,
+          ? `${consumerDataQualityLabel} · ${activeCategoryLabel}: observed ${coverageSummary.real}, partial ${coverageSummary.mixed}, limited ${coverageSummary.fallback}`
+          : `${consumerDataQualityLabel} · ${activeCategoryLabel}：已观测 ${coverageSummary.real}，部分 ${coverageSummary.mixed}，受限 ${coverageSummary.fallback}`,
       },
       ...heroEvidence,
       ...briefingEvidence,
@@ -1360,7 +1393,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       label: freshnessLabel,
       asOf: temperature.asOf || briefing.asOf,
       notes: [
-        dataState.updatedAtLabel ? `Last local snapshot: ${dataState.updatedAtLabel}` : '',
+        dataState.localSnapshotSavedAtLabel ? `Last local snapshot: ${dataState.localSnapshotSavedAtLabel}` : '',
         dataState.needsRefresh ? 'Refresh may be needed before using this as a stronger research read.' : '',
       ],
     },
@@ -2164,16 +2197,13 @@ function isItemFallback(item: { source?: string; freshness?: string; isFallback?
   return Boolean(item.isFallback || item.freshness === 'fallback' || item.source === 'fallback');
 }
 
-function getCardMeta(panels: PanelState, cardKey: CardKey): {
+type MarketObservationMeta = Partial<MarketDataMeta> & {
   status?: string;
-  source?: string;
-  freshness?: string;
-  isFallback?: boolean;
-  isUnavailable?: boolean;
-  isReliable?: boolean;
   metadata?: { isReliable?: boolean };
-  items?: Array<{ source?: string; freshness?: string; isFallback?: boolean }>;
-} {
+  items?: Array<Partial<MarketDataMeta>>;
+};
+
+function getCardMeta(panels: PanelState, cardKey: CardKey): MarketObservationMeta {
   if (cardKey === 'futures') {
     return isMarketFuturesContract(panels.futures)
       ? panels.futures
@@ -2193,8 +2223,12 @@ function getCardMeta(panels: PanelState, cardKey: CardKey): {
 function getCardCoverageKind(panels: PanelState, cardKey: CardKey): CardCoverageKind {
   const meta = getCardMeta(panels, cardKey);
   const items = meta.items || [];
-  if (meta.isUnavailable || meta.source === 'unavailable' || meta.freshness === 'unavailable') {
+  const observationState = marketObservationCollectionState([meta, ...items]);
+  if (['unavailable', 'error', 'unknown', 'synthetic'].includes(observationState)) {
     return 'fallback';
+  }
+  if (observationState === 'partial') {
+    return items.length > 0 ? 'mixed' : 'fallback';
   }
   if (meta.status && !['success', 'partial'].includes(meta.status)) {
     return items.length > 0 ? 'mixed' : 'fallback';
@@ -2223,25 +2257,9 @@ function summarizeCardCoverage(panels: PanelState, cards: CardKey[]): Record<Car
 
 function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
   const values: FreshnessCountKey[] = [];
-  const push = (freshness?: string, isFallback?: boolean, isStale?: boolean) => {
-    const normalized = String(freshness || '').trim().toLowerCase();
-    if (normalized === 'fresh') {
-      values.push('live');
-    } else if (['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error', 'unavailable'].includes(normalized)) {
-      values.push(normalized as FreshnessCountKey);
-    } else if (normalized === 'partial') {
-      values.push('delayed');
-    } else if (normalized === 'proxy') {
-      values.push('fallback');
-    } else if (normalized === 'synthetic') {
-      values.push('mock');
-    } else if (isFallback) {
-      values.push('fallback');
-    } else if (isStale) {
-      values.push('stale');
-    } else {
-      values.push('unavailable');
-    }
+  const push = (meta: Partial<MarketDataMeta>) => {
+    const state = marketObservationState(meta);
+    values.push(state === 'unknown' ? 'unavailable' : state);
   };
   const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'usBreadth', 'rates', 'fxCommodities'];
   panelKeys.forEach((key) => {
@@ -2250,40 +2268,50 @@ function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
       return;
     }
     if (!isMarketOverviewPanelContract(panel)) {
-      push('unavailable');
+      push({ freshness: 'unavailable' });
       return;
     }
-    push(panel.freshness, panel.isFallback, panel.isStale);
-    panel.items.forEach((item) => push(
-      item.freshness || panel.freshness,
-      item.isFallback ?? panel.isFallback,
-      item.isStale ?? panel.isStale,
-    ));
+    push(panel);
+    panel.items.forEach((item) => push({
+      ...panel,
+      ...item,
+      freshness: item.freshness || panel.freshness,
+      isFallback: item.isFallback ?? panel.isFallback,
+      isStale: item.isStale ?? panel.isStale,
+      isPartial: item.isPartial ?? panel.isPartial,
+      isSynthetic: item.isSynthetic ?? panel.isSynthetic,
+      isFixture: item.isFixture ?? panel.isFixture,
+      sampleState: item.sampleState ?? panel.sampleState,
+      isUnavailable: item.isUnavailable ?? panel.isUnavailable,
+      providerHealth: item.providerHealth ?? panel.providerHealth,
+      providerFreshness: item.providerFreshness ?? panel.providerFreshness,
+    }));
   });
-  push(
-    isMarketTemperatureContract(panels.temperature) ? panels.temperature.freshness : 'unavailable',
-    panels.temperature.isFallback,
-    panels.temperature.isStale,
-  );
-  push(
-    isMarketBriefingContract(panels.briefing) ? panels.briefing.freshness : 'unavailable',
-    panels.briefing.isFallback,
-    panels.briefing.isStale,
-  );
+  push(isMarketTemperatureContract(panels.temperature) ? panels.temperature : { freshness: 'unavailable' });
+  push(isMarketBriefingContract(panels.briefing) ? panels.briefing : { freshness: 'unavailable' });
   const futuresValid = isMarketFuturesContract(panels.futures);
-  push(futuresValid ? panels.futures.freshness : 'unavailable', panels.futures.isFallback, panels.futures.isStale);
+  push(futuresValid ? panels.futures : { freshness: 'unavailable' });
   if (futuresValid) {
-    panels.futures.items.forEach((item) => push(
-      item.freshness || panels.futures.freshness,
-      item.isFallback ?? panels.futures.isFallback,
-      item.isStale ?? panels.futures.isStale,
-    ));
+    const futuresMeta = panels.futures as MarketFuturesResponse & Partial<MarketDataMeta>;
+    panels.futures.items.forEach((item) => {
+      const itemMeta = item as typeof item & Partial<MarketDataMeta>;
+      push({
+        ...futuresMeta,
+        ...itemMeta,
+        freshness: item.freshness || panels.futures.freshness,
+        isFallback: item.isFallback ?? panels.futures.isFallback,
+        isStale: item.isStale ?? panels.futures.isStale,
+        isPartial: itemMeta.isPartial ?? futuresMeta.isPartial,
+        isSynthetic: itemMeta.isSynthetic ?? futuresMeta.isSynthetic,
+        isFixture: itemMeta.isFixture ?? futuresMeta.isFixture,
+        sampleState: itemMeta.sampleState ?? futuresMeta.sampleState,
+        isUnavailable: itemMeta.isUnavailable ?? futuresMeta.isUnavailable,
+        providerHealth: item.providerHealth ?? panels.futures.providerHealth,
+        providerFreshness: itemMeta.providerFreshness ?? futuresMeta.providerFreshness,
+      });
+    });
   }
-  push(
-    isCnShortSentimentContract(panels.cnShortSentiment) ? panels.cnShortSentiment.freshness : 'unavailable',
-    panels.cnShortSentiment.isFallback,
-    panels.cnShortSentiment.isStale,
-  );
+  push(isCnShortSentimentContract(panels.cnShortSentiment) ? panels.cnShortSentiment : { freshness: 'unavailable' });
   return values;
 }
 
@@ -2293,8 +2321,9 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
     delayed: 0,
     cached: 0,
     stale: 0,
+    partial: 0,
+    synthetic: 0,
     fallback: 0,
-    mock: 0,
     error: 0,
     unavailable: 0,
   };
@@ -2303,15 +2332,19 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   });
   const status = counts.error + counts.unavailable > 0
     ? '部分数据暂不可用'
-    : counts.stale > 0
-      ? '存在过期数据'
-      : counts.fallback + counts.mock > 0
-        ? '延迟可用'
-        : '可用';
+    : counts.synthetic > 0
+      ? '存在样本观察'
+      : counts.stale > 0
+        ? '存在过期数据'
+        : counts.partial > 0
+          ? '存在部分可用数据'
+          : counts.fallback > 0
+            ? '延迟可用'
+            : '可用';
   return {
     status,
     counts,
-    hasConcern: counts.fallback + counts.mock + counts.stale + counts.error + counts.unavailable > 0,
+    hasConcern: counts.partial + counts.synthetic + counts.fallback + counts.stale + counts.error + counts.unavailable > 0,
   };
 }
 
@@ -2329,10 +2362,10 @@ function summarizeTopLevelDataStatus(params: {
     loading,
     refreshingPanel,
   } = params;
-  const categoryStatuses = CATEGORY_CARDS[activeCategory].map((cardKey) => resolveProviderStatus(getCardMeta(panels, cardKey) as Partial<MarketDataMeta>));
+  const categoryStatuses = CATEGORY_CARDS[activeCategory].map((cardKey) => resolveProviderStatus(getCardMeta(panels, cardKey)));
   const usableCount = coverageSummary.real + coverageSummary.mixed;
   const hasRefreshing = loading || refreshingPanel !== null || categoryStatuses.some((status) => status === 'refreshing');
-  const hasMissingPanels = coverageSummary.fallback > 0 || categoryStatuses.some((status) => ['partial', 'unavailable', 'error'].includes(status));
+  const hasMissingPanels = coverageSummary.fallback > 0 || categoryStatuses.some((status) => ['partial', 'synthetic', 'unavailable', 'error'].includes(status));
 
   if (usableCount === 0) {
     return hasRefreshing
@@ -2522,37 +2555,18 @@ function buildMarketDecision(params: {
   };
 }
 
-function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
-  if (meta?.isRefreshing) {
+function resolveProviderStatus(meta?: (Partial<MarketDataMeta> & { items?: Array<Partial<MarketDataMeta>> })): MarketOverviewResolvedProviderStatus {
+  if (meta?.isRefreshing || meta?.providerHealth?.isRefreshing || meta?.providerHealth?.status === 'refreshing') {
     return 'refreshing';
   }
-  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
-    return 'unavailable';
-  }
-  if (meta?.freshness === 'error') {
-    return 'error';
-  }
-  if (meta?.providerHealth?.status) {
-    return ['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'error', 'refreshing']
-      .includes(meta.providerHealth.status)
-      ? meta.providerHealth.status
-      : 'unavailable';
-  }
-  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
-    return 'fallback';
-  }
-  if (meta?.isStale || meta?.freshness === 'stale') {
-    return 'stale';
-  }
-  if (meta?.freshness === 'live' || meta?.freshness === 'fresh') {
-    return 'live';
-  }
-  if (meta?.freshness === 'delayed' || meta?.freshness === 'cached') {
-    return 'cache';
-  }
-  if (meta?.freshness === 'partial' || meta?.freshness === 'proxy') {
-    return 'partial';
-  }
+  const state = marketObservationCollectionState([meta, ...(meta?.items || [])]);
+  if (state === 'synthetic') return 'synthetic';
+  if (state === 'partial') return 'partial';
+  if (state === 'fallback') return 'fallback';
+  if (state === 'stale') return 'stale';
+  if (state === 'delayed' || state === 'cached') return 'cache';
+  if (state === 'live') return 'live';
+  if (state === 'error') return 'error';
   return 'unavailable';
 }
 
@@ -2586,7 +2600,7 @@ function collectDataStateMeta(panels: PanelState): Array<Partial<MarketDataMeta>
 
 function shouldSuppressRepeatedItemStatus(panel: MarketOverviewPanel, item: MarketOverviewItem): boolean {
   const panelStatus = resolveProviderStatus(panel);
-  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial'].includes(panelStatus)) {
+  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial', 'synthetic'].includes(panelStatus)) {
     return false;
   }
   return resolveProviderStatus(item) === panelStatus;
@@ -3340,9 +3354,13 @@ function useMarketOverviewWorkbenchModel({
     language,
   );
   const directionalSummaryView = marketIntelligenceConsumerView.directionalSummary;
-  const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
-  const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
-  const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
+  const dataStateMeta = collectDataStateMeta(panels);
+  const dataStateStatuses = dataStateMeta.map(resolveProviderStatus);
+  const hasNestedRefresh = dataStateMeta.some((meta) => (
+    meta.isRefreshing || meta.providerHealth?.isRefreshing || meta.providerHealth?.status === 'refreshing'
+  ));
+  const fallbackCount = dataQuality.counts.fallback;
+  const unavailableCount = dataStateStatuses.filter((status) => status === 'unavailable' || status === 'error').length + refreshErrorCount;
   const officialMacroRecords: OfficialMacroAuthorityRecord[] =
     (panels.macro?.items || []).map((item) => ({
       key: item.symbol,
@@ -3366,20 +3384,26 @@ function useMarketOverviewWorkbenchModel({
       officialAsOf: item.officialAsOf,
     }));
   const dataStateView: MarketOverviewDataStateStripView = {
-    availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
+    availableCount: dataQuality.counts.live,
+    cachedCount: dataQuality.counts.cached,
+    delayedCount: dataQuality.counts.delayed,
+    partialCount: dataQuality.counts.partial,
+    syntheticCount: dataQuality.counts.synthetic,
     fallbackCount,
     staleCount: dataQuality.counts.stale,
     hasUnavailable: unavailableCount > 0,
     unavailableCount,
     hasFallback: fallbackCount > 0,
     needsRefresh: dataQuality.counts.stale > 0 || refreshErrorCount > 0 || !localSnapshotSavedAt,
-    isRefreshing: loading || refreshingPanel !== null,
-    updatedAtLabel: formatMarketOverviewTimestamp(localSnapshotSavedAt) || '',
+    isRefreshing: loading || refreshingPanel !== null || hasNestedRefresh,
+    localSnapshotSavedAtLabel: formatMarketOverviewTimestamp(localSnapshotSavedAt) || '',
     variant: unavailableCount > 0 || dataQuality.hasConcern
       ? 'caution'
-      : loading || refreshingPanel !== null
+      : loading || refreshingPanel !== null || hasNestedRefresh
         ? 'info'
-        : 'neutral',
+        : dataQuality.counts.cached + dataQuality.counts.delayed > 0
+          ? 'info'
+          : 'neutral',
   };
   const temperatureSummary: MarketOverviewTemperatureSummaryView = {
     reliable: decisionReliable,
@@ -3494,8 +3518,8 @@ function useMarketOverviewWorkbenchModel({
       id: 'data-status',
       eyebrow: language === 'en' ? 'Data status' : '数据状态',
       title: formatTopLevelDataStatus(topLevelDataStatus, language),
-      detail: dataStateView.updatedAtLabel
-        ? `${language === 'en' ? 'Last updated' : '最近更新'}：${dataStateView.updatedAtLabel}`
+      detail: dataStateView.localSnapshotSavedAtLabel
+        ? `${language === 'en' ? 'Browser snapshot saved' : '本地快照保存'}：${dataStateView.localSnapshotSavedAtLabel}`
         : explainTopLevelDataStatus(topLevelDataStatus, language),
     },
   ];
