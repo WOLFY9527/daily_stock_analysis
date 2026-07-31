@@ -2908,15 +2908,6 @@ const UserScannerPage: React.FC = () => {
     });
   }, [customSymbolTokenCount, detailLimit, executeScannerRun, language, market, parsedCustomSymbols, profile, runDetail, scanScope, scannerFirstRunSetupLabel, selectedTheme, shortlistSize, themeId, universeLimit]);
 
-  const handleRetryCurrentRun = useCallback(async () => {
-    const retryRequest = buildScannerRetryRequest(runDetail);
-    if (retryRequest) {
-      await executeScannerRun(retryRequest);
-      return;
-    }
-    await handleRun();
-  }, [executeScannerRun, handleRun, runDetail]);
-
   const handleGenerateTheme = useCallback(async () => {
     const label = customThemeLabel.trim();
     const prompt = customThemePrompt.trim();
@@ -3872,11 +3863,8 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel, historyResolution, scannerDataReadinessView),
     [historyResolution, language, runDetail, scannerDataReadinessView, scannerFirstRunSetupLabel],
   );
-  const scannerRetryRequest = useMemo(
-    () => buildScannerRetryRequest(runDetail),
-    [runDetail],
-  );
   const isRetryScanState = scannerConclusion.state === 'no-candidate' || scannerConclusion.state === 'insufficient';
+  const isScannerRunBlocked = scannerWorkspaceState === 'blocked';
   const scannerRunButtonLabel = isRunning
     ? t('scanner.running')
     : language === 'en'
@@ -3887,6 +3875,7 @@ const UserScannerPage: React.FC = () => {
     || scannerConclusion.state === 'waiting'
     || scannerConclusion.state === 'no-candidate'
     || scannerConclusion.state === 'insufficient'
+    || scannerWorkspaceState === 'blocked'
     || Boolean(pageErrorSummary));
   const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
     ? (language === 'en'
@@ -4206,25 +4195,31 @@ const UserScannerPage: React.FC = () => {
                         {language === 'en' ? 'Next research action' : '下一步研究动作'}
                       </p>
                       <p className="mt-0.5 text-xs leading-5 text-[color:var(--wolfy-text-primary)]">
-                        {scannerDataReadinessView?.nextDataLabel || scannerWorkflowDetail}
+                        {isScannerRunBlocked
+                          ? (language === 'en'
+                            ? 'Scanner data is blocked, so running this setup would not produce a truthful candidate set.'
+                            : '扫描数据当前受阻，运行此配置不会产生可如实呈现的候选集合。')
+                          : (scannerDataReadinessView?.nextDataLabel || scannerWorkflowDetail)}
                       </p>
                     </div>
-                    <TerminalButton
-                      ref={runScannerButtonRef}
-                      type="button"
-                      onClick={handleRunScannerClick}
-                      onPointerUp={handleRunScannerPointerUp}
-                      disabled={runDisabled}
-                      aria-busy={isRunning}
-                      data-testid="scanner-run-button"
-                      className={`group min-h-[44px] w-full shrink-0 px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:w-auto sm:min-w-[132px] ${
-                        isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
-                      }`}
-                      variant={isRetryScanState ? 'secondary' : 'primary'}
-                    >
-                      <Play className={`h-4 w-4 ${isRetryScanState ? '' : 'group-hover:animate-pulse'}`} />
-                      <span>{scannerRunButtonLabel}</span>
-                    </TerminalButton>
+                    {isScannerRunBlocked ? null : (
+                      <TerminalButton
+                        ref={runScannerButtonRef}
+                        type="button"
+                        onClick={handleRunScannerClick}
+                        onPointerUp={handleRunScannerPointerUp}
+                        disabled={runDisabled}
+                        aria-busy={isRunning}
+                        data-testid="scanner-run-button"
+                        className={`group min-h-[44px] w-full shrink-0 px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:w-auto sm:min-w-[132px] ${
+                          isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
+                        }`}
+                        variant={isRetryScanState ? 'secondary' : 'primary'}
+                      >
+                        <Play className={`h-4 w-4 ${isRetryScanState ? '' : 'group-hover:animate-pulse'}`} />
+                        <span>{scannerRunButtonLabel}</span>
+                      </TerminalButton>
+                    )}
                   </div>
                   <div data-testid="scanner-data-trust-row" className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-2 xl:grid-cols-4">
                     {scannerConsumerTrustItems.map((item) => (
@@ -4296,56 +4291,47 @@ const UserScannerPage: React.FC = () => {
                   className="mx-3 overflow-x-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-sm shadow-sm"
                   aria-label={language === 'en' ? 'Scanner workflow next steps' : '扫描工作流下一步'}
                 >
-                  <div className="flex min-w-0 flex-col gap-3">
-                    <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">
-                            {language === 'en' ? 'Next steps' : '下一步'}
-                          </span>
-                          <span className="rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2 py-0.5 text-[11px] text-[color:var(--wolfy-text-secondary)]">
-                            {scannerWorkflowStats}
-                          </span>
+                  <details data-testid="scanner-workflow-alternatives" className="min-w-0">
+                    <summary className="cursor-pointer text-xs font-medium text-[color:var(--wolfy-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]">
+                      {language === 'en' ? 'Other research paths' : '其他研究路径'}
+                    </summary>
+                    <div className="mt-3 flex min-w-0 flex-col gap-3">
+                      <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">
+                              {language === 'en' ? 'Next steps' : '下一步'}
+                            </span>
+                            <span className="rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2 py-0.5 text-[11px] text-[color:var(--wolfy-text-secondary)]">
+                              {scannerWorkflowStats}
+                            </span>
+                          </div>
+                          <p className="mt-1 max-w-4xl text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
+                            {scannerWorkflowDetail}
+                          </p>
                         </div>
-                        <p className="mt-1 max-w-4xl text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
-                          {scannerWorkflowDetail}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                        {runDetail ? (
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                           <TerminalButton
                             type="button"
                             variant="secondary"
-                            data-testid="scanner-next-step-retry"
-                            disabled={isRunning || !scannerRetryRequest}
+                            data-testid="scanner-next-step-history"
                             className="h-9 px-3 text-xs"
-                            onClick={() => void handleRetryCurrentRun()}
+                            onClick={() => setIsHistoryDrawerOpen(true)}
                           >
-                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>{language === 'en' ? 'Retry same params' : '重新运行同参数'}</span>
+                            <History className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{language === 'en' ? 'Inspect history' : '查看历史'}</span>
                           </TerminalButton>
-                        ) : null}
-                        <TerminalButton
-                          type="button"
-                          variant="secondary"
-                          data-testid="scanner-next-step-history"
-                          className="h-9 px-3 text-xs"
-                          onClick={() => setIsHistoryDrawerOpen(true)}
-                        >
-                          <History className="h-3.5 w-3.5" aria-hidden="true" />
-                          <span>{language === 'en' ? 'Inspect history' : '查看历史'}</span>
-                        </TerminalButton>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(260px,0.58fr)_minmax(260px,0.58fr)]">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(260px,0.58fr)_minmax(260px,0.58fr)]">
                       <div
-                        data-testid="scanner-primary-research-path"
+                        data-testid="scanner-manual-research-path"
                         className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,var(--wolfy-surface-input))] p-3"
                       >
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <span className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
-                            {language === 'en' ? 'Primary research path' : '首选研究路径'}
+                            {language === 'en' ? 'Manual research path' : '手动研究路径'}
                           </span>
                           <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
@@ -4453,8 +4439,9 @@ const UserScannerPage: React.FC = () => {
                           </a>
                         </div>
                       </div>
+                      </div>
                     </div>
-                  </div>
+                  </details>
                 </section>
               ) : null}
               <ConsumerResearchReadinessStrip

@@ -439,8 +439,8 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-status-strip')).toBeInTheDocument();
   });
 
-  it('keeps a watchlist request failure separate from the successful empty state', async () => {
-    listWatchlistItems.mockRejectedValue(Object.assign(new Error('watchlist unavailable'), {
+  it('keeps a watchlist request failure separate from the successful empty state and retries only when requested', async () => {
+    const unavailable = Object.assign(new Error('watchlist unavailable'), {
       status: 503,
       parsedError: {
         title: 'backend error',
@@ -450,16 +450,24 @@ describe('WatchlistPage', () => {
         category: 'upstream_unavailable',
         isAuthError: false,
       },
-    }));
+    });
+    listWatchlistItems.mockRejectedValueOnce(unavailable).mockResolvedValueOnce({ items: [] });
 
     renderWatchlist();
 
     expect(await screen.findByText('观察列表暂不可用')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-compact-empty-state')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-conclusion-band')).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'false');
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('watchlist-unavailable-retry'));
+
+    expect(await screen.findByTestId('watchlist-compact-empty-state')).toBeInTheDocument();
+    expect(screen.queryByText('观察列表暂不可用')).not.toBeInTheDocument();
+    expect(listWatchlistItems).toHaveBeenCalledTimes(2);
   });
 
   it('filters scanner handoff routes to existing watchlist records without writes', async () => {
@@ -1014,7 +1022,7 @@ describe('WatchlistPage', () => {
     expect(screen.getByLabelText('证据筛选')).toBeInTheDocument();
   });
 
-  it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
+  it('distinguishes an empty filtered set from first use and clears filters with one explicit action', async () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
@@ -1023,7 +1031,15 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选为空');
     expect(screen.getByRole('button', { name: /刷新当前筛选/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /回测当前筛选/ })).toBeDisabled();
-    expect(screen.getByText('无匹配标的')).toBeInTheDocument();
+    expect(screen.getByText('没有已保存标的符合当前筛选')).toBeInTheDocument();
+    expect(screen.getByText('已保存台账仍然可用。清除本地筛选后可重新查看全部已保存标的。')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-reset-filters')).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-empty-onboarding-cta')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('watchlist-reset-filters'));
+
+    expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-reset-filters')).not.toBeInTheDocument();
   });
 
   it('filters rows by symbol or name search', async () => {
@@ -2883,7 +2899,7 @@ describe('WatchlistPage', () => {
     expect(await screen.findByText('NVDA 已复制')).toBeInTheDocument();
   });
 
-  it('renders a mobile-safe empty state with manual research as the primary path', async () => {
+  it('renders a mobile-safe first-use state with one visible scanner action and disclosed alternatives', async () => {
     listWatchlistItems.mockResolvedValue({ items: [] });
 
     renderWatchlist();
@@ -2906,26 +2922,30 @@ describe('WatchlistPage', () => {
       'text-center',
     );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。');
+    expect(emptyState).toHaveTextContent('当前已保存覆盖下还没有可用观察行。首要下一步是运行 Scanner 获取由你触发的候选集合；手动研究单个代码仍是下方的可选路径。');
     expect(emptyState).toHaveTextContent('只有你明确保留观察后，已保存的候选证据与状态才会回到这里。');
-    expect(emptyState).toHaveTextContent('这里优先保留单标的研究与明确保存观察的路径。');
+    expect(emptyState).toHaveTextContent('从一个明确的研究动作开始');
     expect(within(emptyState).queryByTestId('watchlist-empty-preview')).not.toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/功能预览|示例预览|Demo sample|sample only/i);
     const researchPath = within(emptyState).getByTestId('watchlist-empty-manual-research');
-    expect(researchPath).toHaveTextContent('首选研究路径');
-    expect(researchPath).toHaveTextContent('手动研究代码');
-    expect(researchPath).toHaveTextContent('首选路径：先启动一个个股研究任务，不会把代码加入观察名单。');
+    expect(within(researchPath).getByRole('button', { name: '改为研究单个代码' })).toHaveAttribute('aria-expanded', 'false');
+    expect(researchPath).toHaveTextContent('改为研究单个代码');
     const onboardingPanel = within(emptyState).getByTestId('watchlist-empty-onboarding-cta');
-    expect(onboardingPanel).toHaveTextContent('先看市场概览');
-    expect(onboardingPanel).toHaveTextContent('运行 Scanner');
-    expect(onboardingPanel).toHaveTextContent('选择观察标的');
-    expect(onboardingPanel).toHaveTextContent('查看研究雷达');
-    expect(within(onboardingPanel).getByRole('button', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(onboardingPanel).toHaveTextContent('只有需要由你触发的候选集合时才运行扫描；它不会自动保存任何标的。');
     expect(within(onboardingPanel).getByRole('button', { name: '打开扫描器' })).toHaveAttribute('href', '/zh/scanner');
     expect(screen.getAllByRole('button', { name: '打开扫描器' })).toHaveLength(1);
-    expect(within(onboardingPanel).getByRole('button', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
-    expect(within(onboardingPanel).getByRole('button', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(onboardingPanel).toHaveTextContent('不会自动保存代码。');
+    const alternatives = within(onboardingPanel).getByTestId('watchlist-empty-alternatives');
+    expect(within(alternatives).getByRole('button', { name: '其他研究路径' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(onboardingPanel).queryByRole('button', { name: '选择观察标的' })).not.toBeInTheDocument();
+    fireEvent.click(within(alternatives).getByRole('button', { name: '其他研究路径' }));
+    expect(within(alternatives).getByRole('button', { name: '其他研究路径' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(onboardingPanel).getByRole('button', { name: '市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(onboardingPanel).getByRole('button', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    fireEvent.click(within(researchPath).getByRole('button', { name: '改为研究单个代码' }));
+    expect(within(researchPath).getByRole('button', { name: '改为研究单个代码' })).toHaveAttribute('aria-expanded', 'true');
+    expect(researchPath).toHaveTextContent('可选路径');
+    expect(researchPath).toHaveTextContent('可选路径：先启动一个个股研究任务，不会把代码加入观察名单。');
+    expect(researchPath).toHaveTextContent('手动研究代码');
     expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器|Open Scanner/i })).not.toBeInTheDocument();
@@ -2943,7 +2963,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
-    expect(within(emptyState).getByTestId('watchlist-empty-manual-research')).toHaveTextContent('首选研究路径');
+    fireEvent.click(within(emptyState).getByText('改为研究单个代码'));
     fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'tsla' } });
     fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
 
@@ -2978,6 +2998,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    fireEvent.click(within(emptyState).getByText('改为研究单个代码'));
     fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: '0700.HK' } });
     fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
 
@@ -2988,7 +3009,9 @@ describe('WatchlistPage', () => {
       originalQuery: 'HK00700',
       selectionSource: 'manual',
     })));
-    expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=HK00700');
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=HK00700');
+    });
   });
 
   it('does not submit manual research when the validation API rejects the symbol', async () => {
@@ -3006,6 +3029,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    fireEvent.click(within(emptyState).getByText('改为研究单个代码'));
     fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'BAD INPUT' } });
     fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
 
@@ -3078,7 +3102,8 @@ describe('WatchlistPage', () => {
 
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
     expect(emptyState).toHaveTextContent('还没有观察标的');
-    expect(emptyState).toHaveTextContent('手动研究代码');
+    expect(emptyState).toHaveTextContent('改为研究单个代码');
+    expect(within(within(emptyState).getByTestId('watchlist-empty-manual-research')).getByRole('button', { name: '改为研究单个代码' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('auth-guard:观察列表')).not.toBeInTheDocument();
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });

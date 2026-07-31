@@ -18,6 +18,7 @@ type ScannerStateMatrixCase = {
   unexpectedText?: RegExp;
   expectsLedgerOverflow?: boolean;
   keyboard?: 'run-button' | 'ledger-row';
+  expectsRunUnavailable?: boolean;
 };
 
 function scannerAuthStatus() {
@@ -524,6 +525,7 @@ const scannerStateMatrixCases: ScannerStateMatrixCase[] = [
     runsPayload: scannerRunsPayload(),
     expectedText: /标的池成员|标的池缺失|标的池尚未准备完成/,
     unexpectedText: /市场数据尚不足|当前暂时无法生成候选/,
+    expectsRunUnavailable: true,
   },
   {
     id: 'market-data-blocked',
@@ -546,6 +548,7 @@ const scannerStateMatrixCases: ScannerStateMatrixCase[] = [
     runsPayload: scannerRunsPayload(),
     expectedText: /市场数据|历史数据待补|市场数据尚不足/,
     unexpectedText: /标的池缺失|当前暂时无法生成候选/,
+    expectsRunUnavailable: true,
   },
   {
     id: 'candidate-generation-blocked',
@@ -565,6 +568,7 @@ const scannerStateMatrixCases: ScannerStateMatrixCase[] = [
     runsPayload: scannerRunsPayload(),
     expectedText: /候选生成|条件过窄|当前暂时无法生成候选/,
     unexpectedText: /标的池缺失|历史数据待补/,
+    expectsRunUnavailable: true,
   },
   {
     id: 'valid-zero-result',
@@ -872,10 +876,13 @@ test.describe('scanner launch surface', () => {
 
       const primaryAction = page.getByTestId('scanner-primary-action');
       const runButton = page.getByTestId('scanner-run-button');
+      const alternatives = page.getByTestId('scanner-workflow-alternatives');
       await expect(primaryAction).toBeVisible({ timeout: 15_000 });
       await expect(runButton).toBeVisible();
       await expect(runButton).toBeEnabled();
       await expect(runButton).toHaveCount(1);
+      await expect(alternatives).not.toHaveAttribute('open');
+      await expect(alternatives.locator('summary')).toBeVisible();
 
       const actionBox = await primaryAction.boundingBox();
       expect(actionBox).not.toBeNull();
@@ -943,6 +950,21 @@ test.describe('scanner launch surface', () => {
         await expect.poll(() => apiRequests.filter((request) => request.method === 'POST' && request.path === '/api/v1/scanner/run').length).toBe(1);
         expect(getPassiveReadViolations(apiRequests.slice(0, passiveRequestCount))).toEqual([]);
         await expect(page.getByTestId('scanner-run-feedback')).toContainText(/扫描|候选|完成|未形成/);
+      }
+
+      if (matrixCase.expectsRunUnavailable) {
+        const primaryAction = page.getByTestId('scanner-primary-action');
+        const alternatives = page.getByTestId('scanner-workflow-alternatives');
+        const summary = alternatives.locator('summary');
+        await expect(primaryAction).toContainText('扫描数据当前受阻');
+        await expect(page.getByTestId('scanner-run-button')).toHaveCount(0);
+        await expect(alternatives).not.toHaveAttribute('open');
+        await summary.focus();
+        await expect(summary).toBeFocused();
+        await summary.click();
+        await expect(alternatives).toHaveAttribute('open');
+        await expect(page.getByTestId('scanner-manual-research-path')).toBeVisible();
+        expect(apiRequests.filter((request) => request.method === 'POST' && request.path === '/api/v1/scanner/run')).toHaveLength(0);
       }
 
       if (matrixCase.id === 'request-error') {
@@ -1069,7 +1091,7 @@ test.describe('scanner launch surface', () => {
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('retries loaded run params with a valid shortlist fallback in the workspace layout', async ({ page }) => {
+  test('uses the one explicit retry action for loaded no-candidate params in the workspace layout', async ({ page }) => {
     let postedRunRequest: unknown = null;
 
     await page.route('**/api/v1/auth/status', async (route) => {
@@ -1138,6 +1160,7 @@ test.describe('scanner launch surface', () => {
     await expect(runFacts).not.toContainText(/provider|reasonCode|below_threshold|raw/i);
     await expect(page.getByTestId('scanner-history-scope-hint')).toContainText('个人历史仅基于当前账号可访问的扫描记录');
     await expect(page.getByRole('button', { name: '重新扫描' })).toBeEnabled();
+    await expect(page.getByTestId('scanner-next-step-retry')).toHaveCount(0);
     await page.getByRole('button', { name: '重新扫描' }).click();
 
     await expect.poll(() => JSON.stringify(postedRunRequest)).toBe(JSON.stringify({
@@ -1263,9 +1286,15 @@ test.describe('scanner launch surface', () => {
     await page.waitForLoadState('domcontentloaded');
 
     const nextSteps = page.getByTestId('scanner-workflow-next-steps');
+    const alternatives = page.getByTestId('scanner-workflow-alternatives');
     await expect(nextSteps).toBeVisible({ timeout: 15_000 });
+    await expect(alternatives).not.toHaveAttribute('open');
+    await alternatives.locator('summary').focus();
+    await expect(alternatives.locator('summary')).toBeFocused();
+    await alternatives.locator('summary').click();
+    await expect(alternatives).toHaveAttribute('open');
     await expect(nextSteps).toContainText('下一步');
-    await expect(nextSteps).toContainText('首选研究路径');
+    await expect(nextSteps).toContainText('手动研究路径');
     await expect(nextSteps).toContainText('换市场或配置');
     await expect(nextSteps).toContainText(/未形成官方入选候选|不代表市场没有机会/);
     await expect(nextSteps).toContainText('查看历史');

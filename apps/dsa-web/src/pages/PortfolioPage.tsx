@@ -8,7 +8,6 @@ import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import { Button } from '../components/common/Button';
 import { Checkbox } from '../components/common/Checkbox';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
-import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { Drawer } from '../components/common/Drawer';
 import { Input } from '../components/common/Input';
 import { PillBadge } from '../components/common/PillBadge';
@@ -1847,7 +1846,7 @@ const PortfolioPage: React.FC = () => {
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readPortfolioDisplayCurrency());
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotWithLineage | null>(null);
   const [structureReview, setStructureReview] = useState<PortfolioStructureReviewResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [fxRefreshing, setFxRefreshing] = useState(false);
   const [fxRefreshFeedback, setFxRefreshFeedback] = useState<FxRefreshFeedback | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -2862,6 +2861,7 @@ const PortfolioPage: React.FC = () => {
   })();
   const portfolioTruth = snapshot?.portfolioTruth ?? null;
   const portfolioTruthLabel = portfolioTruthDisplayLabel(portfolioTruth, language);
+  const isConfirmedPortfolioFirstUse = portfolioTruth?.state === 'no_account' || portfolioTruth?.state === 'account_no_holdings';
   const displaysAuthoritativeAmounts = canDisplayPortfolioAmounts(portfolioTruth);
   const rawTotalEquity = snapshot?.totalEquity ?? null;
   const rawTotalCash = snapshot?.totalCash ?? null;
@@ -2893,6 +2893,7 @@ const PortfolioPage: React.FC = () => {
   const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
   const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
   const hasHoldings = positionRows.length > 0;
+  const shouldShowGlobalErrorAlert = Boolean(error && snapshot);
   const hasHistory = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
   const isEmptyPortfolio = !hasHoldings;
   const totalHistoryRows = tradeEvents.length + cashEvents.length + corporateEvents.length;
@@ -4060,9 +4061,9 @@ const PortfolioPage: React.FC = () => {
             data-testid="portfolio-workspace-grid"
             className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-12"
           >
-            {error || riskWarning || writeWarning ? (
+            {shouldShowGlobalErrorAlert || riskWarning || writeWarning ? (
               <div data-testid="portfolio-row-alerts" className="order-0 col-span-12 xl:col-span-12 min-w-0 flex flex-col gap-3">
-                {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
+                {shouldShowGlobalErrorAlert ? <ApiErrorAlert error={error!} onDismiss={() => setError(null)} /> : null}
                 {riskWarning ? (
                   <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
                     {copy.riskDegraded}: {riskWarning}
@@ -4238,6 +4239,101 @@ const PortfolioPage: React.FC = () => {
                   </div>
                   {portfolioResearchStatePreview}
                 </div>
+              ) : isLoading ? (
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-loading-state"
+                  className="min-w-0 py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {copy.loading}
+                </TerminalPanel>
+              ) : error && !snapshot ? (
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-unavailable-state"
+                  className="min-w-0 py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="font-medium text-[color:var(--wolfy-text-primary)]">
+                    {error.isAuthError || error.status === 401 || error.status === 403
+                      ? (language === 'zh' ? '组合访问受限' : 'Portfolio access is limited')
+                      : (language === 'zh' ? '组合快照暂时不可用' : 'Portfolio snapshot is temporarily unavailable')}
+                  </p>
+                  <p className="mt-1 text-xs leading-5">
+                    {error.isAuthError || error.status === 401 || error.status === 403
+                      ? (language === 'zh' ? '当前权限无法确认账户或持仓状态，因此不会显示首次配置路径。' : 'Current permissions cannot confirm account or holding state, so first-use guidance stays hidden.')
+                      : (language === 'zh' ? '服务尚未确认账户或持仓状态，因此不会显示首次配置路径。' : 'The service has not confirmed account or holding state, so first-use guidance stays hidden.')}
+                  </p>
+                  <TerminalButton
+                    type="button"
+                    variant="primary"
+                    data-testid="portfolio-unavailable-retry"
+                    className="mt-3 h-9 px-3 text-xs"
+                    onClick={() => void handleRefresh()}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {language === 'zh' ? '重试加载组合' : 'Retry loading portfolio'}
+                  </TerminalButton>
+                </TerminalPanel>
+              ) : !isConfirmedPortfolioFirstUse ? (
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-truth-unavailable-state"
+                  className="min-w-0 py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="font-medium text-[color:var(--wolfy-text-primary)]">{portfolioTruthLabel}</p>
+                  <p className="mt-1 text-xs leading-5">
+                    {language === 'zh'
+                      ? '当前快照不能确认首次使用或真实空组合，因此不会显示创建账户或添加持仓的路径。'
+                      : 'The current snapshot cannot confirm first use or a real empty portfolio, so account and holding setup paths stay hidden.'}
+                  </p>
+                  <TerminalButton
+                    type="button"
+                    variant="primary"
+                    data-testid="portfolio-truth-retry"
+                    className="mt-3 h-9 px-3 text-xs"
+                    onClick={() => void handleRefresh()}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {language === 'zh' ? '刷新组合快照' : 'Refresh portfolio snapshot'}
+                  </TerminalButton>
+                </TerminalPanel>
+              ) : !canManagePortfolioOperations ? (
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-permission-limited-state"
+                  className="min-w-0 py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="font-medium text-[color:var(--wolfy-text-primary)]">
+                    {language === 'zh' ? '组合编辑权限受限' : 'Portfolio editing is limited'}
+                  </p>
+                  <p className="mt-1 text-xs leading-5">
+                    {portfolioTruth?.state === 'no_account'
+                      ? (language === 'zh'
+                        ? '当前状态已确认尚未创建组合账户，但你的权限不能创建账户、添加持仓或导入记录。'
+                        : 'The current state confirms that no portfolio account exists, but your permissions cannot create one, add holdings, or import records.')
+                      : (language === 'zh'
+                        ? '当前账户已确认没有持仓，但你的权限不能创建账户、添加持仓或导入记录。'
+                        : 'The current account is confirmed without holdings, but your permissions cannot create accounts, add holdings, or import records.')}
+                  </p>
+                  <TerminalButton
+                    type="button"
+                    variant="primary"
+                    data-testid="portfolio-permission-refresh"
+                    className="mt-3 h-9 px-3 text-xs"
+                    onClick={() => void handleRefresh()}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {language === 'zh' ? '刷新组合快照' : 'Refresh portfolio snapshot'}
+                  </TerminalButton>
+                </TerminalPanel>
               ) : (
                 <div
                   data-testid="portfolio-empty-onboarding-row"
@@ -4268,51 +4364,6 @@ const PortfolioPage: React.FC = () => {
                       </TerminalNotice>
                     ) : null}
 
-                    <ConsumerOnboardingCtaPanel
-                      data-testid="portfolio-empty-onboarding-cta"
-                      language={language}
-                      density="compact"
-                      title={language === 'zh' ? '先完成研究上下文，只有需要组合跟踪时再创建账户' : 'Build research context first; create an account only when portfolio tracking is intentional'}
-                      actions={[
-                        {
-                          route: '/market-overview',
-                          description: language === 'zh'
-                            ? '研究记录'
-                            : 'Research record',
-                        },
-                        {
-                          route: '/scanner',
-                          description: language === 'zh'
-                            ? '需要候选集合时，由你手动运行扫描。'
-                            : 'Run scanner only when you want a candidate set.',
-                        },
-                        {
-                          route: '/watchlist',
-                          description: language === 'zh'
-                            ? '先保存你明确想持续观察的代码。'
-                            : 'Save only symbols you intentionally want to keep observing.',
-                        },
-                        {
-                          route: '/research/radar',
-                          description: language === 'zh'
-                            ? '扫描或观察列表有活动后，再查看研究队列。'
-                            : 'Review the queue after scanner or watchlist activity.',
-                        },
-                        {
-                          route: '/portfolio',
-                          description: language === 'zh'
-                            ? '只有明确想记录持仓、现金与组合表现时才创建账户。'
-                            : 'Create an account only when you want to track holdings, cash, and portfolio performance.',
-                        },
-                      ]}
-                      starterResearchWorkflow={language === 'zh'
-                        ? ['打开市场概览。', '运行 Scanner 或选择观察标的。', '有研究活动后查看研究雷达。', '需要组合跟踪时再创建账户。']
-                        : ['Open Market Overview.', 'Run Scanner or choose a watchlist symbol.', 'Review Research Radar after activity.', 'Create an account only when tracking a portfolio.']}
-                      firstRunChecklist={language === 'zh'
-                        ? ['不会自动创建账户。', '不会生成示例持仓。', '不会改写持仓、现金或外部同步状态。']
-                        : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
-                    />
-
                     <TerminalEmptyState
                       data-testid="portfolio-start-card"
                       title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
@@ -4327,23 +4378,21 @@ const PortfolioPage: React.FC = () => {
                         <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
                           {onboardingPrimaryActionLabel}
                         </TerminalButton>
-                        <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                          {importTradesActionLabel}
-                        </TerminalButton>
                       </div>
                     ) : null}
                     <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                       {portfolioEmptyHelpText}
                     </p>
 
-                    <TerminalDisclosure
+                    <details
                       data-testid="portfolio-empty-supporting-disclosure"
-                      title={language === 'zh' ? '后续路径细节' : 'Later-path detail'}
-                      summary={language === 'zh'
-                        ? `缺失：${!hasAccounts ? '组合账户' : !hasWritableAccounts ? '可写账户' : '首笔持仓或导入记录'}。展开查看三步路径。`
-                        : `Missing: ${!hasAccounts ? 'portfolio account' : !hasWritableAccounts ? 'writable account' : 'first holding or import'}. Expand for the three-step path.`}
-                      className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
+                      className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2"
                     >
+                      <summary className="cursor-pointer text-xs font-medium text-[color:var(--wolfy-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]">
+                        {language === 'zh'
+                          ? `缺失：${!hasAccounts ? '组合账户' : !hasWritableAccounts ? '可写账户' : '首笔持仓或导入记录'}。展开查看后续路径。`
+                          : `Missing: ${!hasAccounts ? 'portfolio account' : !hasWritableAccounts ? 'writable account' : 'first holding or import'}. Expand for later paths.`}
+                      </summary>
                       <ol className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" aria-label={language === 'zh' ? '后续路径' : 'Later path'}>
                         {onboardingSteps.map((step, index) => (
                           <li key={step.key} className="inline-flex min-w-0 items-center gap-1.5">
@@ -4353,7 +4402,12 @@ const PortfolioPage: React.FC = () => {
                           </li>
                         ))}
                       </ol>
-                    </TerminalDisclosure>
+                      {canManagePortfolioOperations ? (
+                        <TerminalButton type="button" variant="secondary" className="mt-3 h-9 px-3 text-xs" onClick={() => openManualLedger('sync')}>
+                          {importTradesActionLabel}
+                        </TerminalButton>
+                      ) : null}
+                    </details>
 
                     {/* Keep research state mounted for empty first-read truth; disclosure only hides secondary path steps. */}
                     {portfolioResearchStatePreview}
@@ -5384,7 +5438,7 @@ const PortfolioPage: React.FC = () => {
                 </div>
               ) : null}
 
-              {leftTab === 'fx' ? (
+              {leftTab === 'fx' && (!error || snapshot) ? (
                 <div data-testid="portfolio-fx-panel" className="space-y-4">
                   <div>
 	                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{language === 'zh' ? '汇率参考' : 'Exchange-rate reference'}</p>

@@ -1087,19 +1087,16 @@ describe('PortfolioPage FX refresh', () => {
     expect(onboardingWorkflow).toHaveTextContent('创建或导入首个组合');
     expect(onboardingWorkflow).toHaveTextContent('真实数据接入前不生成示例收益');
     expect(onboardingWorkflow).toHaveTextContent('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
-    const onboardingCta = within(onboardingWorkflow).getByTestId('portfolio-empty-onboarding-cta');
-    expect(onboardingCta).toHaveTextContent('先看市场概览');
-    expect(onboardingCta).toHaveTextContent('运行 Scanner');
-    expect(onboardingCta).toHaveTextContent('选择观察标的');
-    expect(onboardingCta).toHaveTextContent('查看研究雷达');
-    expect(onboardingCta).toHaveTextContent('创建组合账户');
-    expect(onboardingCta).toHaveTextContent('不会自动创建账户。');
-    expect(onboardingCta).toHaveTextContent('不会改写持仓、现金或外部同步状态。');
-    expect(within(onboardingCta).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
-    expect(within(onboardingCta).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
-    expect(within(onboardingCta).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
-    expect(within(onboardingCta).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(within(onboardingCta).getByRole('link', { name: '创建组合账户' })).toHaveAttribute('href', '/zh/portfolio');
+    const primaryActions = within(onboardingWorkflow).getByTestId('portfolio-empty-actions');
+    expect(within(primaryActions).getAllByRole('button')).toHaveLength(1);
+    expect(within(primaryActions).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(within(onboardingWorkflow).queryByRole('link')).not.toBeInTheDocument();
+    const supportingDisclosure = screen.getByTestId('portfolio-empty-supporting-disclosure');
+    expect(supportingDisclosure).not.toHaveAttribute('open');
+    fireEvent.click(within(supportingDisclosure).getByText(/缺失：首笔持仓或导入记录/));
+    expect(supportingDisclosure).toHaveAttribute('open');
+    expect(within(supportingDisclosure).getByRole('list', { name: '后续路径' })).toBeInTheDocument();
+    expect(within(supportingDisclosure).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
     expect(researchStatePreview).toHaveTextContent('账户已设置');
     expect(researchStatePreview).toHaveTextContent('持仓待接入');
@@ -1301,8 +1298,8 @@ describe('PortfolioPage FX refresh', () => {
 
     const workflow = screen.getByTestId('portfolio-empty-workflow-column');
     const primaryActions = within(workflow).getByTestId('portfolio-empty-actions');
+    expect(within(primaryActions).getAllByRole('button')).toHaveLength(1);
     expect(within(primaryActions).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
-    expect(within(primaryActions).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
 
     // Secondary next-action panel stays compact and does not re-offer the same empty-state buttons.
     const nextAction = screen.getByTestId('portfolio-next-action-panel');
@@ -1314,13 +1311,133 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-structure-review-panel')).toHaveAttribute('data-module-density', 'bounded-empty');
     expect(screen.getByTestId('portfolio-structure-review-bounded-empty')).toHaveTextContent('等待首笔持仓');
 
-    // Research path CTA remains available once without card-wall layout.
-    const onboardingCta = within(workflow).getByTestId('portfolio-empty-onboarding-cta');
-    expect(onboardingCta).toHaveAttribute('data-density', 'compact');
-    expect(within(onboardingCta).getByRole('link', { name: '先看市场概览' })).toBeInTheDocument();
+    // Import and the later workflow stay behind one native disclosure.
+    const supportingDisclosure = screen.getByTestId('portfolio-empty-supporting-disclosure');
+    expect(supportingDisclosure).not.toHaveAttribute('open');
+    expect(within(workflow).queryByRole('link')).not.toBeInTheDocument();
+  });
 
-    // Later-path steps stay behind disclosure so first viewport is not a numbered-step wall.
-    expect(screen.getByTestId('portfolio-empty-supporting-disclosure')).not.toHaveAttribute('open');
+  it('keeps pending portfolio reads out of the first-use state until the snapshot confirms it', async () => {
+    const pendingSnapshot = deferredPromise<ReturnType<typeof makeSnapshot>>();
+    getSnapshot.mockImplementationOnce(() => pendingSnapshot.promise);
+
+    render(<PortfolioPage />);
+
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('portfolio-loading-state')).toHaveTextContent('加载中');
+    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-truth-unavailable-state')).not.toBeInTheDocument();
+
+    await act(async () => {
+      pendingSnapshot.resolve(makeSnapshot());
+      await pendingSnapshot.promise;
+    });
+
+    expect(await screen.findByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+  });
+
+  it('keeps a snapshot failure unavailable with one retry instead of first-use onboarding', async () => {
+    getSnapshot.mockRejectedValueOnce(
+      createApiError(createParsedApiError({
+        title: '组合快照不可用',
+        message: '组合快照暂时不可用',
+        status: 503,
+        category: 'upstream_unavailable',
+      })),
+    );
+
+    render(<PortfolioPage />);
+
+    const unavailableState = await screen.findByTestId('portfolio-unavailable-state');
+    expect(unavailableState).toHaveTextContent('组合快照暂时不可用');
+    expect(within(unavailableState).getAllByRole('button')).toHaveLength(1);
+    expect(within(unavailableState).getByRole('button', { name: '重试加载组合' })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-row-alerts')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+
+    fireEvent.click(within(unavailableState).getByRole('button', { name: '重试加载组合' }));
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+  });
+
+  it('keeps valuation-unavailable truth distinct from first use and from a numeric zero', async () => {
+    getSnapshot.mockResolvedValue({
+      ...makeSnapshot({ includePosition: false, fxStale: false }),
+      portfolioTruth: {
+        state: 'valuation_unavailable',
+        accountState: 'no_holdings',
+        valuationState: 'unavailable',
+        valueSemantics: 'unavailable',
+        authoritativeTotal: null,
+        coveredSubtotal: null,
+        accountCount: 1,
+        positionCount: 0,
+      },
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-truth-unavailable-state')).toHaveTextContent('估值暂不可用');
+    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-total-assets-value')).not.toHaveTextContent('CNY 0.00');
+  });
+
+  it('keeps confirmed empty portfolio access limitations distinct from first-use actions', async () => {
+    setConsumerPortfolioSurface();
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
+    expect(permissionState).toHaveTextContent('组合编辑权限受限');
+    expect(within(permissionState).getAllByRole('button')).toHaveLength(1);
+    expect(within(permissionState).getByRole('button', { name: '刷新组合快照' })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+    expect(createAccount).not.toHaveBeenCalled();
+    expect(createTrade).not.toHaveBeenCalled();
+    expect(commitCsvImport).not.toHaveBeenCalled();
+  });
+
+  it('keeps a confirmed no-account permission limit distinct from an account-without-holdings limit', async () => {
+    setConsumerPortfolioSurface();
+    getAccounts.mockResolvedValue(makeAccounts([]));
+    getSnapshot.mockResolvedValue(makeSnapshot({ accountCount: 0, includePosition: false, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
+    expect(permissionState).toHaveTextContent('当前状态已确认尚未创建组合账户');
+    expect(permissionState).not.toHaveTextContent('当前账户已确认没有持仓');
+    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+  });
+
+  it('keeps confirmed first use visible when a later event read fails', async () => {
+    const pendingEvents = deferredPromise<Awaited<ReturnType<typeof listTrades>>>();
+    const eventFailure = createApiError(createParsedApiError({
+      title: '历史记录暂不可用',
+      message: '无法加载组合历史记录',
+      status: 503,
+      category: 'upstream_unavailable',
+    }));
+    listTrades.mockImplementationOnce(() => pendingEvents.promise);
+
+    render(<PortfolioPage />);
+
+    expect(await screen.findByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+
+    await act(async () => {
+      pendingEvents.reject(eventFailure);
+      await pendingEvents.promise.catch(() => undefined);
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('历史记录暂不可用');
+    expect(screen.getByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-unavailable-state')).not.toBeInTheDocument();
   });
 
   it('renders a compact account strip, compact empty holdings, and primary portfolio actions', async () => {
@@ -1347,8 +1464,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(startCard).toHaveTextContent('创建或导入首个组合');
     expect(startCard).toHaveTextContent('先创建或选择账户，再添加第一笔持仓或导入历史记录。');
     const emptyWorkflowColumn = screen.getByTestId('portfolio-empty-workflow-column');
-    expect(within(emptyWorkflowColumn).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
-    expect(within(emptyWorkflowColumn).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
+    const primaryActions = within(emptyWorkflowColumn).getByTestId('portfolio-empty-actions');
+    expect(within(primaryActions).getAllByRole('button')).toHaveLength(1);
+    expect(within(primaryActions).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
     expect(emptyWorkflowColumn).toHaveTextContent('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
     const researchStatePreview = screen.getByTestId('portfolio-research-state-preview');
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
@@ -3788,7 +3906,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
   });
 
-  it('does not keep success feedback when snapshot reload fails after FX refresh succeeds', async () => {
+  it('does not keep success feedback when snapshot reload becomes unavailable after FX refresh succeeds', async () => {
     getSnapshot
       .mockResolvedValueOnce(makeSnapshot({ fxStale: true }))
       .mockRejectedValueOnce(
@@ -3806,10 +3924,13 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(openFxPanel());
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('快照刷新失败');
-    expect(screen.getByRole('alert')).toHaveTextContent('无法加载最新持仓快照');
+    const unavailableState = await screen.findByTestId('portfolio-unavailable-state');
+    expect(unavailableState).toHaveTextContent('组合快照暂时不可用');
+    expect(within(unavailableState).getAllByRole('button')).toHaveLength(1);
+    expect(within(unavailableState).getByRole('button', { name: '重试加载组合' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument());
-    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
+    expect(screen.queryByTestId('portfolio-fx-panel')).not.toBeInTheDocument();
   });
 
   it('drops late FX refresh results after switching cost method', async () => {
@@ -4005,7 +4126,10 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByText('作废')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-consumer-setup-boundary')).toHaveTextContent('当前视图仅展示已接入的组合、持仓与估值状态。');
     expect(screen.getByTestId('portfolio-consumer-setup-boundary')).not.toHaveTextContent(/IBKR|token|API|账户引用|会话令牌|连接地址|同步控件|sync controls|request|trace|cache|payload/i);
-    expect(screen.getByTestId('portfolio-research-state-preview')).toHaveTextContent('账户已设置');
+    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
+    expect(permissionState).toHaveTextContent('组合编辑权限受限');
+    expect(within(permissionState).getByRole('button', { name: '刷新组合快照' })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-research-state-preview')).not.toBeInTheDocument();
   });
 
   it('keeps new account broker blank instead of defaulting to Demo', async () => {

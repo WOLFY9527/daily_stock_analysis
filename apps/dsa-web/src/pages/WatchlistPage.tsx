@@ -16,7 +16,6 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import {
@@ -1782,13 +1781,13 @@ function getCopy(language: 'zh' | 'en') {
       copied: 'Copied',
       inspecting: 'Inspecting',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'Under the current saved coverage, no watchlist rows are available yet. Start with one manual symbol research task here, then save only if you decide to keep observing it.',
+      emptyBody: 'Under the current saved coverage, no watchlist rows are available yet. The primary next step is Scanner for a user-triggered candidate set; manual symbol research remains optional below.',
       emptyHelp: 'Saved rows return here after you explicitly keep a symbol for ongoing observation.',
-      emptyScannerHelp: 'Keep the first step here focused on one-symbol research and explicit save decisions.',
+      emptyScannerHelp: 'Scanner is the primary route to a user-triggered candidate set; one-symbol research remains optional.',
       savedObservationHelp: 'Saved observations are created only after you explicitly save a symbol; this preview does not create one.',
       manualResearchLabel: 'Manual research symbol',
       manualResearchPlaceholder: 'TSLA',
-      manualResearchHelp: 'Primary path: start one stock research task here without adding anything to Watchlist.',
+      manualResearchHelp: 'Optional path: start one stock research task here without adding anything to Watchlist.',
       manualResearchButton: 'Research',
       enterManualSymbol: 'Enter one symbol before starting research.',
       manualSymbolUnavailable: 'This symbol cannot be used for research.',
@@ -1903,13 +1902,13 @@ function getCopy(language: 'zh' | 'en') {
     copied: '已复制',
     inspecting: '查看中',
     emptyTitle: '还没有观察标的',
-      emptyBody: '当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。',
+      emptyBody: '当前已保存覆盖下还没有可用观察行。首要下一步是运行 Scanner 获取由你触发的候选集合；手动研究单个代码仍是下方的可选路径。',
     emptyHelp: '只有你明确保留观察后，已保存的候选证据与状态才会回到这里。',
-    emptyScannerHelp: '这里优先保留单标的研究与明确保存观察的路径。',
+    emptyScannerHelp: 'Scanner 是获取由你触发候选集合的主路径；单标的研究仍是可选路径。',
     savedObservationHelp: '保存观察只会在你明确保存代码后创建；这里的预览不会创建观察项。',
     manualResearchLabel: '手动研究代码',
     manualResearchPlaceholder: 'TSLA',
-    manualResearchHelp: '首选路径：先启动一个个股研究任务，不会把代码加入观察名单。',
+    manualResearchHelp: '可选路径：先启动一个个股研究任务，不会把代码加入观察名单。',
     manualResearchButton: '研究',
     enterManualSymbol: '请先输入一个研究代码。',
     manualSymbolUnavailable: '该代码暂不能用于研究。',
@@ -2019,6 +2018,8 @@ const WatchlistPage: React.FC = () => {
   const [isBatchScanning, setIsBatchScanning] = useState(false);
   const [emptyResearchSymbol, setEmptyResearchSymbol] = useState('');
   const [isEmptyResearchPending, setIsEmptyResearchPending] = useState(false);
+  const [isEmptyResearchAlternativesOpen, setIsEmptyResearchAlternativesOpen] = useState(false);
+  const [isEmptyManualResearchOpen, setIsEmptyManualResearchOpen] = useState(false);
   const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
@@ -2028,6 +2029,7 @@ const WatchlistPage: React.FC = () => {
   const [authRequired, setAuthRequired] = useState(false);
   const rowActionMenuRefs = useRef(new Map<number, HTMLDivElement>());
   const rowActionTriggerRefs = useRef(new Map<number, HTMLButtonElement>());
+  const watchlistRequestEpochRef = useRef(0);
 
   const closeRowActions = useCallback((restoreFocus = false) => {
     const trigger = openRowActionsId == null ? null : rowActionTriggerRefs.current.get(openRowActionsId);
@@ -2062,36 +2064,38 @@ const WatchlistPage: React.FC = () => {
     }
   }, [routeContext.market, routeContext.source, routeContext.symbol]);
 
-  useEffect(() => {
+  const loadWatchlistItems = useCallback(async () => {
     if (isGuest) return;
-    let isMounted = true;
+    const requestEpoch = ++watchlistRequestEpochRef.current;
     setAuthRequired(false);
     setIsLoading(true);
-    watchlistApi.listWatchlistItems()
-      .then((response) => {
-        if (!isMounted) return;
-        setAuthRequired(false);
-        setItems(response.items || []);
+    try {
+      const response = await watchlistApi.listWatchlistItems();
+      if (requestEpoch !== watchlistRequestEpochRef.current) return;
+      setAuthRequired(false);
+      setItems(response.items || []);
+      setError(null);
+    } catch (err) {
+      if (requestEpoch !== watchlistRequestEpochRef.current) return;
+      const parsedError = getParsedApiError(err);
+      if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+        setAuthRequired(true);
+        setItems([]);
         setError(null);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        const parsedError = getParsedApiError(err);
-        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
-          setAuthRequired(true);
-          setItems([]);
-          setError(null);
-          return;
-        }
-        setError(parsedError);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
-    return () => {
-      isMounted = false;
-    };
+        return;
+      }
+      setError(parsedError);
+    } finally {
+      if (requestEpoch === watchlistRequestEpochRef.current) setIsLoading(false);
+    }
   }, [isGuest]);
+
+  useEffect(() => {
+    void loadWatchlistItems();
+    return () => {
+      watchlistRequestEpochRef.current += 1;
+    };
+  }, [loadWatchlistItems]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -2705,6 +2709,7 @@ const WatchlistPage: React.FC = () => {
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const hasWatchlistListError = Boolean(error);
   const isWatchlistEmptyWorkspace = !isLoading && !hasWatchlistListError && !authRequired && items.length === 0;
+  const isFilteredEmptyWorkspace = !isWatchlistEmptyWorkspace && filteredItems.length === 0;
   const showWatchlistWorkControls = !isLoading && !isWatchlistEmptyWorkspace && !hasWatchlistListError;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
@@ -2859,11 +2864,6 @@ const WatchlistPage: React.FC = () => {
           </TerminalNotice>
         ) : null}
 
-        {error ? (
-          <TerminalPanel as="section" dense>
-            <ApiErrorAlert error={error} />
-          </TerminalPanel>
-        ) : null}
       </div>
 
       <DenseTableShell data-testid="watchlist-watch-board" variant="board">
@@ -3020,9 +3020,21 @@ const WatchlistPage: React.FC = () => {
               ) : hasWatchlistListError ? (
                 <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
                   <TerminalEmptyState title={language === 'en' ? 'Watchlist temporarily unavailable' : '观察列表暂不可用'}>
-                    {language === 'en'
-                      ? 'The saved-symbol ledger could not be loaded. The empty state is hidden until the service confirms there are no saved rows.'
-                      : '已保存标的台账暂时无法载入。只有服务确认没有保存记录后，才显示空状态。'}
+                    <p>
+                      {language === 'en'
+                        ? 'The saved-symbol ledger could not be loaded. The empty state remains hidden until the service confirms there are no saved rows.'
+                        : '已保存标的台账暂时无法载入。在服务确认没有保存记录前，不显示空状态。'}
+                    </p>
+                    <TerminalButton
+                      type="button"
+                      variant="primary"
+                      data-testid="watchlist-unavailable-retry"
+                      className="mt-3 h-9 px-3 text-xs"
+                      onClick={() => void loadWatchlistItems()}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                      {language === 'en' ? 'Retry loading watchlist' : '重试加载观察列表'}
+                    </TerminalButton>
                   </TerminalEmptyState>
                 </TerminalPanel>
               ) : filteredItems.length > 0 ? (
@@ -3488,17 +3500,46 @@ const WatchlistPage: React.FC = () => {
                 >
                   <div className="grid w-full min-w-0 gap-4">
                     <div className="w-full min-w-0 space-y-1">
-                      <p className="text-xs text-[color:var(--wolfy-text-secondary)]">{copy.emptyTitle}</p>
-                      <p>{copy.emptyBody}</p>
-                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyHelp}</p>
-                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">
-                        {language === 'en'
-                          ? 'After adding, saved candidate evidence and status appear here.'
-                          : '添加后可在这里查看已保存的候选证据与状态。'}
+                      <p className="text-xs text-[color:var(--wolfy-text-secondary)]">
+                        {isWatchlistEmptyWorkspace
+                          ? copy.emptyTitle
+                          : (language === 'en' ? 'No saved symbols match these filters' : '没有已保存标的符合当前筛选')}
                       </p>
-                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
+                      <p>
+                        {isWatchlistEmptyWorkspace
+                          ? copy.emptyBody
+                          : (language === 'en'
+                            ? 'Your saved ledger is still available. Clear the local filters to review every saved symbol again.'
+                            : '已保存台账仍然可用。清除本地筛选后可重新查看全部已保存标的。')}
+                      </p>
+                      {isWatchlistEmptyWorkspace ? (
+                        <>
+                          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyHelp}</p>
+                          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+                            {language === 'en'
+                              ? 'After adding, saved candidate evidence and status appear here.'
+                              : '添加后可在这里查看已保存的候选证据与状态。'}
+                          </p>
+                        </>
+                      ) : null}
                     </div>
                   </div>
+
+                  {isFilteredEmptyWorkspace ? (
+                    <TerminalButton
+                      type="button"
+                      variant="primary"
+                      data-testid="watchlist-reset-filters"
+                      className="h-9 self-start px-3 text-xs"
+                      onClick={() => {
+                        setQuery('');
+                        setMarketFilter('all');
+                        setSourceFilter('all');
+                      }}
+                    >
+                      {language === 'en' ? 'Clear filters' : '清除筛选'}
+                    </TerminalButton>
+                  ) : null}
 
                   {isWatchlistEmptyWorkspace ? (
                     <section
@@ -3509,10 +3550,15 @@ const WatchlistPage: React.FC = () => {
                       <div className="min-w-0">
                         <TerminalChip variant="info">{language === 'en' ? 'First research path' : '首次研究路径'}</TerminalChip>
                         <h3 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                          {language === 'en' ? 'Start with market context or one user-chosen symbol' : '先看市场语境，再选择一个你想观察的代码'}
+                          {language === 'en' ? 'Start with one explicit research action' : '从一个明确的研究动作开始'}
                         </h3>
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                          {language === 'en'
+                            ? 'Run Scanner only when you want a user-triggered candidate set; it does not save a symbol automatically.'
+                            : '只有需要由你触发的候选集合时才运行扫描；它不会自动保存任何标的。'}
+                        </p>
                       </div>
-                      <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                      <div className="mt-3">
                         <a
                           role="button"
                           href={buildLocalizedPath('/scanner', language)}
@@ -3521,64 +3567,38 @@ const WatchlistPage: React.FC = () => {
                         >
                           {language === 'en' ? 'Open Scanner' : '打开扫描器'}
                         </a>
-                        <a
-                          role="button"
-                          href={buildLocalizedPath('/market-overview', language)}
-                          aria-label={language === 'en' ? 'Market Overview first' : '先看市场概览'}
-                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
-                        >
-                          {language === 'en' ? 'Market Overview first' : '先看市场概览'}
-                        </a>
-                        <a
-                          role="button"
-                          href={buildLocalizedPath('/watchlist', language)}
-                          aria-label={language === 'en' ? 'Choose watchlist symbol' : '选择观察标的'}
-                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
-                        >
-                          {language === 'en' ? 'Choose watchlist symbol' : '选择观察标的'}
-                        </a>
-                        <a
-                          role="button"
-                          href={buildLocalizedPath('/research/radar', language)}
-                          aria-label={language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
-                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
-                        >
-                          {language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
-                        </a>
                       </div>
-                      <ul className="mt-3 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                        {(language === 'en'
-                          ? [
-                              'Run scanner only when you want a fresh candidate set.',
-                              'Read the broad market context before choosing a symbol.',
-                              'Use the input below to research one symbol before saving it.',
-                              'Review the radar after scanner or watchlist activity.',
-                            ]
-                          : [
-                              '从研究扫描器添加标的到观察列表。',
-                              '先阅读市场背景，再决定是否继续进入标的研究。',
-                              '用下方输入框先研究一个代码，确认后再保存观察。',
-                              '扫描或观察列表有活动后，再回到研究雷达。',
-                            ]).map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                      <div className="mt-3 space-y-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                        <p>
-                          <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
-                            {language === 'en' ? 'Starter flow: ' : '起步流程：'}
-                          </span>
-                          {language === 'en'
-                            ? 'Open Market Overview. → Research one symbol here. → Run Scanner if you need candidates. → Return to Research Radar after activity.'
-                            : '打开市场概览。 → 在这里研究一个你选择的代码。 → 需要候选集合时再运行 Scanner。 → 有活动后回到研究雷达。'}
-                        </p>
-                        <ul className="space-y-1">
-                          {(language === 'en'
-                            ? ['No symbol is saved automatically.', 'No seeded watchlist item is created.', 'Scanner and account actions stay user-triggered.']
-                            : ['不会自动保存代码。', '不会创建预置观察标的。', '扫描和账户动作都保持用户触发。']).map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
+                      <div
+                        data-testid="watchlist-empty-alternatives"
+                        className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-xs transition-colors hover:border-[color:var(--wolfy-divider)]"
+                      >
+                        <TerminalButton
+                          type="button"
+                          variant="compact"
+                          className="min-h-10 w-full justify-start"
+                          aria-expanded={isEmptyResearchAlternativesOpen}
+                          aria-controls="watchlist-empty-alternatives-panel"
+                          onClick={() => setIsEmptyResearchAlternativesOpen((current) => !current)}
+                        >
+                          {language === 'en' ? 'Other research paths' : '其他研究路径'}
+                        </TerminalButton>
+                        {isEmptyResearchAlternativesOpen ? (
+                          <div id="watchlist-empty-alternatives-panel" className="mt-3">
+                            <div className="flex min-w-0 flex-wrap gap-2">
+                              <a role="button" href={buildLocalizedPath('/market-overview', language)} className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]">
+                                {language === 'en' ? 'Market Overview' : '市场概览'}
+                              </a>
+                              <a role="button" href={buildLocalizedPath('/research/radar', language)} className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]">
+                                {language === 'en' ? 'Research Radar' : '研究雷达'}
+                              </a>
+                            </div>
+                            <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                              {language === 'en'
+                                ? 'No symbol is seeded or saved automatically. You can also research one user-chosen symbol below before deciding whether to monitor it.'
+                                : '不会自动预置或保存标的。你也可先研究一个自行选择的代码，再决定是否持续观察。'}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
                     </section>
                   ) : null}
@@ -3586,47 +3606,60 @@ const WatchlistPage: React.FC = () => {
                   {isWatchlistEmptyWorkspace ? (
                       <div
                         data-testid="watchlist-empty-manual-research"
-                        data-research-path="primary"
                         className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-left"
                       >
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <TerminalChip variant="info">{language === 'en' ? 'Primary research path' : '首选研究路径'}</TerminalChip>
-                          <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
-                            {language === 'en'
-                              ? 'Research one symbol first; save only if you explicitly want to keep monitoring it.'
-                              : '先研究单个代码；只有你明确要继续跟踪时，才再保存到观察列表。'}
-                          </span>
-                        </div>
-                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
-                          {copy.manualResearchLabel}
-                        </label>
-                        <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.manualResearchHelp}</p>
-                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                          <input
-                            id="watchlist-empty-manual-symbol"
-                            data-testid="watchlist-empty-manual-symbol-input"
-                            value={emptyResearchSymbol}
-                            className="h-9 min-w-0 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-3 text-sm font-mono text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
-                            onChange={(event) => setEmptyResearchSymbol(event.target.value)}
-                            aria-label={copy.manualResearchLabel}
-                            placeholder={copy.manualResearchPlaceholder}
-                          />
-                          <TerminalButton
-                            type="button"
-                            variant="primary"
-                            data-testid="watchlist-empty-manual-research-button"
-                            className="h-9 px-3 text-xs"
-                            disabled={!emptyResearchInput || isEmptyResearchPending}
-                            onClick={() => void handleEmptyManualResearch()}
-                          >
-                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                            {isEmptyResearchPending
-                              ? copy.analyzing
-                              : copy.manualResearchButton}
-                          </TerminalButton>
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.savedObservationHelp}</p>
-                        <p className="pt-1 text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
+                        <TerminalButton
+                          type="button"
+                          variant="compact"
+                          className="min-h-10 w-full justify-start"
+                          aria-expanded={isEmptyManualResearchOpen}
+                          aria-controls="watchlist-empty-manual-research-panel"
+                          onClick={() => setIsEmptyManualResearchOpen((current) => !current)}
+                        >
+                          {language === 'en' ? 'Research one symbol instead' : '改为研究单个代码'}
+                        </TerminalButton>
+                        {isEmptyManualResearchOpen ? (
+                          <div id="watchlist-empty-manual-research-panel" className="grid gap-2">
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                              <TerminalChip variant="neutral">{language === 'en' ? 'Optional path' : '可选路径'}</TerminalChip>
+                              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+                                {language === 'en'
+                                  ? 'Research one symbol first; save only if you explicitly want to keep monitoring it.'
+                                  : '先研究单个代码；只有你明确要继续跟踪时，才再保存到观察列表。'}
+                              </span>
+                            </div>
+                            <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
+                              {copy.manualResearchLabel}
+                            </label>
+                            <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.manualResearchHelp}</p>
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                              <input
+                                id="watchlist-empty-manual-symbol"
+                                data-testid="watchlist-empty-manual-symbol-input"
+                                value={emptyResearchSymbol}
+                                className="h-9 min-w-0 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-3 text-sm font-mono text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
+                                onChange={(event) => setEmptyResearchSymbol(event.target.value)}
+                                aria-label={copy.manualResearchLabel}
+                                placeholder={copy.manualResearchPlaceholder}
+                              />
+                              <TerminalButton
+                                type="button"
+                                variant="primary"
+                                data-testid="watchlist-empty-manual-research-button"
+                                className="h-9 px-3 text-xs"
+                                disabled={!emptyResearchInput || isEmptyResearchPending}
+                                onClick={() => void handleEmptyManualResearch()}
+                              >
+                                <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                                {isEmptyResearchPending
+                                  ? copy.analyzing
+                                  : copy.manualResearchButton}
+                              </TerminalButton>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.savedObservationHelp}</p>
+                            <p className="pt-1 text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                 </div>

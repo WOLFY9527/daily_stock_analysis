@@ -2195,7 +2195,7 @@ describe('UserScannerPage', () => {
     });
   });
 
-  it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
+  it('keeps one explicit retry action for no-candidate guidance while preserving the same run parameters', async () => {
     const noCandidateRun = makeCryptoDiagnosticsRun({
       shortlistSize: 8,
       universeSize: 180,
@@ -2243,10 +2243,15 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('本次无可用候选，仅供观察。');
     expect(band).toHaveTextContent('当前无可用候选，先查看淘汰分布或历史记录，再决定是否重新扫描。');
     expect(band).not.toHaveTextContent('先使用候选行作为主证据');
+    const alternatives = within(nextSteps).getByTestId('scanner-workflow-alternatives');
+    expect(alternatives).not.toHaveAttribute('open');
+    expect(within(nextSteps).queryByTestId('scanner-next-step-retry')).not.toBeInTheDocument();
+    fireEvent.click(within(alternatives).getByText('其他研究路径'));
+    expect(alternatives).toHaveAttribute('open');
     expect(nextSteps).toHaveTextContent('下一步');
     expect(nextSteps).toHaveTextContent('换市场或配置');
     expect(nextSteps).toHaveTextContent('查看历史');
-    expect(nextSteps).toHaveTextContent('首选研究路径');
+    expect(nextSteps).toHaveTextContent('手动研究路径');
     expect(nextSteps).toHaveTextContent('可选保存路径');
     expect(nextSteps).toHaveTextContent('Market Overview');
     expect(nextSteps).not.toHaveTextContent('不代表市场没有机会');
@@ -2280,7 +2285,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-history-scope-hint')).toHaveTextContent('个人历史仅基于当前账号可访问的扫描记录');
     expect(screen.getByTestId('scanner-history-scope-hint')).toHaveTextContent('美股');
 
-    fireEvent.click(within(nextSteps).getByRole('button', { name: '重新运行同参数' }));
+    fireEvent.click(runButton);
 
     await waitFor(() => {
       expect(runScan).toHaveBeenCalledWith({
@@ -2338,7 +2343,11 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
-    expect(within(nextSteps).getByTestId('scanner-primary-research-path')).toHaveTextContent('首选研究路径');
+    const alternatives = within(nextSteps).getByTestId('scanner-workflow-alternatives');
+    expect(alternatives).not.toHaveAttribute('open');
+    fireEvent.click(within(alternatives).getByText('其他研究路径'));
+    expect(alternatives).toHaveAttribute('open');
+    expect(within(nextSteps).getByTestId('scanner-manual-research-path')).toHaveTextContent('手动研究路径');
     expect(nextSteps).not.toHaveTextContent('预览候选');
     expect(nextSteps).not.toHaveTextContent('预览不会改变官方入选或评分');
     expect(within(nextSteps).queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
@@ -4376,7 +4385,7 @@ describe('UserScannerPage', () => {
     runScan.mockImplementationOnce(() => new Promise((resolve) => {
       resolveRun = resolve;
     }));
-    getRun.mockResolvedValue(blockedRun);
+    getRun.mockResolvedValue(null);
 
     renderUserScannerPage();
 
@@ -4388,7 +4397,6 @@ describe('UserScannerPage', () => {
     expect(runButton).toBeDisabled();
     expect(runButton).toHaveAttribute('aria-busy', 'true');
     expect(runButton).toHaveTextContent(/扫描中|Scanning/i);
-    expect(screen.getByTestId('scanner-results-panel')).toHaveAttribute('aria-busy', 'true');
     fireEvent.click(runButton);
     expect(runScan).toHaveBeenCalledTimes(1);
 
@@ -4399,6 +4407,7 @@ describe('UserScannerPage', () => {
     });
     expect(screen.getByTestId('scanner-run-feedback')).toHaveTextContent('补齐历史数据后再重试。');
     expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent(/补齐历史数据后再重试|Check the rejection mix or history/i);
+    expect(screen.queryByTestId('scanner-run-button')).not.toBeInTheDocument();
   });
 
   it('keeps Scanner primary controls accessible while exposing labeled AI theme and symbol inputs', async () => {
@@ -4636,6 +4645,14 @@ describe('UserScannerPage', () => {
     expect(conclusion).not.toHaveTextContent(/标的池待更新|Scope stale/);
     expect(conclusion).not.toHaveTextContent(/universe|historical_ohlcv|quote_snapshot/i);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('scanner-primary-action')).toHaveTextContent('扫描数据当前受阻');
+    expect(screen.queryByTestId('scanner-run-button')).not.toBeInTheDocument();
+    expect(runScan).not.toHaveBeenCalled();
+    const alternatives = screen.getByTestId('scanner-workflow-alternatives');
+    expect(alternatives).not.toHaveAttribute('open');
+    fireEvent.click(within(alternatives).getByText('其他研究路径'));
+    expect(alternatives).toHaveAttribute('open');
+    expect(screen.getByTestId('scanner-manual-research-path')).toHaveTextContent('只读研究单个代码');
   });
 
   it('shows the operator data readiness link only for admin users with provider-read access', async () => {
