@@ -54,6 +54,7 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   }
 
   await page.goto('/zh/login');
+  await appExpect(page).toHaveTitle('登录 - WolfyStock');
   await appExpect(page.getByRole('heading', { name: 'WolfyStock 账户登录' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '返回游客模式' }).click();
   await appExpect(page).toHaveURL(/\/zh\/guest$/);
@@ -61,10 +62,26 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await appExpect(page.locator('body')).not.toContainText(/WOLFY AI|INITIALIZING|terminal boot/i);
   await expectNoHorizontalOverflow(page);
 
+  await page.goto('/zh/login');
+  await appExpect(page).toHaveTitle('登录 - WolfyStock');
   await page.goto('/zh/register?redirect=%2Fzh%2Fmarket-overview');
+  await appExpect(page).toHaveTitle('创建账户 - WolfyStock');
   await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
   await appExpect(page.getByRole('heading', { name: '创建账户' })).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByRole('button', { name: '返回游客模式' })).toBeVisible();
+  await page.goBack();
+  await appExpect(page).toHaveTitle('登录 - WolfyStock');
+  await page.goForward();
+  await appExpect(page).toHaveTitle('创建账户 - WolfyStock');
+
+  await page.goto('/en/login');
+  await appExpect(page).toHaveTitle('Login - WolfyStock');
+  await page.goto('/en/register');
+  await appExpect(page).toHaveTitle('Create Account - WolfyStock');
+  await page.goBack();
+  await appExpect(page).toHaveTitle('Login - WolfyStock');
+  await page.goForward();
+  await appExpect(page).toHaveTitle('Create Account - WolfyStock');
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/market-overview');

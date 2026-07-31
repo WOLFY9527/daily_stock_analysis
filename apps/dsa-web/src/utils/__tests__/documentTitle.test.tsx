@@ -13,6 +13,10 @@ function LifecycleHarness() {
   return (
     <>
       <DocumentTitleLifecycle language={language} />
+      <button type="button" onClick={() => navigate('/zh/login')}>Chinese login</button>
+      <button type="button" onClick={() => navigate('/zh/register')}>Chinese register</button>
+      <button type="button" onClick={() => navigate('/en/login')}>English login</button>
+      <button type="button" onClick={() => navigate('/en/register')}>English register</button>
       <button type="button" onClick={() => navigate('/stocks/TSLA/structure-decision')}>TSLA</button>
       <button type="button" onClick={() => navigate('/market-overview')}>Market overview</button>
       <button type="button" onClick={() => navigate('/market/liquidity-monitor')}>Liquidity monitor</button>
@@ -44,6 +48,10 @@ describe('document title route identity', () => {
     ['/admin/evidence', 'en', 'Evidence Workflow - WolfyStock'],
     ['/admin/users/user-42/activity', 'zh', '用户治理 - WolfyStock'],
     ['/guest/scanner', 'en', 'Market Scanner - WolfyStock'],
+    ['/login', 'zh', '登录 - WolfyStock'],
+    ['/register', 'en', 'Create Account - WolfyStock'],
+    ['/zh/register', 'en', '创建账户 - WolfyStock'],
+    ['/en/register', 'zh', 'Create Account - WolfyStock'],
     ['/zh/market-overview', 'en', '市场总览 - WolfyStock'],
     ['/en/market-overview', 'zh', 'Market Overview - WolfyStock'],
     ['/__preview/report', 'en', 'Page Not Found - WolfyStock'],
@@ -79,5 +87,36 @@ describe('document title route identity', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Liquidity monitor' }));
     expect(document.title).toBe('Liquidity Monitor - WolfyStock');
+  });
+
+  it('keeps localized login and registration titles distinct through history restoration', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/login']}>
+        <LifecycleHarness />
+      </MemoryRouter>,
+    );
+
+    expect(document.title).toBe('登录 - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese register' }));
+    expect(document.title).toBe('创建账户 - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(document.title).toBe('登录 - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
+    expect(document.title).toBe('创建账户 - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'English login' }));
+    expect(document.title).toBe('Login - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'English register' }));
+    expect(document.title).toBe('Create Account - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(document.title).toBe('Login - WolfyStock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
+    expect(document.title).toBe('Create Account - WolfyStock');
   });
 });

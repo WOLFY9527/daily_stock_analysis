@@ -33,7 +33,7 @@ const ROUTE_TITLES: Record<string, LocalizedTitle> = {
   '/admin/users': { zh: '用户治理', en: 'User Governance' },
   '/admin/cost-observability': { zh: '成本观测', en: 'Cost Observability' },
   '/login': { zh: '登录', en: 'Login' },
-  '/register': { zh: '登录', en: 'Login' },
+  '/register': { zh: '创建账户', en: 'Create Account' },
   '/reset-password': { zh: '重置密码', en: 'Reset Password' },
 };
 
