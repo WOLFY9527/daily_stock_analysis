@@ -68,6 +68,17 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     os.replace(temporary, path)
 
 
+def _filesystem_path(path: Path) -> Path:
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
 def _quarantine(cache_root: Path, path: Path, label: str) -> Path:
     quarantine = cache_root / "quarantine"
     quarantine.mkdir(parents=True, exist_ok=True)
@@ -129,16 +140,18 @@ def verify_cached_snapshot(snapshot: Path, component: SnapshotComponent) -> dict
     ):
         raise EnvironmentFailure("snapshot_provenance_mismatch", "snapshot installed fingerprint does not match")
     component.verify(snapshot, manifest)
-    if bool(getattr(component, "immutable", False)) and os.name != "nt":
-        for item in (snapshot, *snapshot.rglob("*")):
-            if item.is_symlink():
-                continue
-            try:
+    if bool(getattr(component, "immutable", False)):
+        filesystem_snapshot = _filesystem_path(snapshot)
+        try:
+            items = (filesystem_snapshot, *filesystem_snapshot.rglob("*"))
+            for item in items:
+                if item.is_symlink():
+                    continue
                 writable = item.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-            except OSError as exc:
-                raise EnvironmentFailure("snapshot_immutability_invalid", "snapshot immutability check failed") from exc
-            if writable:
-                raise EnvironmentFailure("snapshot_immutability_invalid", "dependency snapshot is writable")
+                if writable:
+                    raise EnvironmentFailure("snapshot_immutability_invalid", "dependency snapshot is writable")
+        except OSError as exc:
+            raise EnvironmentFailure("snapshot_immutability_invalid", "snapshot immutability check failed") from exc
     return manifest
 
 
@@ -308,20 +321,19 @@ def _build_once(
         raise
 
 
+def _seal_snapshot_entry(path: Path) -> None:
+    if path.is_symlink():
+        return
+    mode = path.stat().st_mode
+    path.chmod(mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
+
+
 def _seal_snapshot(path: Path) -> None:
-    for item in sorted(path.rglob("*"), reverse=True):
-        try:
-            if item.is_symlink():
-                continue
-            mode = item.stat().st_mode
-            if item.is_dir():
-                item.chmod(mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
-            else:
-                item.chmod(mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
-        except OSError:
-            continue
     try:
-        path.chmod(path.stat().st_mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
+        filesystem_path = _filesystem_path(path)
+        for item in sorted(filesystem_path.rglob("*"), reverse=True):
+            _seal_snapshot_entry(item)
+        _seal_snapshot_entry(filesystem_path)
     except OSError as exc:
         raise EnvironmentFailure("snapshot_sealing_failed", "unable to seal dependency snapshot") from exc
 

@@ -4,10 +4,12 @@ import json
 import os
 import shutil
 import stat
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -41,6 +43,7 @@ class FakeComponent:
     promotion_writable: bool | None = None
     verification_paths: list[Path] = field(default_factory=list)
     duplicate_final: bool = False
+    nested_payload: Path | None = None
 
     def build(self, destination: Path, *, offline: bool) -> None:
         self.build_destination = destination
@@ -55,6 +58,10 @@ class FakeComponent:
             self.network_builds += 1
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "payload.txt").write_text("verified-content\n", encoding="utf-8")
+        if self.nested_payload is not None:
+            nested = destination / self.nested_payload
+            nested.parent.mkdir(parents=True)
+            nested.write_text("long-path-content\n", encoding="utf-8")
         if self.fail:
             raise EnvironmentFailure("fixture_install_failed", "fixture install failed")
 
@@ -76,6 +83,41 @@ class FakeComponent:
             (temporary / "payload.txt").write_text("corrupt-after-inspection\n", encoding="utf-8")
         if self.duplicate_final:
             shutil.copytree(temporary, final)
+
+
+def _windows_filesystem_path(path: Path) -> Path:
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
+def _remove_windows_test_tree(path: Path) -> None:
+    def remove_readonly(function: Any, child: str, _error: object) -> None:
+        os.chmod(child, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+        function(child)
+
+    filesystem_path = _windows_filesystem_path(path)
+    if filesystem_path.exists():
+        shutil.rmtree(filesystem_path, onerror=remove_readonly)
+
+
+def _long_windows_snapshot_relative(cache_root: Path) -> Path:
+    promotion = (
+        cache_root
+        / "snapshots"
+        / "python"
+        / f".promotion-{'a' * 12}-{'b' * 32}"
+    )
+    base = Path("Lib") / "site-packages"
+    filename = "payload.txt"
+    padding = 262 - len(str(promotion / base / filename)) - 1
+    relative = base / ("nested-" + "x" * padding) / filename
+    assert len(str(promotion / relative)) >= 261
+    assert len(str(cache_root / "staging" / ("c" * 32) / relative)) < 260
+    return relative
 
 
 def test_corrupt_provenance_manifest_is_rejected_and_rebuilt(tmp_path: Path) -> None:
@@ -172,6 +214,82 @@ def test_immutable_promotion_moves_writable_staging_then_publishes_same_parent(
     if os.name != "nt":
         with pytest.raises(PermissionError):
             (result.path / "payload.txt").write_text("mutation", encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length path semantics")
+def test_windows_long_snapshot_descendant_is_fully_sealed() -> None:
+    cache_root = Path(tempfile.mkdtemp(prefix="wsp-"))
+    component = FakeComponent(immutable=True)
+    component.nested_payload = _long_windows_snapshot_relative(cache_root)
+    try:
+        result = ensure_snapshot(cache_root, component, offline=True)
+        logical_payload = result.path / component.nested_payload
+        filesystem_payload = _windows_filesystem_path(logical_payload)
+
+        assert len(str(logical_payload)) >= 261
+        assert not str(result.path).startswith("\\\\?\\")
+        assert filesystem_payload.is_file()
+        assert not (filesystem_payload.stat().st_mode & stat.S_IWRITE)
+        assert "\\\\?\\" not in (result.path / "provenance.json").read_text(encoding="utf-8")
+        assert verify_cached_snapshot(result.path, component)["installedFingerprint"] == result.installed_fingerprint
+    finally:
+        _remove_windows_test_tree(cache_root)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length path semantics")
+def test_windows_verification_rejects_readonly_root_with_writable_long_descendant() -> None:
+    cache_root = Path(tempfile.mkdtemp(prefix="wsv-"))
+    component = FakeComponent(immutable=True)
+    component.nested_payload = _long_windows_snapshot_relative(cache_root)
+    try:
+        result = ensure_snapshot(cache_root, component, offline=True)
+        filesystem_root = _windows_filesystem_path(result.path)
+        filesystem_payload = _windows_filesystem_path(result.path / component.nested_payload)
+        filesystem_payload.chmod(filesystem_payload.stat().st_mode | stat.S_IWRITE)
+
+        assert not (filesystem_root.stat().st_mode & stat.S_IWRITE)
+        assert filesystem_payload.stat().st_mode & stat.S_IWRITE
+        with pytest.raises(EnvironmentFailure) as raised:
+            verify_cached_snapshot(result.path, component)
+
+        assert raised.value.code == "snapshot_immutability_invalid"
+    finally:
+        _remove_windows_test_tree(cache_root)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length path semantics")
+def test_windows_extended_paths_handle_local_and_unc_without_changing_logical_paths() -> None:
+    local = Path(r"C:\cache\snapshot")
+    unc = Path(r"\\server\share\snapshot")
+    extended = Path(r"\\?\C:\cache\snapshot")
+
+    assert snapshots._filesystem_path(local) == extended
+    assert snapshots._filesystem_path(unc) == Path(r"\\?\UNC\server\share\snapshot")
+    assert snapshots._filesystem_path(extended) == extended
+
+
+def test_child_sealing_failure_is_fatal_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    component = FakeComponent(immutable=True)
+    component_root = tmp_path / "snapshots" / component.name
+    original_seal_entry = snapshots._seal_snapshot_entry
+
+    def fail_payload_seal(path: Path) -> None:
+        if path.name == "payload.txt":
+            raise OSError("fixture child sealing failure")
+        original_seal_entry(path)
+
+    monkeypatch.setattr(snapshots, "_seal_snapshot_entry", fail_payload_seal)
+
+    with pytest.raises(EnvironmentFailure) as raised:
+        ensure_snapshot(tmp_path, component, offline=True)
+
+    assert raised.value.code == "snapshot_sealing_failed"
+    assert not list(component_root.glob("[0-9a-f]" * 64))
+    assert not list(component_root.glob(".promotion-*"))
+    assert any(path.name.startswith("failed-promotion-python-") for path in (tmp_path / "quarantine").iterdir())
 
 
 def test_stale_hidden_promotion_is_quarantined_before_building_snapshot(tmp_path: Path) -> None:

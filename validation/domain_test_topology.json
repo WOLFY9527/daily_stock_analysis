@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7991,
-      "sha256": "74ffe665efce6f5be0ab5cbc300893569a49868f80d7f8ec0c1423d0b1bb3a6c"
+      "count": 7995,
+      "sha256": "3e9e9aec7d919266230469539e460c2c724720de996324a5098417a2f314b551"
     },
     "tests": [
       {
@@ -8194,6 +8194,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_child_sealing_failure_is_fatal_before_publication",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_corrupt_provenance_manifest_is_rejected_and_rebuilt",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -8270,6 +8275,21 @@
       },
       {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_two_concurrent_ensure_operations_converge_on_one_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_windows_extended_paths_handle_local_and_unc_without_changing_logical_paths",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_windows_long_snapshot_descendant_is_fully_sealed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_windows_verification_rejects_readonly_root_with_writable_long_descendant",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
