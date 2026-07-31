@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
-from pathlib import Path
+import shutil
+from pathlib import Path, PurePosixPath
 
 import pytest
 
+from scripts.environment import runtime as environment_runtime
 from scripts.environment.errors import EnvironmentFailure
 from scripts.environment.runtime import (
     cleanup_run,
@@ -21,10 +24,16 @@ MANAGED_PATHS = {
 }
 
 
+def _source_path_with_git(*unreviewed: str) -> str:
+    git = shutil.which("git")
+    assert git is not None
+    return os.pathsep.join((str(Path(git).parent), *unreviewed))
+
+
 def test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifiers(tmp_path: Path) -> None:
     context = create_run_context(tmp_path, run_id="run-projection")
     source = {
-        "PATH": "/host/bin",
+        "PATH": _source_path_with_git("/host/bin"),
         "LANG": "en_US.UTF-8",
         "ALPACA_API_KEY": "provider-secret",
         "AWS_SECRET_ACCESS_KEY": "cloud-secret",
@@ -62,7 +71,7 @@ def test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifie
     assert projected["DATABASE_PATH"] == str(context.database_path)
     assert projected["ENV_FILE"] == str(context.root / "empty.env")
     assert not Path(projected["ENV_FILE"]).exists()
-    assert projected["PATH"].split(os.pathsep)[0] == "/managed/.venv/bin"
+    assert projected["PATH"].split(os.pathsep)[0] == str(Path("/managed/.venv/bin"))
 
 
 def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> None:
@@ -81,11 +90,18 @@ def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> No
 
 def test_windows_process_runtime_is_preserved_without_host_path(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = create_run_context(tmp_path, run_id="run-windows-process")
+    git_directory = tmp_path / "Git Program Files" / "cmd"
+    git_directory.mkdir(parents=True)
+    git_executable = git_directory / ("git.exe" if os.name == "nt" else "git")
+    git_executable.write_bytes(b"fixture")
+    git_executable.chmod(0o700)
+    unreviewed = tmp_path / "unreviewed" / "host"
     source = {
         "COMSPEC": r"C:\Windows\System32\cmd.exe",
-        "PATH": r"C:\unreviewed\host",
+        "PATH": os.pathsep.join((str(git_directory), str(unreviewed))),
         "PATHEXT": ".COM;.EXE;.BAT;.CMD",
         "PROCESSOR_ARCHITECTURE": "AMD64",
         "PROCESSOR_ARCHITEW6432": "AMD64",
@@ -106,7 +122,68 @@ def test_windows_process_runtime_is_preserved_without_host_path(
     assert projected["PROCESSOR_ARCHITECTURE"] == "AMD64"
     assert projected["PROCESSOR_ARCHITEW6432"] == "AMD64"
     assert projected["SYSTEMROOT"] == source["SYSTEMROOT"]
-    assert source["PATH"] not in projected["PATH"]
+    projected_paths = projected["PATH"].split(os.pathsep)
+    if os.name == "nt":
+        assert projected_paths == [
+            str(Path(r"C:\managed\.venv\Scripts")),
+            str(Path(r"C:\managed\node")),
+            str(MANAGED_PATHS["managed_rg_dir"]),
+            str(git_directory),
+            "/usr/bin",
+            "/bin",
+        ]
+        assert Path(shutil.which("git", path=projected["PATH"]) or "").resolve() == (
+            git_executable.resolve()
+        )
+    assert str(unreviewed) not in projected_paths
+    assert [
+        key for key, value in projected.items() if str(git_directory) in str(value)
+    ] == (["PATH"] if os.name == "nt" else [])
+    assert str(git_executable) not in json.dumps(projected, sort_keys=True)
+
+    with monkeypatch.context() as isolated:
+        isolated.setattr(environment_runtime.shutil, "which", lambda *_args, **_kwargs: None)
+        with pytest.raises(EnvironmentFailure) as missing:
+            project_test_environment(
+                source,
+                context,
+                managed_python=Path(r"C:\managed\.venv\Scripts\python.exe"),
+                node_bin=Path(r"C:\managed\node"),
+                command=["python", "-c", "pass"],
+                **MANAGED_PATHS,
+            )
+        assert missing.value.code == "managed_git_missing"
+
+    with monkeypatch.context() as isolated:
+        isolated.setattr(
+            environment_runtime.shutil,
+            "which",
+            lambda *_args, **_kwargs: str(tmp_path / "missing" / "git.exe"),
+        )
+        with pytest.raises(EnvironmentFailure) as unverified:
+            project_test_environment(
+                source,
+                context,
+                managed_python=Path(r"C:\managed\.venv\Scripts\python.exe"),
+                node_bin=Path(r"C:\managed\node"),
+                command=["python", "-c", "pass"],
+                **MANAGED_PATHS,
+            )
+        assert unverified.value.code == "managed_git_missing"
+
+    assert environment_runtime._managed_test_path_entries(
+        managed_python=PurePosixPath("/managed/.venv/bin/python"),
+        node_bin=PurePosixPath("/managed/node/bin"),
+        managed_rg_dir=PurePosixPath("/managed/tools/rg"),
+        git_executable=PurePosixPath("/host/git/bin/git"),
+        platform_name="posix",
+    ) == (
+        "/managed/.venv/bin",
+        "/managed/node/bin",
+        "/managed/tools/rg",
+        "/usr/bin",
+        "/bin",
+    )
 
 
 def test_release_projection_preserves_only_non_secret_identity_controls(tmp_path: Path) -> None:
@@ -174,7 +251,7 @@ def test_profile_defaults_are_deterministic_without_freezing_product_settings(tm
 
     projected = project_test_environment(
         {
-            "PATH": "/unreviewed/bin",
+            "PATH": _source_path_with_git("/unreviewed/bin"),
             "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
             "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
         },
@@ -188,17 +265,19 @@ def test_profile_defaults_are_deterministic_without_freezing_product_settings(tm
     assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED" not in projected
     assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED" not in projected
     assert projected["WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"] == "true"
-    assert projected["PATH"].split(os.pathsep) == [
-        "/managed/.venv/bin",
-        "/managed/node/bin",
-        "/managed/tools/rg",
-        "/usr/bin",
-        "/bin",
+    expected_path = [
+        str(Path("/managed/.venv/bin")),
+        str(Path("/managed/node/bin")),
+        str(Path("/managed/tools/rg")),
     ]
+    if os.name == "nt":
+        expected_path.append(str(Path(shutil.which("git") or "").parent))
+    expected_path.extend(("/usr/bin", "/bin"))
+    assert projected["PATH"].split(os.pathsep) == expected_path
     assert "/unreviewed/bin" not in projected["PATH"]
-    assert projected["PLAYWRIGHT_BROWSERS_PATH"] == "/managed/browsers/chromium-1208"
-    assert projected["WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE"] == (
-        "/managed/browsers/chromium-1208/chrome"
+    assert projected["PLAYWRIGHT_BROWSERS_PATH"] == str(MANAGED_PATHS["browser_path"])
+    assert projected["WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE"] == str(
+        MANAGED_PATHS["browser_executable"]
     )
 
 

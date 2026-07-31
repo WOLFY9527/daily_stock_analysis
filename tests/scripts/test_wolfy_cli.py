@@ -79,7 +79,7 @@ def test_cli_help_exposes_single_canonical_command_surface(monkeypatch, capsys) 
         "WolfyStock is ready\n\n"
         "Frontend: http://127.0.0.1:5173\n"
         "Backend:  http://127.0.0.1:8000\n\n"
-        "Stop: /repo/wolfy dev --stop"
+        f"Stop: {Path('/repo/wolfy')} dev --stop"
     )
     assert _format_development_result(
         {"status": "already_running", "frontendUrl": "http://127.0.0.1:5173", "backendUrl": "http://127.0.0.1:8000"},
@@ -287,6 +287,12 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     tmp_path: Path, monkeypatch
 ) -> None:
     observed: dict[str, object] = {}
+    node = tmp_path / "managed node" / "node.exe"
+    git = tmp_path / "Git Program Files" / "cmd" / "git.exe"
+    node.parent.mkdir(parents=True)
+    git.parent.mkdir(parents=True)
+    node.write_bytes(b"fixture")
+    git.write_bytes(b"fixture")
 
     class Manager:
         cache_root = tmp_path / "cache"
@@ -310,9 +316,12 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
         observed["environment"] = kwargs["env"]
         return subprocess.CompletedProcess(command, 1)
 
+    def which(name, **_kwargs):
+        return str({"node": node, "git": git}[name])
+
     monkeypatch.setenv("ALPACA_API_KEY", "must-not-be-recorded")
     monkeypatch.setattr("scripts.environment.cli.secrets.token_hex", lambda _count: "a" * 16)
-    monkeypatch.setattr("scripts.environment.cli.shutil.which", lambda _name: "/managed/node/bin/node")
+    monkeypatch.setattr("scripts.environment.cli.shutil.which", which)
     monkeypatch.setattr("scripts.environment.cli.managed_python_path", lambda _root: Path("/managed/bin/python"))
     monkeypatch.setattr("scripts.environment.cli.subprocess.run", child)
 
@@ -341,4 +350,7 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     ]
     assert "must-not-be-recorded" not in evidence_path.read_text(encoding="utf-8")
     assert "private-value" not in evidence_path.read_text(encoding="utf-8")
+    assert str(git) not in evidence_path.read_text(encoding="utf-8")
     assert "ALPACA_API_KEY" not in observed["environment"]
+    if os.name == "nt":
+        assert str(git.parent) in observed["environment"]["PATH"].split(os.pathsep)

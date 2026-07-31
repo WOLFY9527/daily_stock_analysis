@@ -186,6 +186,35 @@ def _destructive_postgres_authorized(command: list[str], source: dict[str, str])
     )
 
 
+def _verified_git_executable(source: Mapping[str, str]) -> Path:
+    executable = shutil.which("git", path=source.get("PATH"))
+    if executable is None:
+        raise EnvironmentFailure("managed_git_missing", "Git executable is unavailable")
+    path = Path(executable)
+    try:
+        valid = path.is_file()
+    except OSError:
+        valid = False
+    if not valid:
+        raise EnvironmentFailure("managed_git_missing", "Git executable is unavailable")
+    return path
+
+
+def _managed_test_path_entries(
+    *,
+    managed_python: Path,
+    node_bin: Path,
+    managed_rg_dir: Path,
+    git_executable: Path,
+    platform_name: str,
+) -> tuple[str, ...]:
+    entries = [str(managed_python.parent), str(node_bin), str(managed_rg_dir)]
+    if platform_name == "nt":
+        entries.append(str(git_executable.parent))
+    entries.extend(("/usr/bin", "/bin"))
+    return tuple(entries)
+
+
 def project_test_environment(
     source: dict[str, str],
     context: RunContext,
@@ -198,6 +227,7 @@ def project_test_environment(
     command: list[str],
     config_overrides: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
+    git_executable = _verified_git_executable(source)
     overrides = dict(config_overrides or {})
     if set(overrides).difference(TEST_CONFIG_OVERRIDE_KEYS):
         raise EnvironmentFailure(
@@ -253,12 +283,12 @@ def project_test_environment(
     preserved.update(
         {
             "PATH": os.pathsep.join(
-                (
-                    str(managed_python.parent),
-                    str(node_bin),
-                    str(managed_rg_dir),
-                    "/usr/bin",
-                    "/bin",
+                _managed_test_path_entries(
+                    managed_python=managed_python,
+                    node_bin=node_bin,
+                    managed_rg_dir=managed_rg_dir,
+                    git_executable=git_executable,
+                    platform_name=os.name,
                 )
             ),
             "DATABASE_PATH": str(context.database_path),
