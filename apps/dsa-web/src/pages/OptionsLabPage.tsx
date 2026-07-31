@@ -126,6 +126,9 @@ const OPTIONS_NON_TRADING_INSTRUCTION_COPY = '非交易指令';
 const OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY = '仅观察';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
+const OPTIONS_DEMO_FIXTURE_SOURCE = 'synthetic_options_lab_fixture';
+const OPTIONS_DEMO_FIXTURE_VERSION = 'options_lab_synthetic_v1';
+const OPTIONS_DEMO_FIXTURE_TIMESTAMP = '2026-05-06T13:45:00Z';
 const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 const OPTIONS_IV_GREEKS_LABEL = 'IV / 希腊值';
@@ -730,26 +733,88 @@ const DataQualityBanner: React.FC<{
   summary: OptionsUnderlyingSummaryResponse | null;
   chain: OptionsChainResponse | null;
   decision: OptionsDecisionResponse | null;
-}> = ({ availability, summary, chain, decision }) => {
+  testId?: string;
+  regionLabel?: string;
+  className?: string;
+}> = ({
+  availability,
+  summary,
+  chain,
+  decision,
+  testId = 'options-lab-data-quality-banner',
+  regionLabel = '期权首读',
+  className,
+}) => {
   if (!hasDemoOrStalePayload(summary, chain, decision)) return null;
 
+  const rawSource = chain?.source
+    || chain?.underlying?.source
+    || summary?.underlying?.source
+    || decision?.freshness?.source
+    || null;
+  const snapshotTimestamp = chain?.chainAsOf
+    || chain?.underlying?.asOf
+    || summary?.underlying?.asOf
+    || decision?.freshness?.asOf
+    || '待确认';
+  const demoFingerprint = chain?.optionsStructureSignalPacket?.staleOrDemoBoundary;
+  const isCanonicalDemoFixture = rawSource === OPTIONS_DEMO_FIXTURE_SOURCE || (
+    chain?.symbol === 'TEM'
+    && snapshotTimestamp === OPTIONS_DEMO_FIXTURE_TIMESTAMP
+    && demoFingerprint?.fixtureBacked === true
+    && demoFingerprint?.syntheticData === true
+  );
+  const sourceIdentity = isCanonicalDemoFixture
+    ? OPTIONS_DEMO_FIXTURE_SOURCE
+    : sourceContextLabel(rawSource);
+  const sampleVersionIdentity = isCanonicalDemoFixture
+    ? OPTIONS_DEMO_FIXTURE_VERSION
+    : '未声明';
+
   return (
-    <div
-      data-testid="options-lab-data-quality-banner"
-      className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] px-3 py-3"
+    <aside
+      aria-label={`${regionLabel}演示数据边界`}
+      data-testid={testId}
+      role="note"
+      className={cn(
+        'min-w-0 border-l-2 border-amber-300/55 bg-amber-300/[0.06] px-3 py-3',
+        className,
+      )}
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs font-semibold leading-5 text-amber-100">
+          {regionLabel} · 演示 / 合成数据
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Pill tone="warn">非实时 · 仅观察</Pill>
+          <Pill tone="info">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
         <Pill tone="warn">演示样本</Pill>
         <Pill tone="warn">仅观察 · 非官方实时权威</Pill>
         <Pill tone="warn">波动结构待确认</Pill>
-        <Pill tone="info">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
         <Pill tone="neutral">{availability.freshnessLabel}</Pill>
         <Pill tone="risk">风险边界</Pill>
       </div>
+      <dl className="mt-2 grid min-w-0 gap-x-4 gap-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3">
+        <div className="min-w-0">
+          <dt className="inline font-semibold text-[color:var(--wolfy-text-muted)]">来源：</dt>
+          <dd className="inline break-all font-mono">{sourceIdentity}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="inline font-semibold text-[color:var(--wolfy-text-muted)]">样本版本：</dt>
+          <dd className="inline break-all font-mono">{sampleVersionIdentity}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="inline font-semibold text-[color:var(--wolfy-text-muted)]">快照时间：</dt>
+          <dd className="inline break-all font-mono">{snapshotTimestamp}</dd>
+        </div>
+      </dl>
       <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-        演示或延迟样本仅用于界面与情景验证，不作为官方实时权威或可执行判断依据。
+        仅用于界面与情景验证，不作为官方实时权威或可执行判断依据，也不作为交易信号或执行依据。
       </p>
-    </div>
+    </aside>
   );
 };
 
@@ -1982,6 +2047,7 @@ const ProductHero: React.FC<{
             summary={summary}
             chain={chain}
             decision={decision}
+            className="mt-4"
           />
         </div>
 
@@ -2278,8 +2344,9 @@ const StrategyComparisonPanel: React.FC<{
   chain: OptionsChainResponse | null;
   onRun: () => void;
   runDisabled: boolean;
+  demoBoundary?: React.ReactNode;
   className?: string;
-}> = ({ comparisonState, decision, loading, emptyMessage, chain, onRun, runDisabled, className }) => {
+}> = ({ comparisonState, decision, loading, emptyMessage, chain, onRun, runDisabled, demoBoundary, className }) => {
   const comparison = comparisonState.comparison;
   const comparisonMetadata = comparison?.metadata ?? {};
   const strategies = asArray(comparison?.strategies);
@@ -2299,6 +2366,7 @@ const StrategyComparisonPanel: React.FC<{
   const limitationSummary = summarizeLabels(limitations, limitationLabel);
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-strategy-comparison">
+      {demoBoundary}
       <SectionHeader eyebrow="主工作区" title="观察结构样例" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{freshness ? limitationLabel(String(freshness)) : '等待快照'}</Pill>
@@ -2480,14 +2548,16 @@ const StrategyAnalyzerPanel: React.FC<{
   analyzerState: StrategyAnalyzerState;
   onRun: () => void;
   runDisabled: boolean;
+  demoBoundary?: React.ReactNode;
   className?: string;
-}> = ({ analyzerState, onRun, runDisabled, className }) => {
+}> = ({ analyzerState, onRun, runDisabled, demoBoundary, className }) => {
   const analyses = asArray(analyzerState.analysis?.analyses).slice(0, 3);
   const observationOnly = analyzerState.analysis?.observationOnly !== false;
   const decisionGrade = analyzerState.analysis?.decisionGrade === true;
 
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-strategy-analyzer">
+      {demoBoundary}
       <SectionHeader eyebrow="策略分析" title="策略分析器" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
@@ -2742,8 +2812,9 @@ const DecisionPanel: React.FC<{
   emptyMessage: string | null;
   onRun: () => void;
   runDisabled: boolean;
+  demoBoundary?: React.ReactNode;
   className?: string;
-}> = ({ decisionState, emptyMessage, onRun, runDisabled, className }) => {
+}> = ({ decisionState, emptyMessage, onRun, runDisabled, demoBoundary, className }) => {
   const decision = decisionState.decision;
   const label = decisionStatusLabel(decision);
   const expectedMove = decision?.expectedMove;
@@ -2795,6 +2866,7 @@ const DecisionPanel: React.FC<{
   ];
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
+      {demoBoundary}
       <SectionHeader eyebrow="判断内容" title="情景判断" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone={label === OPTIONS_NO_CONCLUSION_COPY || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
@@ -3663,6 +3735,14 @@ const OptionsLabPageContent: React.FC = () => {
               summary="先确认标的、方向、到期与假设价格，再阅读可用证据与限制。演示或延迟样本保持仅观察，不作为官方实时权威。"
               icon={Search}
             >
+              <DataQualityBanner
+                availability={consumerAvailability}
+                summary={state.summary}
+                chain={state.chain}
+                decision={decisionState.decision}
+                testId="options-lab-input-demo-boundary"
+                regionLabel="情景输入"
+              />
               <AssumptionPanel
                 symbol={symbolInput}
                 direction={direction}
@@ -3702,6 +3782,17 @@ const OptionsLabPageContent: React.FC = () => {
                   chain={state.chain}
                   onRun={() => void runComparison()}
                   runDisabled={!analyticalExecutionReady}
+                  demoBoundary={(
+                    <DataQualityBanner
+                      availability={consumerAvailability}
+                      summary={state.summary}
+                      chain={state.chain}
+                      decision={decisionState.decision}
+                      testId="options-lab-strategy-demo-boundary"
+                      regionLabel="结构比较"
+                      className="mb-4"
+                    />
+                  )}
                   className="xl:col-start-1 xl:row-start-1"
                 />
                 <DecisionPanel
@@ -3709,6 +3800,17 @@ const OptionsLabPageContent: React.FC = () => {
                   emptyMessage={decisionEmptyMessage}
                   onRun={() => void runDecision()}
                   runDisabled={!analyticalExecutionReady}
+                  demoBoundary={(
+                    <DataQualityBanner
+                      availability={consumerAvailability}
+                      summary={state.summary}
+                      chain={state.chain}
+                      decision={decisionState.decision}
+                      testId="options-lab-decision-demo-boundary"
+                      regionLabel="情景判断"
+                      className="mb-4"
+                    />
+                  )}
                   className="xl:col-start-1 xl:row-start-2"
                 />
                 <RiskBoundaryPanel
@@ -3729,6 +3831,17 @@ const OptionsLabPageContent: React.FC = () => {
                   analyzerState={strategyAnalyzerState}
                   onRun={() => void runStrategyAnalysis()}
                   runDisabled={!analyticalExecutionReady}
+                  demoBoundary={(
+                    <DataQualityBanner
+                      availability={consumerAvailability}
+                      summary={state.summary}
+                      chain={state.chain}
+                      decision={decisionState.decision}
+                      testId="options-lab-analysis-demo-boundary"
+                      regionLabel="策略分析"
+                      className="mb-4"
+                    />
+                  )}
                   className="xl:col-start-2 xl:row-start-3"
                 />
                 <ResearchVisualsPanel
@@ -3747,6 +3860,15 @@ const OptionsLabPageContent: React.FC = () => {
                 ) : null}
 
                 <DataWorkbenchFrame className="overflow-hidden xl:col-start-1 xl:row-start-5">
+                  <DataQualityBanner
+                    availability={consumerAvailability}
+                    summary={state.summary}
+                    chain={state.chain}
+                    decision={decisionState.decision}
+                    testId="options-lab-chain-demo-boundary"
+                    regionLabel="期权链"
+                    className="mb-4"
+                  />
                   <SectionHeader eyebrow="链表工作区" title="Call / Put 链" icon={BarChart3} />
                   {state.loading ? (
                     <TerminalNotice variant="info" role="status" aria-busy="true" className="mt-4">正在加载期权链快照...</TerminalNotice>

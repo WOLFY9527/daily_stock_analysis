@@ -25,6 +25,9 @@ const NO_CONCLUSION_LABEL = '数据不足，暂不形成结论';
 const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
 const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
+const OPTIONS_DEMO_FIXTURE_SOURCE = 'synthetic_options_lab_fixture';
+const OPTIONS_DEMO_FIXTURE_VERSION = 'options_lab_synthetic_v1';
+const OPTIONS_DEMO_FIXTURE_TIMESTAMP = '2026-05-06T13:45:00Z';
 const SYNTHETIC_DIAGNOSTIC_MARKERS = /synthetic_provider_url|synthetic_cache_key|synthetic_request_id|synthetic_debug_reason|synthetic_score_trace|synthetic_diagnostic_window|synthetic_provider_payload_label|provider\.example|cache:synth:TEM|req-synth-123|Traceback|scoreContributionAllowed|raw_provider_payload/i;
 const SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS = [
   /synthetic_(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload_label)/i,
@@ -343,8 +346,8 @@ function mockHappyPath(
     underlying: {
       price: 52.34,
       changePct: 1.2,
-      source: 'fixture',
-      asOf: '2026-05-06T09:45:00-04:00',
+      source: OPTIONS_DEMO_FIXTURE_SOURCE,
+      asOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
       freshness: 'mock',
     },
     optionsAvailability: {
@@ -366,8 +369,8 @@ function mockHappyPath(
         dte: 44,
         type: 'monthly',
         chainAvailable: true,
-        asOf: '2026-05-06T09:45:00-04:00',
-        source: 'fixture',
+        asOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
+        source: OPTIONS_DEMO_FIXTURE_SOURCE,
         warnings: ['mocked_chain'],
       },
     ],
@@ -383,8 +386,8 @@ function mockHappyPath(
     underlying: {
       price: 52.34,
       changePct: 1.2,
-      source: 'fixture',
-      asOf: '2026-05-06T09:45:00-04:00',
+      source: OPTIONS_DEMO_FIXTURE_SOURCE,
+      asOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
       freshness: 'mock',
     },
     calls: [
@@ -427,8 +430,8 @@ function mockHappyPath(
       minOpenInterest: 100,
       maxSpreadPct: 20,
     },
-    chainAsOf: '2026-05-06T09:45:00-04:00',
-    source: 'fixture',
+    chainAsOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
+    source: OPTIONS_DEMO_FIXTURE_SOURCE,
     limitations: ['provider_validation_required'],
     metadata: {
       readOnly: true,
@@ -962,6 +965,7 @@ describe('OptionsLabPage', () => {
     const inputRegion = screen.getByTestId('options-lab-input-region');
     expect(inputRegion).toHaveTextContent('情景参数');
     expect(inputRegion).not.toHaveTextContent('这里仅记录研究输入');
+    const inputDemoBoundary = await within(inputRegion).findByTestId('options-lab-input-demo-boundary');
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
     expect(summaryStrip).toHaveTextContent('当前可观察');
@@ -971,6 +975,40 @@ describe('OptionsLabPage', () => {
     const outputRegion = screen.getByTestId('options-lab-output-region');
     expect(outputRegion).toHaveTextContent('分析结果');
     expect(outputRegion).toHaveTextContent('先看结构与风险，再下钻图形和明细');
+    const strategyComparison = screen.getByTestId('options-lab-strategy-comparison');
+    const decisionEngine = screen.getByTestId('options-lab-decision-engine');
+    const strategyAnalyzer = screen.getByTestId('options-lab-strategy-analyzer');
+    const chainPanel = screen.getAllByTestId('options-lab-chain-panel')[0];
+    const completeDemoBoundaries = [
+      inputDemoBoundary,
+      within(strategyComparison).getByTestId('options-lab-strategy-demo-boundary'),
+      within(decisionEngine).getByTestId('options-lab-decision-demo-boundary'),
+      within(strategyAnalyzer).getByTestId('options-lab-analysis-demo-boundary'),
+      screen.getByTestId('options-lab-chain-demo-boundary'),
+    ];
+    completeDemoBoundaries.forEach((boundary) => {
+      expect(boundary).toHaveAttribute('role', 'note');
+      expect(boundary).toHaveTextContent('演示 / 合成数据');
+      expect(boundary).toHaveTextContent(`来源：${OPTIONS_DEMO_FIXTURE_SOURCE}`);
+      expect(boundary).toHaveTextContent(`样本版本：${OPTIONS_DEMO_FIXTURE_VERSION}`);
+      expect(boundary).toHaveTextContent(`快照时间：${OPTIONS_DEMO_FIXTURE_TIMESTAMP}`);
+      expect(boundary).toHaveTextContent('非实时 · 仅观察');
+      expect(boundary).toHaveTextContent('不作为官方实时权威或可执行判断依据，也不作为交易信号或执行依据');
+      expect(boundary).not.toHaveClass('sticky', 'fixed', 'absolute');
+      expect(boundary.className).not.toMatch(/\bz-/);
+    });
+    expect(inputDemoBoundary).toHaveAccessibleName('情景输入演示数据边界');
+    expect(Boolean(inputDemoBoundary.compareDocumentPosition(commandArea) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(within(strategyComparison).getByTestId('options-lab-strategy-demo-boundary').compareDocumentPosition(
+      within(strategyComparison).getByRole('button', { name: '运行结构比较' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(within(decisionEngine).getByTestId('options-lab-decision-demo-boundary').compareDocumentPosition(
+      within(decisionEngine).getByRole('button', { name: '评估情景准备度' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(within(strategyAnalyzer).getByTestId('options-lab-analysis-demo-boundary').compareDocumentPosition(
+      within(strategyAnalyzer).getByRole('button', { name: '运行策略分析' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(screen.getByTestId('options-lab-chain-demo-boundary').compareDocumentPosition(chainPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
     ['期权情景输入', '观察结构样例', '收益边界与 IV 快照', '情景判断', '风险边界', '数据注记', 'Call / Put 链', '流动性与下一步'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
@@ -1123,7 +1161,10 @@ describe('OptionsLabPage', () => {
     const analyzerText = analyzer.textContent || '';
     expect(analyzerText).not.toMatch(/provider|internal|cache|requestId|traceId|rawPayload|debug|probability_model_version|sourceAuthority|scoreAuthority|scoreContributionAllowed/i);
     expect(analyzerText).not.toMatch(/recommended|recommendation|best strategy|winner|optimal|best contract|buy now|sell now|place order|order CTA|position sizing|stop loss|target price|下单|买入|卖出|推荐|最优|首选|赢家/);
-    expect(findConsumerRawLeakage(analyzerText, {
+    const analyzerTrustText = analyzerText
+      .replaceAll(OPTIONS_DEMO_FIXTURE_SOURCE, '')
+      .replaceAll(OPTIONS_DEMO_FIXTURE_VERSION, '');
+    expect(findConsumerRawLeakage(analyzerTrustText, {
       extraForbiddenPatterns: SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS,
     })).toEqual([]);
   });
