@@ -13,6 +13,11 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 
 type LoginLanguage = UiLanguage;
 
+type ClientValidationError = {
+  field: 'username' | 'passwordConfirm';
+  message: string;
+};
+
 type LoginCopy = {
   documentTitle: string;
   shellProductName: string;
@@ -172,6 +177,7 @@ const LoginPage: React.FC = () => {
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
+  const [validationError, setValidationError] = useState<ClientValidationError | null>(null);
   const submitInFlightRef = useRef(false);
 
   const isAdminBootstrap = setupState === 'no_password';
@@ -226,14 +232,17 @@ const LoginPage: React.FC = () => {
       return;
     }
     setError(null);
+    setValidationError(null);
 
     if (!isAdminBootstrap && isCreateUserMode && !username.trim()) {
-      setError(copy.errorUsernameRequired);
+      setValidationError({ field: 'username', message: copy.errorUsernameRequired });
+      document.getElementById('username')?.focus();
       return;
     }
 
     if ((isAdminBootstrap || isCreateUserMode) && password !== passwordConfirm) {
-      setError(copy.errorPasswordMismatch);
+      setValidationError({ field: 'passwordConfirm', message: copy.errorPasswordMismatch });
+      document.getElementById('passwordConfirm')?.focus();
       return;
     }
 
@@ -335,6 +344,7 @@ const LoginPage: React.FC = () => {
                 disabled={isSubmitting}
                 autoFocus
                 autoComplete="username"
+                error={validationError?.field === 'username' ? validationError.message : undefined}
               />
             ) : null}
 
@@ -387,6 +397,7 @@ const LoginPage: React.FC = () => {
                 onChange={(event) => setPasswordConfirm(event.target.value)}
                 disabled={isSubmitting}
                 autoComplete="new-password"
+                error={validationError?.field === 'passwordConfirm' ? validationError.message : undefined}
               />
             ) : null}
 
@@ -429,6 +440,7 @@ const LoginPage: React.FC = () => {
                   }));
                   setPasswordConfirm('');
                   setError(null);
+                  setValidationError(null);
                 }}
                 disabled={isSubmitting}
               >

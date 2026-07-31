@@ -288,12 +288,31 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
-    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
+    const username = screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'));
+    const password = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+    const passwordConfirm = screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel'));
+    const submit = screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') });
+    fireEvent.change(password, { target: { value: 'passwd6' } });
+    fireEvent.change(passwordConfirm, { target: { value: 'passwd6' } });
+    submit.focus();
+    expect(submit).toHaveFocus();
+    fireEvent.click(submit);
 
     expect(await screen.findByText(translate('zh', 'auth.login.errorUsernameRequired'))).toBeInTheDocument();
+    expect(username).toHaveFocus();
+    expect(username).toHaveAttribute('aria-invalid', 'true');
+    expect(username).toHaveAttribute('aria-describedby', expect.stringContaining('username-error'));
+    expect(document.getElementById('username-error')).toHaveAttribute('role', 'alert');
+    expect(password).toHaveValue('passwd6');
+    expect(passwordConfirm).toHaveValue('passwd6');
     expect(login).not.toHaveBeenCalled();
+
+    fireEvent.change(username, { target: { value: 'researcher' } });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    expect(username).not.toHaveAttribute('aria-invalid');
+    expect(document.getElementById('username-error')).toBeNull();
   });
 
   it('surfaces register API errors and re-enables submit controls', async () => {

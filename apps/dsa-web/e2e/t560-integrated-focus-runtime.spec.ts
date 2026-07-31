@@ -240,8 +240,13 @@ test.describe('T560 integrated real-runtime focus authority', () => {
     if (existsSync(staticRoot)) {
       throw new Error('T560 requires an absent canonical static directory before its task-owned build');
     }
-    execFileSync('npm', ['exec', '--', 'vite', 'build', '--outDir', '../../static', '--emptyOutDir'], {
-      cwd: path.join(repoRoot, 'apps/dsa-web'),
+    execFileSync(python, [
+      path.join(repoRoot, 'scripts', 'web_build_artifact.py'),
+      'build',
+      '--repo-root',
+      repoRoot,
+    ], {
+      cwd: repoRoot,
       stdio: ['ignore', 'ignore', 'inherit'],
     });
     taskBuiltStatic = true;
@@ -327,5 +332,47 @@ test.describe('T560 integrated real-runtime focus authority', () => {
     } finally {
       await context.close();
     }
+  });
+
+  test('moves blank registration focus to the invalid field and preserves keyboard correction', async ({ page }) => {
+    const externalRequests: string[] = [];
+    page.setDefaultTimeout(30_000);
+    page.on('request', (request) => {
+      if (new URL(request.url()).origin !== baseUrl) externalRequests.push(request.url());
+    });
+
+    await page.goto(`${baseUrl}/en/register`);
+    const username = page.locator('#username');
+    const password = page.locator('#password');
+    const passwordConfirm = page.locator('#passwordConfirm');
+    const submit = page.locator('button[type="submit"]');
+    await expect(username).toBeVisible({ timeout: 30_000 });
+    await password.fill('t560-mismatch-first');
+    await passwordConfirm.fill('t560-mismatch-second');
+    await submit.focus();
+    await expect(submit).toBeFocused();
+    await submit.click();
+
+    await expect(username).toBeFocused();
+    await expect(username).toHaveAttribute('aria-invalid', 'true');
+    await expect(username).toHaveAttribute('aria-describedby', /username-error/);
+    const usernameError = page.locator('#username-error');
+    await expect(usernameError).toHaveAttribute('role', 'alert');
+    await expect(usernameError).toContainText(/.+/);
+    await expect(password).toHaveValue('t560-mismatch-first');
+    await expect(passwordConfirm).toHaveValue('t560-mismatch-second');
+
+    await page.keyboard.type('t560-registration-user');
+    await submit.click();
+
+    await expect(username).not.toHaveAttribute('aria-invalid');
+    await expect(usernameError).toHaveCount(0);
+    await expect(passwordConfirm).toBeFocused();
+    await expect(passwordConfirm).toHaveAttribute('aria-invalid', 'true');
+    await expect(passwordConfirm).toHaveAttribute('aria-describedby', /passwordConfirm-error/);
+    const passwordConfirmError = page.locator('#passwordConfirm-error');
+    await expect(passwordConfirmError).toHaveAttribute('role', 'alert');
+    await expect(passwordConfirmError).toHaveText('The two password entries do not match');
+    expect(externalRequests).toEqual([]);
   });
 });

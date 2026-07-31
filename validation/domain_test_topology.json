@@ -42278,11 +42278,11 @@
     "inventory": {
       "specCount": 68,
       "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
-      "projectCaseCount": 726,
-      "projectCaseSha256": "588626d2f05212f52ef0f5ad34b293b555834f52d4ccb5bd446d3f4f4978c8c8",
+      "projectCaseCount": 728,
+      "projectCaseSha256": "2cf8ea92a648dc42d4ffbdf26b763b629f6daa5d4e50c7cd10715cba7d8e45b1",
       "projectCaseCounts": {
-        "chromium": 361,
-        "chromium-mobile": 361,
+        "chromium": 362,
+        "chromium-mobile": 362,
         "release-real-runtime": 4
       }
     },
@@ -44780,6 +44780,13 @@
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts::t560-integrated-focus-runtime.spec.ts › T560 integrated real-runtime focus authority › contains focus at 390x844 and restores it across integrated desktop overlays",
+        "spec": "apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts::t560-integrated-focus-runtime.spec.ts › T560 integrated real-runtime focus authority › moves blank registration focus to the invalid field and preserves keyboard correction",
         "spec": "apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts",
         "project": "chromium-mobile",
         "owner": "milestone",
@@ -47307,6 +47314,13 @@
       },
       {
         "id": "chromium::apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts::t560-integrated-focus-runtime.spec.ts › T560 integrated real-runtime focus authority › contains focus at 390x844 and restores it across integrated desktop overlays",
+        "spec": "apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts::t560-integrated-focus-runtime.spec.ts › T560 integrated real-runtime focus authority › moves blank registration focus to the invalid field and preserves keyboard correction",
         "spec": "apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts",
         "project": "chromium",
         "owner": "milestone",
