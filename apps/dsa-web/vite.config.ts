@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
+
+const configRoot = path.dirname(fileURLToPath(import.meta.url))
 
 function getManualChunk(id: string) {
   const normalizedId = id.replace(/\\/g, '/')
@@ -47,7 +50,7 @@ export default defineConfig({
   },
   build: {
     // 打包输出到项目根目录的 static 文件夹
-    outDir: path.resolve(__dirname, '../../static'),
+    outDir: path.resolve(configRoot, '../../static'),
     emptyOutDir: true,
     rollupOptions: {
       output: {

@@ -195,6 +195,58 @@ def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
     assert all(command[-1] != "build" for command in commands)
 
 
+def test_canonical_bundle_uses_non_mutating_runner_config_loader() -> None:
+    source_repo = Path(__file__).resolve().parents[2]
+    package = json.loads((source_repo / "apps" / "dsa-web" / "package.json").read_text(encoding="utf-8"))
+    config = (source_repo / "apps" / "dsa-web" / "vite.config.ts").read_text(encoding="utf-8")
+    assert package["scripts"]["build:bundle"] == "vite build --configLoader runner"
+    assert "fileURLToPath(import.meta.url)" in config
+    assert "__dirname" not in config
+
+
+def test_build_artifact_rejects_managed_dependency_mutation(monkeypatch, tmp_path: Path) -> None:
+    repo, _artifact_path = _write_fixture(tmp_path)
+    playwright_output = repo / "playwright-output"
+    monkeypatch.setenv("WOLFYSTOCK_FRONTEND_OUTPUT_DIR", str(playwright_output))
+    _patch_current(monkeypatch)
+    base_environment = artifact._environment_contract(repo)[0]
+    mutation = repo / "apps" / "dsa-web" / "node_modules" / "unexpected-managed-write.txt"
+
+    def environment_contract(_repo: Path) -> tuple[dict[str, object], list[str]]:
+        errors = ["managed_environment_unverified"] if mutation.exists() else []
+        return base_environment, errors
+
+    def run(_repo: Path, *args: str, capture: bool = True) -> subprocess.CompletedProcess[str]:
+        command = list(args)
+        if "build:bundle" in command:
+            output_dir = Path(command[command.index("--outDir") + 1])
+            (output_dir / "assets").mkdir(parents=True)
+            (output_dir / "index.html").write_text(
+                '<script type="module" src="/assets/index.js"></script>',
+                encoding="utf-8",
+            )
+            (output_dir / "assets" / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+            mutation.parent.mkdir(parents=True)
+            mutation.write_text("injected mutation\n", encoding="utf-8")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(artifact, "_environment_contract", environment_contract)
+    monkeypatch.setattr(artifact, "_run", run)
+    monkeypatch.setattr(
+        "scripts.uat_fresh_build_verifier.write_frontend_build_identity",
+        lambda **_kwargs: VerificationResult(ok=True, payload={}),
+    )
+    monkeypatch.setattr("scripts.uat_fresh_build_verifier.read_backend_info", lambda _repo: object())
+
+    result = artifact.prepare_playwright_artifact(repo, expected_sha="candidate")
+
+    prepared_artifact = playwright_output / artifact.PLAYWRIGHT_ARTIFACT_DIRECTORY / artifact.ARTIFACT_FILENAME
+    assert result.ok is False
+    assert "managed_environment_unverified" in result.error_codes
+    assert mutation.is_file()
+    assert not prepared_artifact.exists()
+
+
 def test_build_artifact_reuses_existing_verified_identity_without_rebuild(monkeypatch, tmp_path: Path) -> None:
     repo, artifact_path = _write_fixture(tmp_path)
     _patch_current(monkeypatch)

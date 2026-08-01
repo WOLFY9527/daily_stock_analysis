@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7995,
-      "sha256": "3e9e9aec7d919266230469539e460c2c724720de996324a5098417a2f314b551"
+      "count": 7997,
+      "sha256": "13fe1c43bb0ca4303c1938e6f9b31e38dd78cf1c3a118bf8b3ae5922901f0ac0"
     },
     "tests": [
       {
@@ -7464,12 +7464,22 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_rejects_managed_dependency_mutation",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_reuses_existing_verified_identity_without_rebuild",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
         "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_uses_temporary_output_and_binds_managed_environment",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_canonical_bundle_uses_non_mutating_runner_config_loader",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
