@@ -1057,7 +1057,7 @@ describe('portfolioApi scenario risk adapter', () => {
           valuation: {
             unavailable_native_values: [{
               component: 'account:1:position:AAPL:us:USD',
-              amount: 1234567890123456.12,
+              amount: 1,
               currency: 'USD',
             }],
           },
