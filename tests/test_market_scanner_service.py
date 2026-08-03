@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
 import unittest
+from contextlib import redirect_stdout
 from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -35,6 +38,10 @@ from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner
 from src.services.market_cache import market_cache
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.r06_nonlive_scanner_fixture import (
+    R06NonliveScannerFixtureContextError,
+    resolve_optional_r06_nonlive_scanner_fixture_context,
+)
 from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvBar,
     HistoricalOhlcvProviderResult,
@@ -51,6 +58,7 @@ from src.services.scanner_universe_lifecycle import (
     activate_scanner_universe_from_source,
 )
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun
+from scripts import seed_r06_nonlive_scanner_fixture
 
 
 def _make_history(
@@ -400,6 +408,43 @@ def _write_local_us_parquet(
     path = cache_dir / f"{symbol.upper()}.parquet"
     pq.write_table(round_tripped, path)
     return path
+
+
+R06_NONLIVE_FIXTURE_DESCRIPTOR = (
+    Path(__file__).resolve().parent / "fixtures" / "scanner" / "r06_nonlive_us_data_ready_v1.json"
+)
+
+
+def _seed_r06_nonlive_fixture(run_root: Path) -> dict[str, str]:
+    stdout = StringIO()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "test",
+                "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true",
+                "WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "false",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "false",
+            },
+            clear=False,
+        ),
+        patch.object(
+            sys,
+            "argv",
+            [
+                "seed_r06_nonlive_scanner_fixture.py",
+                "--run-root",
+                str(run_root),
+                "--descriptor",
+                str(R06_NONLIVE_FIXTURE_DESCRIPTOR),
+            ],
+        ),
+        redirect_stdout(stdout),
+    ):
+        assert seed_r06_nonlive_scanner_fixture.main() == 0
+    payload = json.loads(stdout.getvalue())
+    return {str(key): str(value) for key, value in payload["environment"].items()}
 
 
 class ObservationScannerDataManager(FakeScannerDataManager):
@@ -4369,6 +4414,148 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             MarketScannerService._latest_expected_us_session(after_session),
             date(2026, 7, 17),
         )
+
+    def test_r06_nonlive_fixture_context_is_opt_in_and_rejects_partial_environment(self) -> None:
+        self.assertIsNone(resolve_optional_r06_nonlive_scanner_fixture_context(env={}))
+
+        for partial_environment in (
+            {"WOLFYSTOCK_R06_NONLIVE_SCANNER_FIXTURE_ROOT": "/tmp/r06"},
+            {"WOLFYSTOCK_R06_NONLIVE_SCANNER_FIXTURE_ROOT": ""},
+        ):
+            with self.assertRaises(R06NonliveScannerFixtureContextError) as caught:
+                resolve_optional_r06_nonlive_scanner_fixture_context(env=partial_environment)
+
+            self.assertEqual(caught.exception.code, "fixture_context_incomplete")
+
+    def test_r06_nonlive_fixture_seed_is_hash_bound_and_rejects_tampered_output(self) -> None:
+        run_root = Path(self._cache_temp_dir.name) / "r06-nonlive-fixture"
+        environment = _seed_r06_nonlive_fixture(run_root)
+
+        context = resolve_optional_r06_nonlive_scanner_fixture_context(env=environment)
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context.fixture_id, "r06-nonlive-us-data-ready")
+        self.assertEqual(context.symbols, ("SPY", "AAPL", "NVDA"))
+        self.assertTrue(context.no_external_calls)
+        self.assertFalse(context.provider_calls_enabled)
+
+        output = run_root / "cache" / "AAPL.parquet"
+        output.write_bytes(output.read_bytes() + b"tampered")
+        with self.assertRaises(R06NonliveScannerFixtureContextError) as caught:
+            resolve_optional_r06_nonlive_scanner_fixture_context(env=environment)
+
+        self.assertEqual(caught.exception.code, "output_hash_mismatch")
+
+    def test_r06_nonlive_fixture_context_rejects_live_escape_hatches_and_extra_outputs(self) -> None:
+        run_root = Path(self._cache_temp_dir.name) / "r06-nonlive-fixture-strict-gates"
+        environment = _seed_r06_nonlive_fixture(run_root)
+
+        for overrides, expected_code in (
+            ({"APP_ENV": "production"}, "test_environment_required"),
+            ({"WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": ""}, "live_provider_gate_enabled"),
+            ({"WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "maybe"}, "live_provider_gate_enabled"),
+            ({"WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST": "provider:escape"}, "live_provider_allowlist_not_empty"),
+            ({"US_STOCK_PARQUET_DIR": str(run_root / "other-cache")}, "cache_root_mismatch"),
+        ):
+            with self.assertRaises(R06NonliveScannerFixtureContextError) as caught:
+                resolve_optional_r06_nonlive_scanner_fixture_context(
+                    env={**environment, **overrides}
+                )
+            self.assertEqual(caught.exception.code, expected_code)
+
+        (run_root / "cache" / "unexpected.parquet").write_bytes(b"not a fixture output")
+        with self.assertRaises(R06NonliveScannerFixtureContextError) as caught:
+            resolve_optional_r06_nonlive_scanner_fixture_context(env=environment)
+        self.assertEqual(caught.exception.code, "unexpected_cache_output")
+
+        fresh_run_root = Path(self._cache_temp_dir.name) / "r06-nonlive-fixture-extra-run-output"
+        fresh_environment = _seed_r06_nonlive_fixture(fresh_run_root)
+        (fresh_run_root / "unexpected.txt").write_text("untrusted", encoding="utf-8")
+        with self.assertRaises(R06NonliveScannerFixtureContextError) as caught:
+            resolve_optional_r06_nonlive_scanner_fixture_context(env=fresh_environment)
+        self.assertEqual(caught.exception.code, "unexpected_cache_output")
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "test",
+                    "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true",
+                    "WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST": "",
+                    "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "false",
+                    "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "false",
+                },
+                clear=False,
+            ),
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "seed_r06_nonlive_scanner_fixture.py",
+                    "--run-root",
+                    str(fresh_run_root),
+                    "--descriptor",
+                    str(R06_NONLIVE_FIXTURE_DESCRIPTOR),
+                ],
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "run_root_must_be_new"):
+                seed_r06_nonlive_scanner_fixture.main()
+
+    def test_r06_nonlive_fixture_pre_run_readiness_is_non_live_and_not_run(self) -> None:
+        run_root = Path(self._cache_temp_dir.name) / "r06-nonlive-fixture-readiness"
+        environment = _seed_r06_nonlive_fixture(run_root)
+        with patch.dict(os.environ, environment, clear=False):
+            service = MarketScannerService(self.db, data_manager=FakeUsScannerDataManager())
+            readiness = service.get_operational_status(
+                market="us",
+                profile="us_preopen_v1",
+            )["dataReadiness"]
+
+        self.assertEqual(readiness["state"], "not_run")
+        self.assertTrue(readiness["noExternalCalls"])
+        self.assertFalse(readiness["providerCallsEnabled"])
+        self.assertEqual(readiness["candidateGenerationState"], "not_run")
+
+    def test_r06_nonlive_fixture_context_projects_real_us_cache_as_non_decision_evidence(self) -> None:
+        run_root = Path(self._cache_temp_dir.name) / "r06-nonlive-fixture-service"
+        environment = _seed_r06_nonlive_fixture(run_root)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(os.environ, environment, clear=False), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
+            service = MarketScannerService(self.db, data_manager=data_manager)
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=3,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        remote_history_fetch.assert_not_called()
+        self.assertEqual(detail["status"], "completed")
+        self.assertEqual([item["symbol"] for item in detail["candidates"]], ["AAPL", "NVDA"])
+        self.assertTrue(detail["dataReadiness"]["noExternalCalls"])
+        self.assertFalse(detail["dataReadiness"]["providerCallsEnabled"])
+        self.assertIn("fixture_evidence", detail["dataReadiness"]["candidateGenerationLimitations"])
+        self.assertEqual(detail["dataReadiness"]["state"], "partial")
+        self.assertEqual(detail["dataReadiness"]["availabilityState"], "degraded")
+        self.assertEqual(detail["dataReadiness"]["executionState"], "degraded")
+        self.assertEqual(detail["dataReadiness"]["candidateGenerationState"], "degraded")
+        self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        for candidate in detail["candidates"]:
+            self.assertEqual(candidate["provider"], "fixture")
+            self.assertEqual(resolve_source_type(candidate["provider"]), "synthetic_fixture")
+            source_confidence = detail["diagnostics"]["candidate_diagnostics"][candidate["symbol"]]["score_explainability"]["source_confidence"]
+            self.assertEqual(source_confidence["sourceType"], "synthetic_fixture")
+            self.assertFalse(source_confidence["sourceAuthorityAllowed"])
+            self.assertFalse(source_confidence["scoreContributionAllowed"])
+            self.assertTrue(source_confidence["observationOnly"])
+            self.assertEqual(candidate["consumerDiagnostics"]["sourceConfidenceBucket"], "insufficient")
 
     def test_configured_local_us_parquet_cache_blocks_malformed_columns(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "malformed-us-cache"

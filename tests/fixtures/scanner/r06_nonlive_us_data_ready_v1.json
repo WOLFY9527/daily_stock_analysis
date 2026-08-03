@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "wolfystock.r06.nonlive-us-scanner-fixture.v1",
+  "fixtureId": "r06-nonlive-us-data-ready",
+  "fixtureVersion": "v1",
+  "market": "us",
+  "historyBars": 90,
+  "symbols": [
+    {
+      "symbol": "SPY",
+      "role": "benchmark"
+    },
+    {
+      "symbol": "AAPL",
+      "role": "candidate"
+    },
+    {
+      "symbol": "NVDA",
+      "role": "candidate"
+    }
+  ],
+  "deterministicOhlcvSeed": {
+    "priceStart": "100.00",
+    "priceStep": "0.25",
+    "volumeStart": 30000000,
+    "volumeStep": 1000
+  }
+}

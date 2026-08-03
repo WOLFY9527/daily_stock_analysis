@@ -78,6 +78,11 @@ from src.services.scanner_universe_readiness import (
 from src.services.scanner_universe_lifecycle import build_scanner_universe_lifecycle_readiness
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
+from src.services.r06_nonlive_scanner_fixture import (
+    R06NonliveScannerFixtureContext,
+    R06NonliveScannerFixtureContextError,
+    resolve_optional_r06_nonlive_scanner_fixture_context,
+)
 from src.services.us_ohlcv_coverage_readiness import starter_us_ohlcv_coverage_symbols
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
@@ -833,12 +838,17 @@ class MarketScannerService:
         self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
         self.baostock_cn_history_observation_resolver = baostock_cn_history_observation_resolver
+        self._r06_nonlive_fixture_context = resolve_optional_r06_nonlive_scanner_fixture_context()
+        if self._r06_nonlive_fixture_context is not None and historical_ohlcv_provider is not None:
+            raise R06NonliveScannerFixtureContextError("fixture_cache_provider_unavailable")
         configured_local_us_ohlcv_provider = None
         if historical_ohlcv_provider is None:
             configured_local_us_ohlcv_provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
             historical_ohlcv_provider = configured_local_us_ohlcv_provider
         if historical_ohlcv_provider is None and _scanner_historical_ohlcv_runtime_enabled():
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.data_manager)
+        if self._r06_nonlive_fixture_context is not None and configured_local_us_ohlcv_provider is None:
+            raise R06NonliveScannerFixtureContextError("fixture_cache_provider_unavailable")
         self._uses_configured_local_us_ohlcv_cache = configured_local_us_ohlcv_provider is not None
         self.historical_ohlcv_provider = historical_ohlcv_provider
         self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
@@ -1013,6 +1023,8 @@ class MarketScannerService:
 
     def _active_lifecycle_universe_resolution(self, *, market: str) -> Optional[Dict[str, Any]]:
         normalized_market = str(market or "").strip().lower()
+        if self._r06_nonlive_fixture_context is not None and normalized_market == "us":
+            return None
         readiness = build_scanner_universe_lifecycle_readiness(market=normalized_market)
         if readiness.get("usable") is not True:
             return None
@@ -2426,13 +2438,17 @@ class MarketScannerService:
             "blockedSymbols": blocked_symbols[:50],
         }
 
-    @staticmethod
-    def _bounded_local_us_universe_from_parquet(parquet_dir: Path) -> Dict[str, Any]:
+    def _bounded_local_us_universe_from_parquet(self, parquet_dir: Path) -> Dict[str, Any]:
         configured_key = "LOCAL_US_PARQUET_DIR" if os.getenv("LOCAL_US_PARQUET_DIR", "").strip() else "US_STOCK_PARQUET_DIR"
         symbols: List[str] = []
         try:
             if parquet_dir.exists() and parquet_dir.is_dir():
-                for symbol in BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS:
+                candidate_symbols = (
+                    self._r06_nonlive_fixture_context.symbols
+                    if self._r06_nonlive_fixture_context is not None
+                    else BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS
+                )
+                for symbol in candidate_symbols:
                     if (parquet_dir / f"{symbol}.parquet").exists():
                         symbols.append(symbol)
         except OSError as exc:
@@ -2566,7 +2582,11 @@ class MarketScannerService:
                 "freshnessState": "universe_runtime_input" if runtime_universe_available else "missing_universe",
             }
 
-        lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=market)
+        lifecycle_readiness = (
+            {}
+            if self._r06_nonlive_fixture_context is not None and str(market or "").strip().lower() == "us"
+            else build_scanner_universe_lifecycle_readiness(market=market)
+        )
         if uses_default_universe and lifecycle_readiness.get("usable"):
             existing_metadata = _context_mapping(cache_universe_readiness.get("sourceMetadata"))
             cache_universe_readiness = {
@@ -2612,10 +2632,16 @@ class MarketScannerService:
             snapshot_resolution.get("sourceType"),
             *(quote_snapshot_readiness.get("sourceFamilies") or []),
         ]
+        if (
+            self._r06_nonlive_fixture_context is not None
+            and str(market or "").strip().lower() == "us"
+        ):
+            source_markers.append(self._r06_nonlive_fixture_context.source)
         for candidate in candidate_payloads:
             source_markers.extend((
                 candidate.get("sourceType"), candidate.get("source_type"),
                 candidate.get("quote_source"), candidate.get("quote_source_type"),
+                candidate.get("history_source"),
             ))
 
         return ScannerReadinessEvidence(
@@ -2631,7 +2657,11 @@ class MarketScannerService:
                 for marker in source_markers
                 if str(marker or "").strip()
             ),
-            bounded_us_symbols=BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS,
+            bounded_us_symbols=(
+                self._r06_nonlive_fixture_context.symbols
+                if self._r06_nonlive_fixture_context is not None and str(market or "").strip().lower() == "us"
+                else BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS
+            ),
         )
 
     def _build_data_readiness(
@@ -2654,7 +2684,57 @@ class MarketScannerService:
             evaluated_size=evaluated_size, shortlist_size=shortlist_size,
             diagnostics=diagnostics, summary=summary, candidates=candidates,
         )
-        return serialize_scanner_readiness(evaluate_scanner_readiness(evidence))
+        readiness = serialize_scanner_readiness(evaluate_scanner_readiness(evidence))
+        return self._project_r06_nonlive_fixture_readiness(
+            readiness=readiness,
+            market=market,
+            status=status,
+        )
+
+    def _project_r06_nonlive_fixture_readiness(
+        self,
+        *,
+        readiness: Mapping[str, Any],
+        market: str,
+        status: str,
+    ) -> Dict[str, Any]:
+        """Expose a completed synthetic fixture as degraded, never ready."""
+
+        payload = dict(readiness or {})
+        if (
+            self._r06_nonlive_fixture_context is None
+            or str(market or "").strip().lower() != "us"
+            or str(status or "").strip().lower() != "completed"
+            or payload.get("state") != "blocked"
+        ):
+            return payload
+        allowed_blockers = {
+            "missing_quote_snapshot",
+            "factor_evidence_rejected",
+            "factor_evidence_unavailable",
+            "factor_evidence_insufficient",
+            "factor_evidence_stale",
+        }
+        blockers = {
+            str(item or "").strip().lower()
+            for item in payload.get("candidateGenerationBlockers") or []
+            if str(item or "").strip()
+        }
+        if not blockers or not blockers.issubset(allowed_blockers):
+            return payload
+        limitations = list(payload.get("candidateGenerationLimitations") or [])
+        if "fixture_evidence" not in limitations:
+            limitations.append("fixture_evidence")
+        payload.update(
+            {
+                "state": "partial",
+                "availabilityState": "degraded",
+                "executionState": "degraded",
+                "candidateGenerationState": "degraded",
+                "candidateGenerationLimitations": limitations,
+            }
+        )
+        return payload
 
     def _attach_data_readiness(
         self,
@@ -4334,14 +4414,14 @@ class MarketScannerService:
             "message": None,
         }
 
-    @staticmethod
     def _load_us_history_only_quote_context(
+        self,
         *,
         symbol: str,
         reference_close: Optional[float],
     ) -> Dict[str, Any]:
         _ = symbol, reference_close
-        return {
+        payload = {
             "available": False,
             "status": "not_required",
             "source": "history_only_us_scan",
@@ -4355,6 +4435,17 @@ class MarketScannerService:
             "trace": [],
             "message": "quote unavailable; candidate generated from local historical OHLCV only",
         }
+        if self._r06_nonlive_fixture_context is not None:
+            payload.update(
+                {
+                    "source": self._r06_nonlive_fixture_context.source,
+                    "sourceType": self._r06_nonlive_fixture_context.source_type,
+                    "observationOnly": self._r06_nonlive_fixture_context.observation_only,
+                    "noExternalCalls": self._r06_nonlive_fixture_context.no_external_calls,
+                    "providerCallsEnabled": self._r06_nonlive_fixture_context.provider_calls_enabled,
+                }
+            )
+        return payload
 
     def _build_us_candidate_from_history(
         self,
@@ -6244,7 +6335,7 @@ class MarketScannerService:
                 preselected_size=0,
                 evaluated_size=0,
                 shortlist_size=0,
-                diagnostics={},
+                diagnostics=self._fixture_not_run_diagnostics(market=market),
                 summary={},
                 candidates=[],
             )
@@ -6259,10 +6350,20 @@ class MarketScannerService:
             preselected_size=0,
             evaluated_size=0,
             shortlist_size=selected_count,
-            diagnostics={},
+            diagnostics=self._fixture_not_run_diagnostics(market=market),
             summary={"selected_count": selected_count},
             candidates=[],
         )
+
+    def _fixture_not_run_diagnostics(self, *, market: str) -> Dict[str, Any]:
+        if self._r06_nonlive_fixture_context is None or str(market or "").strip().lower() != "us":
+            return {}
+        return {
+            "sourceType": self._r06_nonlive_fixture_context.source,
+            "noExternalCalls": self._r06_nonlive_fixture_context.no_external_calls,
+            "providerCallsEnabled": self._r06_nonlive_fixture_context.provider_calls_enabled,
+            "fixtureId": self._r06_nonlive_fixture_context.fixture_id,
+        }
 
     def get_default_universe_readiness(self, *, market: str) -> Dict[str, Any]:
         normalized_market = str(market or "").strip().lower()
@@ -8032,6 +8133,11 @@ class MarketScannerService:
                 readiness=readiness,
                 expected_session=expected_session,
             )
+        fixture_context = self._r06_nonlive_fixture_context
+        fixture_source = False
+        if fixture_context is not None and local_cache_readiness is not None:
+            fixture_context.require_expected_session(expected_session)
+            fixture_source = local_cache_readiness.get("state") == "available" and fixture_context.matches_symbol(code)
         latest_trade_date = (
             pd.to_datetime(history_df["date"]).max().date().isoformat()
             if not history_df.empty and "date" in history_df.columns
@@ -8039,7 +8145,9 @@ class MarketScannerService:
         )
         history_diag = {
             "source": (
-                "local_us_parquet_cache"
+                fixture_context.source
+                if fixture_source
+                else "local_us_parquet_cache"
                 if local_cache_readiness is not None
                 else "historical_ohlcv_runtime"
                 if readiness.get("providerState") == "available"
@@ -8053,6 +8161,18 @@ class MarketScannerService:
             "historicalOhlcvReadiness": readiness,
             "unavailable_reason": result.unavailable_reason,
         }
+        if fixture_source:
+            history_diag.update(
+                {
+                    "sourceType": fixture_context.source_type,
+                    "fixtureId": fixture_context.fixture_id,
+                    "fixtureVersion": fixture_context.fixture_version,
+                    "expectedSession": fixture_context.expected_session.isoformat(),
+                    "noExternalCalls": fixture_context.no_external_calls,
+                    "providerCallsEnabled": fixture_context.provider_calls_enabled,
+                    "observationOnly": fixture_context.observation_only,
+                }
+            )
         if local_cache_readiness is not None:
             history_diag["localCacheReadiness"] = local_cache_readiness
             if local_cache_readiness.get("state") != "available":

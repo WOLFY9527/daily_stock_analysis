@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8161,
-      "sha256": "b9e1f8301268703263250aabab5983f0db2114fbafa3396a6a26c34a8da1c356"
+      "count": 8166,
+      "sha256": "f80cd78d2b0ea54008c8b7a1c89b8eda25a22d94b1336d83005a0e6da0f93e13"
     },
     "tests": [
       {
@@ -24102,6 +24102,31 @@
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_quote_snapshot_cache_readiness_can_supply_quote_context_without_live_quotes",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_r06_nonlive_fixture_context_is_opt_in_and_rejects_partial_environment",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_r06_nonlive_fixture_context_projects_real_us_cache_as_non_decision_evidence",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_r06_nonlive_fixture_context_rejects_live_escape_hatches_and_extra_outputs",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_r06_nonlive_fixture_pre_run_readiness_is_non_live_and_not_run",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_r06_nonlive_fixture_seed_is_hash_bound_and_rejects_tampered_output",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_remote_float_history_remains_analytics_available_and_reports_not_persisted",

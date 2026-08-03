@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Response } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,6 +20,7 @@ let backend: ChildProcess | undefined;
 let frontend: ChildProcess | undefined;
 let runtimeDir = '';
 let appUrl = '';
+let backendUrl = '';
 
 test.skip(({ isMobile }) => Boolean(isMobile), 'T676 owns one isolated desktop browser journey.');
 
@@ -50,6 +51,10 @@ type AuthStatus = {
   passwordSet: boolean;
   setupState: string;
   currentUser: CurrentUser | null;
+};
+
+type R06FixtureSeedResult = {
+  environment: Record<string, string>;
 };
 
 async function reservePort(): Promise<number> {
@@ -104,6 +109,66 @@ async function stopProcess(child: ChildProcess | undefined): Promise<void> {
     new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
   ]);
   if (child.exitCode === null) child.kill('SIGKILL');
+}
+
+async function expectAbsent(pathname: string): Promise<void> {
+  try {
+    await access(pathname);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error(`Expected isolated runtime path to be removed: ${pathname}`);
+}
+
+async function seedR06NonliveScannerFixture(runRoot: string): Promise<R06FixtureSeedResult> {
+  const descriptor = path.join(repoRoot, 'tests', 'fixtures', 'scanner', 'r06_nonlive_us_data_ready_v1.json');
+  const seed = spawn(python, [
+    path.join(repoRoot, 'scripts', 'seed_r06_nonlive_scanner_fixture.py'),
+    '--run-root',
+    runRoot,
+    '--descriptor',
+    descriptor,
+  ], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      APP_ENV: 'test',
+      WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS: 'true',
+      WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST: '',
+      WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED: 'false',
+      WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED: 'false',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  seed.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
+  seed.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk));
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    seed.once('error', reject);
+    seed.once('close', (code) => resolve(code ?? 1));
+  });
+  if (exitCode !== 0) {
+    throw new Error(`R06 non-live fixture seed failed with exit ${exitCode}: ${Buffer.concat(stderr).toString('utf8').trim()}`);
+  }
+  let result: unknown;
+  try {
+    result = JSON.parse(Buffer.concat(stdout).toString('utf8'));
+  } catch (error) {
+    throw new Error(`R06 non-live fixture seed emitted invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!result || typeof result !== 'object' || !('environment' in result) || !result.environment || typeof result.environment !== 'object') {
+    throw new Error('R06 non-live fixture seed emitted no environment contract');
+  }
+  const environment = Object.fromEntries(
+    Object.entries(result.environment).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+  if (!environment.WOLFYSTOCK_R06_NONLIVE_SCANNER_FIXTURE_MANIFEST_SHA256) {
+    throw new Error('R06 non-live fixture seed emitted an incomplete environment contract');
+  }
+  return { environment };
 }
 
 async function readAuthStatus(page: Page): Promise<AuthStatus> {
@@ -185,21 +250,24 @@ function isExpectedNavigationAbort(method: string, errorText: string): boolean {
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   runtimeDir = await mkdtemp(path.join(os.tmpdir(), 'wolfystock-t676-browser-'));
+  const fixture = await seedR06NonliveScannerFixture(path.join(runtimeDir, 'r06-nonlive-scanner-fixture'));
   const envPath = path.join(runtimeDir, '.env');
   await writeFile(envPath, [
     'ADMIN_AUTH_ENABLED=false',
     'APP_ENV=test',
     'CRYPTO_REALTIME_ENABLED=false',
     'WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true',
+    'WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST=',
     'WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false',
     'WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false',
     'STOCK_LIST=AAPL',
+    ...Object.entries(fixture.environment).map(([key, value]) => `${key}=${value}`),
   ].join('\n'), 'utf8');
 
   const backendPort = await reservePort();
   let frontendPort = await reservePort();
   while (frontendPort === backendPort) frontendPort = await reservePort();
-  const backendUrl = `http://127.0.0.1:${backendPort}`;
+  backendUrl = `http://127.0.0.1:${backendPort}`;
   appUrl = `http://127.0.0.1:${frontendPort}`;
 
   const viteConfigPath = path.join(runtimeDir, 'vite.t676.config.ts');
@@ -241,8 +309,10 @@ test.beforeAll(async () => {
       LOG_DIR: path.join(runtimeDir, 'logs'),
       POSTGRES_PHASE_A_URL: '',
       WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS: 'true',
+      WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST: '',
       WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED: 'false',
       WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED: 'false',
+      ...fixture.environment,
     },
     stdio: 'ignore',
     windowsHide: true,
@@ -271,7 +341,10 @@ test.afterAll(async () => {
   await stopProcess(frontend);
   await stopProcess(backend);
   if (runtimeDir) {
-    await rm(runtimeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    const completedRuntimeDir = runtimeDir;
+    await rm(completedRuntimeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    await expectAbsent(completedRuntimeDir);
+    runtimeDir = '';
   }
 });
 
@@ -401,32 +474,72 @@ test('creates and restores an ordinary-user session through the real browser jou
   expect(Object.keys(readinessPayload).sort()).toEqual(['dataReadiness', 'market', 'profile']);
   expect(JSON.stringify(readinessPayload)).not.toMatch(/schedule|notification|last_manual|providercallsenabled|operatornextaction|sourcepath/i);
 
+  const usReadinessResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/scanner/readiness')
+      && new URL(response.url()).searchParams.get('market') === 'us'
+      && response.request().method() === 'GET',
+  );
+  await page.getByTestId('scanner-market-toggle').getByRole('button', { name: '美股', exact: true }).click();
+  const usReadinessResponse = await usReadinessResponsePromise;
+  expect(usReadinessResponse.status()).toBe(200);
+  const usReadinessPayload = await usReadinessResponse.json();
+  expect(usReadinessPayload).toMatchObject({
+    market: 'us',
+    profile: 'us_preopen_v1',
+    dataReadiness: { state: 'not_run' },
+  });
+  expect(JSON.stringify(usReadinessPayload)).not.toMatch(/fixture|synthetic|provider|sourcepath|manifest|cache/i);
+
+  const rejectedCrossOriginRun = await page.context().request.post(`${backendUrl}/api/v1/scanner/run`, {
+    headers: { Origin: 'https://untrusted.example.invalid' },
+    data: { market: 'us', profile: 'us_preopen_v1' },
+  });
+  expect(rejectedCrossOriginRun.status()).toBe(403);
+  expect(await rejectedCrossOriginRun.json()).toMatchObject({ error: 'csrf_origin_forbidden' });
+
   const scannerRunButton = page.getByTestId('scanner-run-button');
   await expect(scannerRunButton).toBeVisible();
   await expect(scannerRunButton).toBeEnabled();
+  const scannerRunRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/scanner/run') {
+      scannerRunRequests.push(request.url());
+    }
+  });
   const scannerRunResponsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/v1/scanner/run') && response.request().method() === 'POST',
   );
   await scannerRunButton.click();
   const scannerRunResponse = await scannerRunResponsePromise;
-  expect(scannerRunResponse.status()).toBe(409);
+  expect(scannerRunResponse.status()).toBe(200);
+  expect(scannerRunRequests).toEqual([`${appUrl}/api/v1/scanner/run`]);
+  expect(scannerRunResponse.request().postDataJSON()).toMatchObject({ market: 'us', profile: 'us_preopen_v1' });
   const scannerRunPayload = await scannerRunResponse.json();
   expect(scannerRunPayload).toMatchObject({
-    error: 'scanner_data_not_ready',
-    message: 'Scanner data is insufficient for this request.',
-    detail: {
+    market: 'us',
+    profile: 'us_preopen_v1',
+    status: 'completed',
+    diagnostics: {
       dataReadiness: {
-        scannerUniverseReadiness: {
-          status: 'missing',
-          consumerSafeMessage: '扫描标的池缺失，暂时无法生成候选。',
-        },
+        state: 'partial',
+        candidateGenerationState: 'degraded',
+        candidateGenerationLimitations: expect.arrayContaining(['fixture_evidence']),
       },
     },
   });
-  expect(JSON.stringify(scannerRunPayload)).not.toMatch(/permission|admin|contractversion|providercallsenabled|operatornextaction|sourcepath/i);
+  expect(scannerRunPayload.selected).toEqual([]);
+  expect(scannerRunPayload.shortlist).toEqual([]);
+  expect(scannerRunPayload.candidates).toHaveLength(2);
+  expect(scannerRunPayload.candidates).toEqual(expect.arrayContaining([
+    expect.objectContaining({ consumerDiagnostics: expect.objectContaining({ sourceConfidenceBucket: 'insufficient' }) }),
+  ]));
   const scannerRunFeedback = page.getByTestId('scanner-run-feedback');
-  await expect(scannerRunFeedback).toContainText(/数据不足/);
+  await expect(scannerRunFeedback).toBeVisible();
   await expect(scannerRunFeedback).not.toContainText(/权限|permission/i);
+  await expect(page.getByTestId('scanner-results-panel')).toHaveAttribute(
+    'data-scanner-workspace-state',
+    'blocked',
+  );
   await expectNoAdminNavigation(page);
 
   const watchlistLink = visibleConsumerNav(page).getByRole('link', { name: '观察列表', exact: true });
@@ -479,12 +592,10 @@ test('creates and restores an ordinary-user session through the real browser jou
 
   expect(consoleErrors).toEqual([
     'Failed to load resource: the server responded with a status of 400 (Bad Request)',
-    'Failed to load resource: the server responded with a status of 409 (Conflict)',
   ]);
   expect(pageErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
   expect(httpErrors).toEqual([
     `POST 400 ${appUrl}/api/v1/auth/login`,
-    `POST 409 ${appUrl}/api/v1/scanner/run`,
   ]);
 });
