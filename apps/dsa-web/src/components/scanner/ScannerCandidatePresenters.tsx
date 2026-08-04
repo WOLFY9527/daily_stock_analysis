@@ -496,6 +496,8 @@ export function ScannerCandidateDiagnosticRow({
   candidateResearchSummaryFrame,
   candidateResearchPacket,
   candidateSourceProvenanceFrame,
+  historicalOhlcvAsOf,
+  historicalOhlcvIsFixtureEvidence,
   scoreLabel,
   scoreDelta,
   comparisonLabel,
@@ -540,6 +542,8 @@ export function ScannerCandidateDiagnosticRow({
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
   candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
+  historicalOhlcvAsOf?: string | null;
+  historicalOhlcvIsFixtureEvidence?: boolean;
   scoreLabel: string;
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
@@ -653,6 +657,13 @@ export function ScannerCandidateDiagnosticRow({
             <div role="cell" aria-colindex={7} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Data quality' : '数据质量'}</p>
               <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={dataQualityLabel}>{dataQualityLabel}</p>
+              {historicalOhlcvAsOf ? (
+                <p data-testid={`scanner-candidate-source-as-of-${candidate.symbol}`} className={`mt-1 truncate text-[11px] ${scannerMutedTextClass}`}>
+                  {historicalOhlcvIsFixtureEvidence
+                    ? (language === 'en' ? `Non-live · ${historicalOhlcvAsOf}` : `非实时 · ${historicalOhlcvAsOf}`)
+                    : (language === 'en' ? `Source as of · ${historicalOhlcvAsOf}` : `来源时点 · ${historicalOhlcvAsOf}`)}
+                </p>
+              ) : null}
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip
                   frame={candidateEvidenceFrame}
@@ -708,6 +719,13 @@ export function ScannerCandidateDiagnosticRow({
                 />
               ) : null}
               <p title={dataQualityLabel}>{dataQualityLabel}</p>
+              {historicalOhlcvAsOf ? (
+                <p data-testid={`scanner-candidate-source-as-of-${candidate.symbol}`} className={`text-[11px] ${scannerMutedTextClass}`}>
+                  {historicalOhlcvIsFixtureEvidence
+                    ? (language === 'en' ? `Non-live · ${historicalOhlcvAsOf}` : `非实时 · ${historicalOhlcvAsOf}`)
+                    : (language === 'en' ? `Source as of · ${historicalOhlcvAsOf}` : `来源时点 · ${historicalOhlcvAsOf}`)}
+                </p>
+              ) : null}
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip
                   frame={candidateEvidenceFrame}

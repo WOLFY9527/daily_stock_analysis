@@ -2087,6 +2087,7 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
       reviewWindowDays: 3,
     },
     diagnostics: {},
+    historicalOhlcvReadiness: candidate.historicalOhlcvReadiness,
   };
 }
 
@@ -2103,6 +2104,7 @@ function fallbackDiagnosticFromCandidate(candidate: ScannerCandidate): ScannerCa
     missingFields: [],
     metrics: Object.fromEntries((candidate.keyMetrics || []).map((item) => [item.label, item.value])),
     metadata: {},
+    historicalOhlcvReadiness: candidate.historicalOhlcvReadiness,
   };
 }
 
@@ -4909,6 +4911,8 @@ const UserScannerPage: React.FC = () => {
                                         candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
                                         candidateResearchPacket={sourceCandidateWithEvidence.candidateResearchPacket}
                                         candidateSourceProvenanceFrame={sourceCandidateWithEvidence.candidateSourceProvenanceFrame}
+                                        historicalOhlcvAsOf={sourceCandidate.historicalOhlcvReadiness?.asOf || candidate.historicalOhlcvReadiness?.asOf || null}
+                                        historicalOhlcvIsFixtureEvidence={getRunDetailDataReadiness(activeRunDetail)?.candidateGenerationLimitations?.includes('fixture_evidence') || false}
                                         scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
                                         trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
                                         scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}

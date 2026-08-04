@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.core.scanner_skip_reason import normalize_scanner_skip_reason
+from src.services.scanner_ohlcv_readiness import sanitize_historical_ohlcv_readiness
 
 
 SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}
@@ -97,6 +98,20 @@ _SCANNER_CONSUMER_UNIVERSE_READINESS_FIELDS = frozenset(
         "consumerSafe",
     }
 )
+_SCANNER_RUN_DETAIL_READINESS_FIELDS = frozenset(
+    {
+        "availabilityState",
+        "executionState",
+        "universeReadiness",
+        "quoteReadiness",
+        "historyReadiness",
+        "benchmarkReadiness",
+        "candidateGenerationState",
+        "candidateGenerationBlockers",
+        "missingRequirements",
+    }
+)
+_SCANNER_RUN_DETAIL_READINESS_STATE_FIELDS = frozenset({"state", "reason"})
 _SCANNER_PACKET_FORBIDDEN_TEXT_RE = re.compile(
     r"fallback|trustlevel|reasoncode|launchverdict|consumervisible|advisoryonly|"
     r"liveenforcement|isfallback|isstale|ispartial|sourcetype|"
@@ -167,6 +182,31 @@ def _scanner_sanitize_consumer_value(value: Any) -> Any:
             return None
         return value
     return value
+
+
+def _scanner_consumer_run_data_readiness(value: Any) -> Dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    sanitized = _scanner_sanitize_consumer_value(raw)
+    if not isinstance(sanitized, dict):
+        return {}
+    result = sanitize_scanner_consumer_readiness(raw)
+    for key in _SCANNER_RUN_DETAIL_READINESS_FIELDS:
+        item = sanitized.get(key)
+        if key in {"universeReadiness", "quoteReadiness", "historyReadiness", "benchmarkReadiness"}:
+            if isinstance(item, dict):
+                safe_item = {
+                    field: item[field]
+                    for field in _SCANNER_RUN_DETAIL_READINESS_STATE_FIELDS
+                    if field in item
+                }
+                if safe_item:
+                    result[key] = safe_item
+        elif key in sanitized:
+            result[key] = item
+    limitations = raw.get("candidateGenerationLimitations")
+    if isinstance(limitations, (list, tuple, set)) and "fixture_evidence" in limitations:
+        result["candidateGenerationLimitations"] = ["fixture_evidence"]
+    return result
 
 
 def _scanner_packet_safe_text(value: Any) -> Optional[str]:
@@ -422,8 +462,13 @@ def _scanner_consumer_diagnostics_payload(value: Any) -> Dict[str, Any]:
 def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Project scanner run payloads into the normal-user API contract."""
     result = copy.deepcopy(payload or {})
+    if "dataReadiness" in payload:
+        result["dataReadiness"] = _scanner_consumer_run_data_readiness(payload.get("dataReadiness"))
     if isinstance(result.get("diagnostics"), dict):
         result["diagnostics"] = _scanner_sanitize_consumer_value(result["diagnostics"])
+        diagnostics = payload.get("diagnostics")
+        if isinstance(diagnostics, dict) and "dataReadiness" in diagnostics:
+            result["diagnostics"]["dataReadiness"] = _scanner_consumer_run_data_readiness(diagnostics.get("dataReadiness"))
     for frame_key in ("scannerContextFrame",):
         if isinstance(result.get(frame_key), dict):
             result[frame_key] = _scanner_sanitize_consumer_value(result[frame_key])
@@ -454,7 +499,7 @@ def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]
             item["diagnostics"] = {}
             item["candidateSourceProvenanceFrame"] = {}
             if isinstance(item.get("historicalOhlcvReadiness"), dict):
-                item["historicalOhlcvReadiness"] = _scanner_sanitize_consumer_value(item["historicalOhlcvReadiness"])
+                item["historicalOhlcvReadiness"] = sanitize_historical_ohlcv_readiness(item["historicalOhlcvReadiness"])
             item["suppressCandidateResearchPacket"] = True
             for frame_key in (
                 "candidateEvidenceFrame",
@@ -475,7 +520,7 @@ def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]
             item["metrics"] = {}
             item["cn_provider_observation"] = {}
             if isinstance(item.get("historicalOhlcvReadiness"), dict):
-                item["historicalOhlcvReadiness"] = _scanner_sanitize_consumer_value(item["historicalOhlcvReadiness"])
+                item["historicalOhlcvReadiness"] = sanitize_historical_ohlcv_readiness(item["historicalOhlcvReadiness"])
             item["consumerDiagnostics"] = _scanner_consumer_diagnostics_payload(item.get("consumerDiagnostics"))
     return result
 

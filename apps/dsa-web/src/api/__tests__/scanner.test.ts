@@ -118,6 +118,60 @@ describe('scannerApi investor signal normalization', () => {
     });
   });
 
+  it('keeps only valid date-only candidate source asOf values and drops raw fixture controls', async () => {
+    const { scannerApi } = await import('../scanner');
+    get.mockResolvedValueOnce({
+      data: {
+        id: 46,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        status: 'completed',
+        universe_name: 'US pre-open',
+        shortlist_size: 1,
+        universe_size: 1,
+        preselected_size: 1,
+        evaluated_size: 1,
+        universe_notes: [],
+        scoring_notes: [],
+        universe_type: 'default',
+        requested_symbols_count: 0,
+        accepted_symbols_count: 0,
+        rejected_symbols: [],
+        diagnostics: {
+          data_readiness: {
+            state: 'partial',
+            candidate_generation_limitations: ['fixture_evidence', 'operator_override'],
+            fixture_id: 'r06-nonlive-us-data-ready', fixture_version: 'v1', expected_session: '2026-08-03',
+            no_external_calls: true, provider_calls_enabled: false,
+          },
+        },
+        notification: { attempted: false, status: 'skipped', channels: [] },
+        comparison_to_previous: { available: false, new_count: 0, retained_count: 0, dropped_count: 0, new_symbols: [], retained_symbols: [], dropped_symbols: [] },
+        review_summary: { available: false, review_window_days: 5, review_status: 'pending', candidate_count: 1, reviewed_count: 0, pending_count: 1, strong_count: 0, mixed_count: 0, weak_count: 0 },
+        shortlist: [{
+          symbol: 'NVDA', name: 'NVIDIA', rank: 1, score: 82,
+          historical_ohlcv_readiness: {
+            as_of: '2026-08-01', fixture_id: 'r06-nonlive-us-data-ready', fixture_version: 'v1',
+            expected_session: '2026-08-03', no_external_calls: true, provider_calls_enabled: false,
+          },
+        }],
+        candidates: [{
+          symbol: 'NVDA', name: 'NVIDIA', rank: 1, status: 'selected', score: 82,
+          historical_ohlcv_readiness: {
+            as_of: '2026-02-30', fixture_id: 'r06-nonlive-us-data-ready', provider_calls_enabled: false,
+          },
+        }],
+      },
+    });
+
+    const detail = await scannerApi.getRun(46);
+
+    expect(detail.shortlist[0].historicalOhlcvReadiness).toEqual({ asOf: '2026-08-01' });
+    expect(detail.candidates?.[0].historicalOhlcvReadiness).toBeUndefined();
+    expect(detail.diagnostics.dataReadiness?.candidateGenerationLimitations).toEqual(['fixture_evidence']);
+    expect(JSON.stringify(detail)).not.toMatch(/fixtureId|fixtureVersion|expectedSession|noExternalCalls|providerCallsEnabled|operatorOverride/i);
+  });
+
   it('converts consumer_diagnostics investor_signal into typed camelCase fields', async () => {
     const { scannerApi } = await import('../scanner');
     get.mockResolvedValueOnce({

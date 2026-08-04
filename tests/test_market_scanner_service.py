@@ -38,6 +38,7 @@ from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner
 from src.services.market_cache import market_cache
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.scanner_ohlcv_readiness import sanitize_historical_ohlcv_readiness
 from src.services.r06_nonlive_scanner_fixture import (
     R06NonliveScannerFixtureContextError,
     resolve_optional_r06_nonlive_scanner_fixture_context,
@@ -4547,6 +4548,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["dataReadiness"]["candidateGenerationState"], "degraded")
         self.assertEqual(data_manager.daily_history_calls, [])
         self.assertEqual(data_manager.realtime_quote_calls, [])
+        safe_as_of_values = []
         for candidate in detail["candidates"]:
             self.assertEqual(candidate["provider"], "fixture")
             self.assertEqual(resolve_source_type(candidate["provider"]), "synthetic_fixture")
@@ -4556,6 +4558,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertFalse(source_confidence["scoreContributionAllowed"])
             self.assertTrue(source_confidence["observationOnly"])
             self.assertEqual(candidate["consumerDiagnostics"]["sourceConfidenceBucket"], "insufficient")
+            historical_readiness = candidate["historicalOhlcvReadiness"]
+            safe_readiness = sanitize_historical_ohlcv_readiness(historical_readiness)
+            self.assertEqual(safe_readiness["asOf"], historical_readiness["asOf"])
+            self.assertNotIn("fixtureId", safe_readiness)
+            self.assertNotIn("fixtureVersion", safe_readiness)
+            self.assertNotIn("expectedSession", safe_readiness)
+            safe_as_of_values.append(safe_readiness["asOf"])
+        self.assertEqual(len(set(safe_as_of_values)), 1)
 
     def test_configured_local_us_parquet_cache_blocks_malformed_columns(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "malformed-us-cache"

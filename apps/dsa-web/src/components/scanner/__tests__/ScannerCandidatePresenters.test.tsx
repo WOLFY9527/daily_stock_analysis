@@ -13,7 +13,7 @@ const candidate: ScannerCandidateDiagnostic = {
   reason: 'Relative strength improved.',
 };
 
-function renderDiagnosticRow() {
+function renderDiagnosticRow(sourceAsOf: string | null = '2026-08-01', fixtureEvidence = true) {
   const handlers = {
     onSelect: vi.fn(),
     onAnalyze: vi.fn(),
@@ -39,6 +39,8 @@ function renderDiagnosticRow() {
       watchSummary="等待下一次证据复核。"
       rangeSummary="风险边界待确认。"
       evidenceSummary={null}
+      historicalOhlcvAsOf={sourceAsOf}
+      historicalOhlcvIsFixtureEvidence={fixtureEvidence}
       scoreLabel="88/100"
       statusLabel="已入选"
       watchlistActionLabel="加入观察"
@@ -72,5 +74,30 @@ describe('ScannerCandidateDiagnosticRow', () => {
     fireEvent.click(screen.getByRole('button', { name: '加入观察' }));
     expect(handlers.onTrack).toHaveBeenCalledTimes(1);
     expect(handlers.onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the exact non-live historical source date in desktop and mobile rows without fixture metadata', () => {
+    renderDiagnosticRow('2026-08-01');
+
+    const sourceAsOf = screen.getAllByTestId('scanner-candidate-source-as-of-NVDA');
+    expect(sourceAsOf).toHaveLength(2);
+    sourceAsOf.forEach((item) => expect(item).toHaveTextContent('非实时 · 2026-08-01'));
+    expect(screen.queryByText(/fixture_evidence|fixtureId|r06-nonlive/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps a non-fixture source date neutral instead of calling it non-live', () => {
+    renderDiagnosticRow('2026-08-01', false);
+
+    const sourceAsOf = screen.getAllByTestId('scanner-candidate-source-as-of-NVDA');
+    sourceAsOf.forEach((item) => {
+      expect(item).toHaveTextContent('来源时点 · 2026-08-01');
+      expect(item).not.toHaveTextContent('非实时');
+    });
+  });
+
+  it('omits source freshness when no safe source date is available', () => {
+    renderDiagnosticRow(null);
+
+    expect(screen.queryByTestId('scanner-candidate-source-as-of-NVDA')).not.toBeInTheDocument();
   });
 });

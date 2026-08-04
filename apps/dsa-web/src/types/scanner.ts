@@ -342,6 +342,10 @@ export interface ScannerRunDiagnostics {
 
 export type ScannerCandidateDiagnosticStatus = 'selected' | 'rejected' | 'data_failed' | 'skipped' | 'error' | 'evaluated';
 
+export interface ScannerHistoricalOhlcvReadiness {
+  asOf?: string;
+}
+
 export interface ScannerCandidateDiagnostic {
   symbol: string;
   name?: string | null;
@@ -355,6 +359,7 @@ export interface ScannerCandidateDiagnostic {
   missingFields?: string[];
   metrics?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  historicalOhlcvReadiness?: ScannerHistoricalOhlcvReadiness;
 }
 
 export interface ScannerThemeDiagnostics {
@@ -460,6 +465,7 @@ export interface ScannerCandidate {
   realizedOutcome: ScannerCandidateOutcome;
   diagnostics: ScannerRunDiagnostics;
   consumerDiagnostics?: ScannerConsumerDiagnostics | null;
+  historicalOhlcvReadiness?: ScannerHistoricalOhlcvReadiness;
   candidateEvidenceFrame?: ScannerCandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;

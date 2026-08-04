@@ -233,6 +233,93 @@ def test_scanner_member_readiness_projects_only_consumer_safe_data() -> None:
     for forbidden in ("contractversion", "providercallsenabled", "operatornextaction", "sourcepath", "private/provider", "raw provider"):
         assert forbidden not in serialized_error
 
+    successful_payload = {
+        "id": 99,
+        "market": "us",
+        "profile": "us_preopen_v1",
+        "status": "completed",
+        "universe_name": "us_liquid",
+        "shortlist_size": 1,
+        "universe_size": 1,
+        "preselected_size": 1,
+        "evaluated_size": 1,
+        "dataReadiness": {
+            "state": "partial",
+            "market": "us",
+            "profile": "us_preopen_v1",
+            "candidateGenerationLimitations": ["fixture_evidence", "operator_override"],
+            "fixtureId": "r06-nonlive-us-data-ready",
+            "fixtureVersion": "v1",
+            "expectedSession": "2026-08-03",
+            "noExternalCalls": True,
+            "providerCallsEnabled": False,
+        },
+        "diagnostics": {
+            "dataReadiness": {
+                "state": "partial",
+                "market": "us",
+                "profile": "us_preopen_v1",
+                "candidateGenerationLimitations": ["fixture_evidence", "operator_override"],
+                "fixtureId": "r06-nonlive-us-data-ready",
+                "fixtureVersion": "v1",
+                "expectedSession": "2026-08-03",
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+            },
+        },
+        "shortlist": [{
+            "symbol": "NVDA",
+            "name": "NVIDIA",
+            "rank": 1,
+            "score": 82.0,
+            "factorEvidence": _valid_factor_evidence(),
+            "historicalOhlcvReadiness": {
+                "asOf": "2026-08-01",
+                "fixtureId": "r06-nonlive-us-data-ready",
+                "fixtureVersion": "v1",
+                "expectedSession": "2026-08-03",
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+            },
+        }],
+        "candidates": [{
+            "symbol": "NVDA",
+            "name": "NVIDIA",
+            "rank": 1,
+            "status": "selected",
+            "score": 82.0,
+            "factorEvidence": _valid_factor_evidence(),
+            "historicalOhlcvReadiness": {
+                "asOf": "2026-08-01",
+                "fixtureId": "r06-nonlive-us-data-ready",
+                "fixtureVersion": "v1",
+                "expectedSession": "2026-08-03",
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+            },
+        }],
+    }
+    service.run_manual_scan.side_effect = None
+    service.run_manual_scan.return_value = successful_payload
+    with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+        successful_run = TestClient(app).post("/api/v1/scanner/run", json={"market": "us", "profile": "us_preopen_v1"})
+
+    assert successful_run.status_code == 200
+    service.get_run_detail.return_value = successful_payload
+    with patch("api.v1.endpoints.scanner.MarketScannerService", return_value=service):
+        successful_detail = TestClient(app).get("/api/v1/scanner/runs/99")
+
+    assert successful_detail.status_code == 200
+    for response_payload in (successful_run.json(), successful_detail.json()):
+        candidate_readiness = response_payload["candidates"][0]["historicalOhlcvReadiness"]
+        assert candidate_readiness["asOf"] == "2026-08-01"
+        assert response_payload["shortlist"][0]["historicalOhlcvReadiness"]["asOf"] == "2026-08-01"
+        assert response_payload["dataReadiness"]["candidateGenerationLimitations"] == ["fixture_evidence"]
+        assert response_payload["diagnostics"]["dataReadiness"]["candidateGenerationLimitations"] == ["fixture_evidence"]
+        serialized_success = json.dumps(response_payload).lower()
+        for forbidden in ("fixtureid", "fixtureversion", "expectedsession", "noexternalcalls", "providercallsenabled", "operator_override"):
+            assert forbidden not in serialized_success
+
 
 def test_crypto_mining_theme_registry_has_11_symbols() -> None:
     theme = get_scanner_theme("crypto_miners")
@@ -363,6 +450,15 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
         "universe_size": 1,
         "preselected_size": 1,
         "evaluated_size": 1,
+        "dataReadiness": {
+            "state": "blocked",
+            "candidateGenerationLimitations": ["fixture_evidence", "operator_override"],
+            "fixtureId": "r06-nonlive-us-data-ready",
+            "fixtureVersion": "v1",
+            "expectedSession": "2026-08-03",
+            "noExternalCalls": True,
+            "providerCallsEnabled": False,
+        },
         "diagnostics": {
             "providerName": "LeakyProvider",
             "requestId": "rq-secret",
@@ -394,6 +490,12 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                 },
                 "candidateGenerationState": "blocked",
                 "candidateGenerationBlockers": ["provider_missing", "missing_benchmark"],
+                "candidateGenerationLimitations": ["fixture_evidence", "operator_override"],
+                "fixtureId": "r06-nonlive-us-data-ready",
+                "fixtureVersion": "v1",
+                "expectedSession": "2026-08-03",
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
                 "missingRequirements": ["provider_missing"],
                 "scannerUniverseReadiness": {
                     "contractVersion": "scanner_universe_readiness_v1",
@@ -425,6 +527,7 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                 "rank": 1,
                 "score": 0,
                 "historicalOhlcvReadiness": {
+                    "asOf": "2026-08-01",
                     "contractVersion": "historical_ohlcv_readiness_v1",
                     "symbol": "NVDA",
                     "market": "us",
@@ -448,6 +551,11 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                     "credential": "secret",
                     "env": "SECRET",
                     "PRIVATE_KEY": "secret",
+                    "fixtureId": "r06-nonlive-us-data-ready",
+                    "fixtureVersion": "v1",
+                    "expectedSession": "2026-08-03",
+                    "noExternalCalls": True,
+                    "providerCallsEnabled": False,
                 },
                 "consumerDiagnostics": {
                     "status": "limited",
@@ -479,6 +587,12 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
         "raw_provider_payload",
         "rawpayload",
         "credential",
+        "fixtureid",
+        "fixtureversion",
+        "expectedsession",
+        "noexternalcalls",
+        "providercallsenabled",
+        "operator_override",
     ):
         assert forbidden not in serialized
     assert response["diagnostics"]["dataReadiness"]["universeReadiness"]["state"] == "available"
@@ -487,10 +601,22 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
     assert response["diagnostics"]["dataReadiness"]["quoteReadiness"]["state"] == "missing"
     assert response["diagnostics"]["dataReadiness"]["benchmarkReadiness"]["state"] == "missing"
     assert response["diagnostics"]["dataReadiness"]["candidateGenerationState"] == "blocked"
+    assert response["diagnostics"]["dataReadiness"]["candidateGenerationLimitations"] == ["fixture_evidence"]
+    assert response["dataReadiness"]["candidateGenerationLimitations"] == ["fixture_evidence"]
     readiness = response["shortlist"][0]["historicalOhlcvReadiness"]
+    assert readiness["asOf"] == "2026-08-01"
     assert readiness["providerState"] == "provider_missing"
     assert readiness["requiredBars"] == 70
     assert readiness["missingBars"] == 70
+
+    malformed_readiness = sanitize_scanner_consumer_payload(
+        {
+            "dataReadiness": "not-a-readiness-object",
+            "diagnostics": {"dataReadiness": "not-a-readiness-object"},
+        }
+    )
+    assert malformed_readiness["dataReadiness"] == {}
+    assert malformed_readiness["diagnostics"]["dataReadiness"] == {}
 
 
 def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_fields() -> None:

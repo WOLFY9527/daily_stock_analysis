@@ -42,6 +42,7 @@ export interface ScannerDataReadiness {
   blockerBucket?: string | null;
   consumerSummary?: string | null;
   nextDataAction?: string | null;
+  candidateGenerationLimitations?: Array<'fixture_evidence'>;
 }
 
 export type ScannerRunDetailWithDataReadiness = ScannerRunDetail & {
@@ -110,15 +111,19 @@ function normalizeScannerResearchPacket(value: unknown): ScannerCandidateResearc
 
 function normalizeScannerCandidate(candidate: ScannerCandidate): ScannerCandidate {
   const candidateResearchPacket = normalizeScannerResearchPacket(candidate.candidateResearchPacket);
-  if (!candidateResearchPacket) {
-    const rest = { ...candidate };
+  const historicalOhlcvReadiness = normalizeScannerHistoricalOhlcvReadiness(candidate.historicalOhlcvReadiness);
+  const rest = { ...candidate };
+  if (candidateResearchPacket) {
+    rest.candidateResearchPacket = candidateResearchPacket;
+  } else {
     delete rest.candidateResearchPacket;
-    return rest;
   }
-  return {
-    ...candidate,
-    candidateResearchPacket,
-  };
+  if (historicalOhlcvReadiness) {
+    rest.historicalOhlcvReadiness = historicalOhlcvReadiness;
+  } else {
+    delete rest.historicalOhlcvReadiness;
+  }
+  return rest;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,6 +136,20 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function normalizeScannerHistoricalOhlcvReadiness(value: unknown): { asOf: string } | undefined {
+  if (!isRecord(value) || typeof value.asOf !== 'string') return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.asOf);
+  if (!match) return undefined;
+  const [year, month, day] = match.slice(1).map(Number);
+  const sourceDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    sourceDate.getUTCFullYear() !== year
+    || sourceDate.getUTCMonth() !== month - 1
+    || sourceDate.getUTCDate() !== day
+  ) return undefined;
+  return { asOf: value.asOf };
+}
+
 function normalizeScannerCandidates(candidates: unknown): ScannerCandidate[] {
   if (!Array.isArray(candidates)) return [];
   return candidates
@@ -140,16 +159,59 @@ function normalizeScannerCandidates(candidates: unknown): ScannerCandidate[] {
 
 function normalizeScannerCandidateDiagnostics(value: unknown): ScannerRunDetail['candidates'] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is NonNullable<ScannerRunDetail['candidates']>[number] => (
-    Boolean(item) && typeof item === 'object'
-  ));
+  return value
+    .filter((item): item is NonNullable<ScannerRunDetail['candidates']>[number] => Boolean(item) && typeof item === 'object')
+    .map((candidate) => {
+      const historicalOhlcvReadiness = normalizeScannerHistoricalOhlcvReadiness(candidate.historicalOhlcvReadiness);
+      if (!historicalOhlcvReadiness) {
+        const rest = { ...candidate };
+        delete rest.historicalOhlcvReadiness;
+        return rest;
+      }
+      return { ...candidate, historicalOhlcvReadiness };
+    });
 }
 
 function normalizeScannerDataReadiness(value: unknown): ScannerDataReadiness | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const normalized = toCamelCase<ScannerDataReadiness>(value as Record<string, unknown>);
   if (!normalized.state && !normalized.blockerBucket) return undefined;
-  return normalized;
+  const candidateGenerationLimitations = Array.isArray(normalized.candidateGenerationLimitations)
+    && normalized.candidateGenerationLimitations.includes('fixture_evidence')
+    ? ['fixture_evidence'] as Array<'fixture_evidence'>
+    : undefined;
+  const universeReadiness = normalized.scannerUniverseReadiness;
+  return {
+    state: normalized.state,
+    market: normalized.market,
+    profile: normalized.profile,
+    universeSize: normalized.universeSize,
+    scannerUniverseReadiness: universeReadiness ? {
+      contractVersion: universeReadiness.contractVersion,
+      status: universeReadiness.status,
+      market: universeReadiness.market,
+      universeSize: universeReadiness.universeSize,
+      lastUpdatedAt: universeReadiness.lastUpdatedAt,
+      freshnessState: universeReadiness.freshnessState,
+      requiredDataClasses: asStringArray(universeReadiness.requiredDataClasses),
+      availableDataClasses: asStringArray(universeReadiness.availableDataClasses),
+      missingDataClasses: asStringArray(universeReadiness.missingDataClasses),
+      blockedProductSurfaces: asStringArray(universeReadiness.blockedProductSurfaces),
+      consumerSafeMessage: universeReadiness.consumerSafeMessage,
+      consumerSafe: universeReadiness.consumerSafe,
+    } : undefined,
+    quoteCoverage: normalized.quoteCoverage,
+    historyCoverage: normalized.historyCoverage,
+    freshness: normalized.freshness,
+    candidateEvaluationCount: normalized.candidateEvaluationCount,
+    selectedCount: normalized.selectedCount,
+    rejectedCount: normalized.rejectedCount,
+    failedCount: normalized.failedCount,
+    blockerBucket: normalized.blockerBucket,
+    consumerSummary: normalized.consumerSummary,
+    nextDataAction: normalized.nextDataAction,
+    candidateGenerationLimitations,
+  };
 }
 
 function normalizePaginationCount(value: unknown, fallback: number): number {

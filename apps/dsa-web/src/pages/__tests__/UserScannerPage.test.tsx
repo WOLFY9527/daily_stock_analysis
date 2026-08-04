@@ -1249,6 +1249,63 @@ describe('UserScannerPage', () => {
     });
   });
 
+  it('shows only the candidate historical source date without lifecycle substitution or duplicate row keys', async () => {
+    const sourceAsOf = '2026-08-01';
+    const nvdaDiagnostic = {
+      symbol: 'NVDA',
+      name: 'NVIDIA',
+      rank: 1,
+      status: 'selected' as const,
+      score: 94,
+      reason: 'Candidate source date is available.',
+      historicalOhlcvReadiness: { asOf: sourceAsOf },
+    } as unknown as ScannerRunDetail['candidates'][number];
+    const amdDiagnostic = {
+      symbol: 'AMD',
+      name: 'AMD',
+      rank: 2,
+      status: 'selected' as const,
+      score: 88,
+      reason: 'Candidate source date is available.',
+      historicalOhlcvReadiness: { asOf: sourceAsOf },
+    } as unknown as ScannerRunDetail['candidates'][number];
+    const nvdaCandidate = {
+      ...makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 }),
+      historicalOhlcvReadiness: { asOf: sourceAsOf },
+    } as unknown as ScannerCandidate;
+    const amdCandidate = {
+      ...makeCandidate({ symbol: 'AMD', name: 'AMD', rank: 2, score: 88 }),
+      historicalOhlcvReadiness: { asOf: sourceAsOf },
+    } as unknown as ScannerCandidate;
+    getRun.mockResolvedValue(makeRunDetail({
+      runAt: '2026-08-03T08:30:00Z',
+      completedAt: '2026-08-03T08:31:00Z',
+      diagnostics: {
+        dataReadiness: {
+          state: 'partial',
+          candidateGenerationLimitations: ['fixture_evidence'],
+        },
+      },
+      shortlist: [nvdaCandidate, amdCandidate],
+      selected: [nvdaCandidate, amdCandidate],
+      candidates: [nvdaDiagnostic, amdDiagnostic],
+    }));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 1280 });
+
+    const nvdaRow = await screen.findByTestId('scanner-ranked-row-NVDA');
+    const amdRow = await screen.findByTestId('scanner-ranked-row-AMD');
+    [nvdaRow, amdRow].forEach((row) => {
+      expect(row).toHaveTextContent(sourceAsOf);
+      expect(row).toHaveTextContent('非实时');
+      expect(row).not.toHaveTextContent('2026-08-03T08:30:00Z');
+    });
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AMD']);
+    expect(consoleError.mock.calls.join('\n')).not.toMatch(/unique "key"|same key/i);
+    consoleError.mockRestore();
+  });
+
   it('keeps page load passive while presenting scanner readiness as membership, market-data, and candidate-generation layers', async () => {
     const readinessRun = makeRunDetail();
     readinessRun.diagnostics = {
