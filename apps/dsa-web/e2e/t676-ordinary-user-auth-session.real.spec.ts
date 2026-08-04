@@ -1,28 +1,24 @@
 import { expect, test, type Page, type Response } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { access, lstat, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const webRoot = path.join(repoRoot, 'apps', 'dsa-web');
 const python = process.env.PYTHON || path.join(
   repoRoot,
   '.venv',
   process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
 );
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-let backend: ChildProcess | undefined;
-let frontend: ChildProcess | undefined;
+let runtime: ChildProcess | undefined;
 let runtimeDir = '';
 let appUrl = '';
 let backendUrl = '';
-
-test.skip(({ isMobile }) => Boolean(isMobile), 'T676 owns one isolated desktop browser journey.');
+let canonicalArtifactEntry = '';
 
 type CurrentUser = {
   id: string;
@@ -56,6 +52,146 @@ type AuthStatus = {
 type R06FixtureSeedResult = {
   environment: Record<string, string>;
 };
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireHash(value: unknown, label: string, length: 40 | 64): string {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!new RegExp(`^[0-9a-f]{${length}}$`).test(normalized)) {
+    throw new Error(`${label} must be a ${length}-character lowercase SHA-256/commit digest`);
+  }
+  return normalized;
+}
+
+function requireEnvironmentValue(name: string, length: 40 | 64): string {
+  return requireHash(process.env[name], name, length);
+}
+
+async function assertReadonlyCanonicalArtifactTree(root: string): Promise<void> {
+  const pending = [root];
+  let regularFileCount = 0;
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (!entry) continue;
+    const stat = await lstat(entry);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Canonical Web artifact must not contain symlinks: ${entry}`);
+    }
+    if ((stat.mode & 0o222) !== 0) {
+      throw new Error(`Canonical Web artifact must be immutable: ${entry}`);
+    }
+    if (stat.isDirectory()) {
+      for (const child of await readdir(entry)) pending.push(path.join(entry, child));
+    } else if (stat.isFile()) {
+      regularFileCount += 1;
+    } else {
+      throw new Error(`Canonical Web artifact contains an unsupported node: ${entry}`);
+    }
+  }
+  if (regularFileCount === 0) {
+    throw new Error('Canonical Web artifact must contain regular files');
+  }
+}
+
+async function verifyCurrentCanonicalArtifact(): Promise<void> {
+  if (process.env.DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER !== '1') {
+    throw new Error('DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER=1 is required for the canonical-artifact R06 journey');
+  }
+
+  const expectedCandidateSha = requireEnvironmentValue('WOLFYSTOCK_RELEASE_CANDIDATE_SHA', 40);
+  const expectedEnvironmentFingerprint = requireEnvironmentValue('WOLFYSTOCK_ENV_FINGERPRINT', 64);
+  const observedCandidateSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+  const observedCandidateTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+  if (observedCandidateSha !== expectedCandidateSha) {
+    throw new Error('WOLFYSTOCK_RELEASE_CANDIDATE_SHA does not match the current source candidate');
+  }
+
+  const artifactRoot = path.join(repoRoot, 'static');
+  await assertReadonlyCanonicalArtifactTree(artifactRoot);
+  const marker = requireRecord(
+    JSON.parse(await readFile(path.join(artifactRoot, '.wolfystock-web-build-artifact.json'), 'utf8')),
+    'canonical Web artifact marker',
+  );
+  const candidate = requireRecord(marker.candidate, 'canonical Web artifact candidate');
+  if (
+    requireHash(candidate.commit, 'canonical Web artifact candidate.commit', 40) !== expectedCandidateSha
+    || requireHash(candidate.tree, 'canonical Web artifact candidate.tree', 40) !== observedCandidateTree
+    || candidate.dirty !== false
+  ) {
+    throw new Error('Canonical Web artifact candidate identity does not match the current clean source candidate');
+  }
+
+  const environment = requireRecord(marker.environment, 'canonical Web artifact environment');
+  const managedEnvironment = requireRecord(environment.managed, 'canonical Web artifact managed environment');
+  if (
+    requireHash(managedEnvironment.environmentFingerprint, 'canonical Web artifact environment fingerprint', 64)
+    !== expectedEnvironmentFingerprint
+  ) {
+    throw new Error('Canonical Web artifact environment fingerprint does not match the managed Playwright environment');
+  }
+  requireHash(marker.fingerprint, 'canonical Web artifact fingerprint', 64);
+
+  const index = requireRecord(marker.index, 'canonical Web artifact index');
+  const entries = index.entry;
+  if (!Array.isArray(entries) || entries.length !== 1 || typeof entries[0] !== 'string') {
+    throw new Error('Canonical Web artifact must declare exactly one module entry');
+  }
+  const entry = entries[0];
+  if (!entry.startsWith('/assets/') || entry.includes('..')) {
+    throw new Error('Canonical Web artifact module entry is not a contained asset path');
+  }
+
+  const buildIdentity = requireRecord(
+    JSON.parse(await readFile(path.join(artifactRoot, '.wolfystock-build-identity.json'), 'utf8')),
+    'canonical Web build identity',
+  );
+  if (
+    buildIdentity.contract !== 'wolfystock_frontend_build_identity_v1'
+    || requireHash(buildIdentity.gitSha, 'canonical Web build identity gitSha', 40) !== expectedCandidateSha
+    || buildIdentity.repositoryRoot !== repoRoot
+    || buildIdentity.mainJsAssetFilename !== path.posix.basename(entry)
+  ) {
+    throw new Error('Canonical Web build identity does not match the marker entry and current candidate');
+  }
+  const assets = marker.assets;
+  if (!Array.isArray(assets)) {
+    throw new Error('Canonical Web artifact assets must be an array');
+  }
+  const entryAsset = assets
+    .map((asset) => requireRecord(asset, 'canonical Web artifact asset'))
+    .find((asset) => asset.path === entry.slice(1));
+  if (!entryAsset || requireHash(entryAsset.sha256, 'canonical Web artifact entry asset SHA-256', 64)
+    !== requireHash(buildIdentity.mainJsAssetSha256, 'canonical Web build identity mainJsAssetSha256', 64)) {
+    throw new Error('Canonical Web module entry does not match the build identity');
+  }
+
+  const verification = requireRecord(
+    JSON.parse(execFileSync(python, [
+      path.join(repoRoot, 'scripts', 'web_build_artifact.py'),
+      'verify-runtime',
+      '--artifact',
+      'static/.wolfystock-web-build-artifact.json',
+      '--expected-sha',
+      expectedCandidateSha,
+      '--json',
+    ], {
+      cwd: repoRoot,
+      env: process.env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })),
+    'canonical Web artifact verification result',
+  );
+  if (verification.ok !== true) {
+    throw new Error('Canonical Web artifact verify-runtime did not pass');
+  }
+  canonicalArtifactEntry = entry;
+}
 
 async function reservePort(): Promise<number> {
   const server = net.createServer();
@@ -108,7 +244,13 @@ async function stopProcess(child: ChildProcess | undefined): Promise<void> {
     new Promise<void>((resolve) => child.once('exit', () => resolve())),
     new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
   ]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  if (child.exitCode === null) {
+    child.kill('SIGKILL');
+    await Promise.race([
+      new Promise<void>((resolve) => child.once('exit', () => resolve())),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]);
+  }
 }
 
 async function expectAbsent(pathname: string): Promise<void> {
@@ -119,6 +261,40 @@ async function expectAbsent(pathname: string): Promise<void> {
     throw error;
   }
   throw new Error(`Expected isolated runtime path to be removed: ${pathname}`);
+}
+
+async function expectHttpUnavailable(url: string): Promise<void> {
+  const unavailable = await fetch(url).then(() => false).catch(() => true);
+  if (!unavailable) {
+    throw new Error(`Expected task-owned runtime listener to be stopped: ${url}`);
+  }
+}
+
+function candidateAsOf(payload: unknown, symbol: string): string {
+  const candidates = requireRecord(payload, 'scanner run payload').candidates;
+  if (!Array.isArray(candidates)) throw new Error('Scanner run payload candidates must be an array');
+  const candidate = candidates
+    .map((item) => requireRecord(item, 'scanner candidate'))
+    .find((item) => item.symbol === symbol);
+  if (!candidate) throw new Error(`Scanner run payload is missing ${symbol}`);
+  const readiness = requireRecord(candidate.historicalOhlcvReadiness, `${symbol} historicalOhlcvReadiness`);
+  const asOf = typeof readiness.asOf === 'string' ? readiness.asOf : '';
+  const parsedAsOf = new Date(`${asOf}T00:00:00Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(asOf)
+    || Number.isNaN(parsedAsOf.getTime())
+    || parsedAsOf.toISOString().slice(0, 10) !== asOf
+  ) {
+    throw new Error(`${symbol} historicalOhlcvReadiness.asOf must be a valid date-only source timestamp`);
+  }
+  return asOf;
+}
+
+function lifecycleTimestamps(payload: unknown): string[] {
+  const run = requireRecord(payload, 'scanner run payload');
+  return ['runAt', 'completedAt', 'generatedAt']
+    .map((key) => run[key])
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 async function seedR06NonliveScannerFixture(runRoot: string): Promise<R06FixtureSeedResult> {
@@ -249,6 +425,7 @@ function isExpectedNavigationAbort(method: string, errorText: string): boolean {
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
+  await verifyCurrentCanonicalArtifact();
   runtimeDir = await mkdtemp(path.join(os.tmpdir(), 'wolfystock-t676-browser-'));
   const fixture = await seedR06NonliveScannerFixture(path.join(runtimeDir, 'r06-nonlive-scanner-fixture'));
   const envPath = path.join(runtimeDir, '.env');
@@ -264,38 +441,17 @@ test.beforeAll(async () => {
     ...Object.entries(fixture.environment).map(([key, value]) => `${key}=${value}`),
   ].join('\n'), 'utf8');
 
-  const backendPort = await reservePort();
-  let frontendPort = await reservePort();
-  while (frontendPort === backendPort) frontendPort = await reservePort();
-  backendUrl = `http://127.0.0.1:${backendPort}`;
-  appUrl = `http://127.0.0.1:${frontendPort}`;
+  const port = await reservePort();
+  backendUrl = `http://127.0.0.1:${port}`;
+  appUrl = backendUrl;
 
-  const viteConfigPath = path.join(runtimeDir, 'vite.t676.config.ts');
-  await writeFile(viteConfigPath, [
-    `import base from ${JSON.stringify(path.join(webRoot, 'vite.config.ts'))}`,
-    'export default {',
-    '  ...base,',
-    `  cacheDir: ${JSON.stringify(path.join(runtimeDir, 'vite-cache'))},`,
-    '  server: {',
-    '    ...(base.server || {}),',
-    "    host: '127.0.0.1',",
-    `    port: ${frontendPort},`,
-    '    strictPort: true,',
-    `    proxy: { '/api': { target: ${JSON.stringify(backendUrl)}, changeOrigin: true } },`,
-    '  },',
-    '}',
-  ].join('\n'), 'utf8');
-
-  backend = spawn(python, [
-    '-m',
-    'uvicorn',
-    'api.app:app',
+  runtime = spawn(python, [
+    path.join(repoRoot, 'main.py'),
+    '--serve-only',
     '--host',
     '127.0.0.1',
     '--port',
-    String(backendPort),
-    '--log-level',
-    'warning',
+    String(port),
   ], {
     cwd: repoRoot,
     detached: process.platform !== 'win32',
@@ -317,29 +473,12 @@ test.beforeAll(async () => {
     stdio: 'ignore',
     windowsHide: true,
   });
-  await waitForHttp(`${backendUrl}/api/health/live`, [backend]);
-
-  frontend = spawn(npm, [
-    '--prefix',
-    webRoot,
-    'run',
-    'dev',
-    '--',
-    '--config',
-    viteConfigPath,
-  ], {
-    cwd: repoRoot,
-    detached: process.platform !== 'win32',
-    env: process.env,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
-  await waitForHttp(appUrl, [backend, frontend]);
+  await waitForHttp(`${backendUrl}/api/health/live`, [runtime]);
 });
 
 test.afterAll(async () => {
-  await stopProcess(frontend);
-  await stopProcess(backend);
+  await stopProcess(runtime);
+  if (backendUrl) await expectHttpUnavailable(`${backendUrl}/api/health/live`);
   if (runtimeDir) {
     const completedRuntimeDir = runtimeDir;
     await rm(completedRuntimeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
@@ -354,6 +493,8 @@ test('creates and restores an ordinary-user session through the real browser jou
   const pageErrors: string[] = [];
   const failedRequests: string[] = [];
   const httpErrors: string[] = [];
+  const developmentRequests: string[] = [];
+  const webSocketUrls: string[] = [];
 
   page.on('console', (message) => {
     if (message.type() === 'error' && !message.text().includes('favicon.ico')) {
@@ -361,6 +502,13 @@ test('creates and restores an ordinary-user session through the real browser jou
     }
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/@vite/client' || pathname.startsWith('/@id/') || pathname.startsWith('/src/')) {
+      developmentRequests.push(request.url());
+    }
+  });
+  page.on('websocket', (socket) => webSocketUrls.push(socket.url()));
   page.on('requestfailed', (request) => {
     const errorText = request.failure()?.errorText || 'unknown failure';
     if (!isExpectedNavigationAbort(request.method(), errorText)) {
@@ -374,7 +522,16 @@ test('creates and restores an ordinary-user session through the real browser jou
   });
 
   const adminPassword = randomBytes(24).toString('base64url');
+  const moduleEntryResponsePromise = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === canonicalArtifactEntry && response.request().method() === 'GET',
+  );
   await page.goto(`${appUrl}/zh/login?redirect=%2Fzh`, { waitUntil: 'domcontentloaded' });
+  expect((await moduleEntryResponsePromise).status()).toBe(200);
+  const moduleScripts = page.locator('script[type="module"][src]');
+  await expect(moduleScripts).toHaveCount(1);
+  const moduleScriptSource = await moduleScripts.getAttribute('src');
+  if (!moduleScriptSource) throw new Error('Canonical Web module entry was not present in the served HTML');
+  expect(new URL(moduleScriptSource, appUrl).pathname).toBe(canonicalArtifactEntry);
   await expect(page.locator('#passwordConfirm')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('#username')).toHaveCount(0);
   expect(await readAuthStatus(page)).toMatchObject({
@@ -461,6 +618,8 @@ test('creates and restores an ordinary-user session through the real browser jou
     currentUser: { id: createdIdentity.id, username, role: 'user', isAdmin: false },
   });
   await expectNoAdminNavigation(page);
+  const adminUsersResponse = await page.context().request.get(`${appUrl}/api/v1/admin/users`);
+  expect(adminUsersResponse.status()).toBe(403);
 
   const readinessResponsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/v1/scanner/readiness') && response.request().method() === 'GET',
@@ -533,9 +692,25 @@ test('creates and restores an ordinary-user session through the real browser jou
   expect(scannerRunPayload.candidates).toEqual(expect.arrayContaining([
     expect.objectContaining({ consumerDiagnostics: expect.objectContaining({ sourceConfidenceBucket: 'insufficient' }) }),
   ]));
+  const aaplAsOf = candidateAsOf(scannerRunPayload, 'AAPL');
+  const nvdaAsOf = candidateAsOf(scannerRunPayload, 'NVDA');
+  expect(nvdaAsOf).toBe(aaplAsOf);
+  const runTimestamps = lifecycleTimestamps(scannerRunPayload);
+  expect(runTimestamps.length).toBeGreaterThan(0);
+  for (const runTimestamp of runTimestamps) expect(runTimestamp).not.toBe(aaplAsOf);
   const scannerRunFeedback = page.getByTestId('scanner-run-feedback');
   await expect(scannerRunFeedback).toBeVisible();
   await expect(scannerRunFeedback).not.toContainText(/权限|permission/i);
+  const candidateFilters = page.getByTestId('scanner-candidate-filters');
+  await expect(candidateFilters).toBeVisible();
+  await candidateFilters.getByRole('button', { name: '候选池', exact: true }).click();
+  for (const symbol of ['AAPL', 'NVDA']) {
+    const row = page.locator(`[data-testid="scanner-ranked-row-${symbol}"]:visible`);
+    await expect(row).toHaveCount(1);
+    const sourceAsOf = page.locator(`[data-testid="scanner-candidate-source-as-of-${symbol}"]:visible`);
+    await expect(sourceAsOf).toHaveCount(1);
+    await expect(sourceAsOf).toHaveText(`非实时 · ${aaplAsOf}`);
+  }
   await expect(page.getByTestId('scanner-results-panel')).toHaveAttribute(
     'data-scanner-workspace-state',
     'blocked',
@@ -589,7 +764,13 @@ test('creates and restores an ordinary-user session through the real browser jou
   expect(restoredIdentity.id).toBe(createdIdentity.id);
   expectOrdinaryIdentity(restoredIdentity, username, displayName);
   await expectNoAdminNavigation(page);
+  expect((await logoutFromAccountMenu(page)).status()).toBe(204);
+  expect((await page.context().cookies(appUrl)).some((cookie) => cookie.name === 'dsa_session')).toBe(false);
+  expect(await readAuthStatus(page)).toMatchObject({ loggedIn: false, currentUser: null });
 
+  expect(developmentRequests).toEqual([]);
+  expect(webSocketUrls).toEqual([]);
+  expect(consoleErrors.join('\n')).not.toMatch(/same key|duplicate.*key|unique ["']key["']/i);
   expect(consoleErrors).toEqual([
     'Failed to load resource: the server responded with a status of 400 (Bad Request)',
   ]);
