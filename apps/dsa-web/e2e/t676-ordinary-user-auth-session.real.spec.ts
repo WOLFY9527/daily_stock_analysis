@@ -292,7 +292,7 @@ function candidateAsOf(payload: unknown, symbol: string): string {
 
 function lifecycleTimestamps(payload: unknown): string[] {
   const run = requireRecord(payload, 'scanner run payload');
-  return ['runAt', 'completedAt', 'generatedAt']
+  return ['run_at', 'completed_at']
     .map((key) => run[key])
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
@@ -385,14 +385,43 @@ function expectOrdinaryIdentity(user: CurrentUser, username: string, displayName
   });
 }
 
-async function logoutFromAccountMenu(page: Page): Promise<Response> {
+async function openMobileNavigation(page: Page) {
+  const mobileNavigation = page.getByTestId('shell-mobile-navigation-menu');
+  if (await mobileNavigation.isVisible().catch(() => false)) return mobileNavigation;
+
+  const trigger = page.getByRole('button', { name: '打开导航菜单' });
+  if (!(await trigger.isVisible().catch(() => false))) return null;
+  await trigger.click();
+  await expect(mobileNavigation).toBeVisible();
+  return mobileNavigation;
+}
+
+async function expectAuthenticatedAccountSurface(page: Page): Promise<void> {
+  const mobileNavigation = await openMobileNavigation(page);
+  if (mobileNavigation) {
+    await expect(mobileNavigation.getByTestId('shell-mobile-account-center')).toHaveCount(1);
+    return;
+  }
+
   const accountEntry = page.locator('[data-testid="shell-account-center-entry"]:visible');
   await expect(accountEntry).toHaveCount(1);
-  await accountEntry.getByRole('button', { name: '账户中心' }).click();
+}
 
-  const accountMenu = page.locator('[data-testid="shell-account-center-menu"]:visible');
-  await expect(accountMenu).toHaveCount(1);
-  await accountMenu.getByRole('menuitem', { name: '退出登录' }).click();
+async function logoutFromAccountMenu(page: Page): Promise<Response> {
+  const mobileNavigation = await openMobileNavigation(page);
+  if (mobileNavigation) {
+    const mobileAccount = mobileNavigation.getByTestId('shell-mobile-account-center');
+    await expect(mobileAccount).toHaveCount(1);
+    await mobileAccount.getByRole('button', { name: '退出登录' }).click();
+  } else {
+    const accountEntry = page.locator('[data-testid="shell-account-center-entry"]:visible');
+    await expect(accountEntry).toHaveCount(1);
+    await accountEntry.getByRole('button', { name: '账户中心' }).click();
+
+    const accountMenu = page.locator('[data-testid="shell-account-center-menu"]:visible');
+    await expect(accountMenu).toHaveCount(1);
+    await accountMenu.getByRole('menuitem', { name: '退出登录' }).click();
+  }
 
   const dialog = page.getByRole('dialog', { name: '退出登录' });
   await expect(dialog).toBeVisible();
@@ -405,7 +434,13 @@ async function logoutFromAccountMenu(page: Page): Promise<Response> {
   return response;
 }
 
-function visibleConsumerNav(page: Page) {
+async function visibleConsumerNav(page: Page) {
+  const mobileNavigation = await openMobileNavigation(page);
+  if (mobileNavigation) {
+    const navigation = mobileNavigation.getByTestId('shell-consumer-primary-nav');
+    await expect(navigation).toBeVisible();
+    return navigation;
+  }
   return page.locator('[data-testid="shell-consumer-primary-nav"]:visible');
 }
 
@@ -550,7 +585,7 @@ test('creates and restores an ordinary-user session through the real browser jou
   await page.locator('button[type="submit"]').click();
   expect((await initializeResponsePromise).status()).toBe(200);
   await expect(page).toHaveURL(/\/zh\/?$/, { timeout: 30_000 });
-  await expect(page.locator('[data-testid="shell-account-center-entry"]:visible')).toHaveCount(1);
+  await expectAuthenticatedAccountSurface(page);
   expect(await readAuthStatus(page)).toMatchObject({
     authEnabled: true,
     loggedIn: true,
@@ -697,7 +732,10 @@ test('creates and restores an ordinary-user session through the real browser jou
   expect(nvdaAsOf).toBe(aaplAsOf);
   const runTimestamps = lifecycleTimestamps(scannerRunPayload);
   expect(runTimestamps.length).toBeGreaterThan(0);
-  for (const runTimestamp of runTimestamps) expect(runTimestamp).not.toBe(aaplAsOf);
+  for (const runTimestamp of runTimestamps) {
+    expect(runTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(runTimestamp).not.toBe(aaplAsOf);
+  }
   const scannerRunFeedback = page.getByTestId('scanner-run-feedback');
   await expect(scannerRunFeedback).toBeVisible();
   await expect(scannerRunFeedback).not.toContainText(/权限|permission/i);
@@ -717,13 +755,13 @@ test('creates and restores an ordinary-user session through the real browser jou
   );
   await expectNoAdminNavigation(page);
 
-  const watchlistLink = visibleConsumerNav(page).getByRole('link', { name: '观察列表', exact: true });
+  const watchlistLink = (await visibleConsumerNav(page)).getByRole('link', { name: '观察列表', exact: true });
   await expect(watchlistLink).toBeVisible();
   await watchlistLink.click();
   await expect(page).toHaveURL(/\/zh\/watchlist$/);
   await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 30_000 });
 
-  const portfolioLink = visibleConsumerNav(page).getByRole('link', { name: '持仓', exact: true });
+  const portfolioLink = (await visibleConsumerNav(page)).getByRole('link', { name: '持仓', exact: true });
   await expect(portfolioLink).toBeVisible();
   await portfolioLink.click();
   await expect(page).toHaveURL(/\/zh\/portfolio$/);
@@ -741,7 +779,7 @@ test('creates and restores an ordinary-user session through the real browser jou
   expect((await page.context().cookies(appUrl)).some((cookie) => cookie.name === 'dsa_session')).toBe(false);
   expect(await readAuthStatus(page)).toMatchObject({ loggedIn: false, currentUser: null });
 
-  const guestWatchlistLink = visibleConsumerNav(page).getByRole('link', { name: '观察列表', exact: true });
+  const guestWatchlistLink = (await visibleConsumerNav(page)).getByRole('link', { name: '观察列表', exact: true });
   await expect(guestWatchlistLink).toBeVisible();
   await guestWatchlistLink.click();
   await expect(page).toHaveURL(/\/zh\/watchlist$/);
