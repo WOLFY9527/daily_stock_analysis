@@ -261,27 +261,7 @@ def test_missing_evidence_is_represented_as_no_evidence() -> None:
 def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
     service = PersonalSummaryService()
 
-    response = service.build_summary(
-        portfolio_snapshot={
-            "total_equity": 0.0,
-            "portfolio_truth": {
-                "state": "valuation_unavailable",
-                "account_state": "holdings_present",
-                "valuation_state": "unavailable",
-                "value_semantics": "unavailable",
-                "authoritative_total": None,
-                "covered_subtotal": None,
-                "account_count": 1,
-                "position_count": 1,
-            },
-        },
-        portfolio_connected=True,
-    )
-
-    payload = response.model_dump(mode="json")
-
-    assert payload["portfolioSnapshot"]["totalValue"] is None
-    assert payload["portfolioSnapshot"]["portfolioTruth"] == {
+    unavailable_truth = {
         "state": "valuation_unavailable",
         "account_state": "holdings_present",
         "valuation_state": "unavailable",
@@ -291,6 +271,90 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
         "account_count": 1,
         "position_count": 1,
     }
+    truth_statuses = (
+        (
+            {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            },
+            "no_evidence",
+        ),
+        (
+            {
+                "state": "account_no_holdings",
+                "account_state": "no_holdings",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 0.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 0,
+            },
+            "ready",
+        ),
+        (unavailable_truth, "unavailable"),
+        (
+            {
+                "state": "valuation_partial",
+                "account_state": "holdings_present",
+                "valuation_state": "partial",
+                "value_semantics": "covered_subtotal",
+                "authoritative_total": None,
+                "covered_subtotal": 6.0,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "partial",
+        ),
+        (
+            {
+                "state": "fully_valued_zero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 0.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "ready",
+        ),
+        (
+            {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 10.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "ready",
+        ),
+    )
+    unavailable_payload = None
+
+    for truth, expected_status in truth_statuses:
+        response = service.build_summary(
+            portfolio_snapshot={"total_equity": 0.0, "portfolio_truth": truth},
+            portfolio_connected=True,
+        )
+        payload = response.model_dump(mode="json")
+
+        assert payload["dataQuality"]["portfolioStatus"] == expected_status
+        if truth["state"] == "valuation_unavailable":
+            unavailable_payload = payload
+
+    assert unavailable_payload is not None
+    assert unavailable_payload["portfolioSnapshot"]["totalValue"] is None
+    assert unavailable_payload["portfolioSnapshot"]["portfolioTruth"] == unavailable_truth
 
 
 def test_response_does_not_leak_internal_diagnostics_or_secrets() -> None:

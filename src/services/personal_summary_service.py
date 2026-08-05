@@ -68,6 +68,14 @@ _OBSERVE_VALUES = {"observe", "observation", "watch"}
 _NORMAL_VALUES = {"available", "complete", "completed", "fresh", "live", "normal", "ready"}
 _SAMPLE_VALUES = {"example_data", "fixture", "sample", "sample_data"}
 _MOVEMENT_VALUES = {"stronger", "weaker", "volume_expanded", "range_bound"}
+_PORTFOLIO_TRUTH_COMPONENT_STATUS: dict[str, PersonalSummaryStatus] = {
+    "no_account": "no_evidence",
+    "account_no_holdings": "ready",
+    "valuation_unavailable": "unavailable",
+    "valuation_partial": "partial",
+    "fully_valued_zero": "ready",
+    "fully_valued_nonzero": "ready",
+}
 _MAX_WATCHLIST_EXCEPTION_ITEMS = 5
 _MAX_REVIEW_QUEUE_ITEMS = 5
 _PRIORITY_ORDER = {
@@ -402,6 +410,9 @@ class PersonalSummaryService:
         snapshot = portfolio_snapshot if isinstance(portfolio_snapshot, Mapping) else {}
         if sample_data or self._bool_value(self._lookup(snapshot, "sampleData", "sample_data")):
             return "no_evidence"
+        portfolio_truth = self._portfolio_truth(snapshot)
+        if portfolio_truth is not None:
+            return _PORTFOLIO_TRUTH_COMPONENT_STATUS[portfolio_truth.state]
         data_status = self._text_value(self._lookup(snapshot, "data_status", "dataStatus"))
         if data_status in _UNAVAILABLE_VALUES:
             return "unavailable"
