@@ -118,9 +118,15 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
 
         observed: dict[str, object] = {}
 
-        def _boom(manager: DatabaseManager, _connection: object) -> None:
+        def _boom(
+            manager: DatabaseManager,
+            _connection: object,
+            *,
+            sqlite_preexisting_table_names: set[str] | None = None,
+        ) -> None:
             observed["phase_a_enabled"] = manager._phase_a_enabled
             observed["phase_a_store"] = manager._phase_a_store
+            observed["sqlite_preexisting_table_names"] = sqlite_preexisting_table_names
             raise RuntimeError("boom")
 
         with self.assertRaises(RuntimeError):
@@ -135,6 +141,7 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
         self.assertIsNone(DatabaseManager._instance)
         self.assertEqual(observed["phase_a_enabled"], False)
         self.assertIsNone(observed["phase_a_store"])
+        self.assertEqual(observed["sqlite_preexisting_table_names"], set())
 
         DatabaseManager.reset_instance()
         db = DatabaseManager(db_url="sqlite:///:memory:")
