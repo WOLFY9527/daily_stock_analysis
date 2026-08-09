@@ -50,19 +50,15 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 
 | Path | Kind | Status | Direct edit | Purpose | SHA-256 |
 | --- | --- | --- | --- | --- | --- |
-| [.claude/skills/README.md](../../.claude/skills/README.md) | tool_workflow | active | yes | Claude-compatible repository skill index; defers to AGENTS.md | 12c76fe1a644 |
-| [.claude/skills/analyze-issue/SKILL.md](../../.claude/skills/analyze-issue/SKILL.md) | tool_workflow | active | yes | Claude issue-analysis workflow; defers to AGENTS.md | 7087b69f11dc |
-| [.claude/skills/analyze-pr/SKILL.md](../../.claude/skills/analyze-pr/SKILL.md) | tool_workflow | active | yes | Claude pull-request analysis workflow; defers to AGENTS.md | 4f1459bd4114 |
-| [.claude/skills/fix-issue/SKILL.md](../../.claude/skills/fix-issue/SKILL.md) | tool_workflow | active | yes | Claude issue-fix workflow; defers to AGENTS.md | b8cb440145f8 |
-| [.github/copilot-instructions.md](../../.github/copilot-instructions.md) | tool_mirror | mirror | yes | GitHub Copilot compatibility entry | cd70c0093d9c |
+| [.github/copilot-instructions.md](../../.github/copilot-instructions.md) | tool_mirror | mirror | yes | GitHub Copilot compatibility entry | ec815061324a |
 | [.github/instructions/backend.instructions.md](../../.github/instructions/backend.instructions.md) | tool_mirror | mirror | yes | Path-scoped backend instruction mirror | 08f91f8d32b6 |
 | [.github/instructions/client.instructions.md](../../.github/instructions/client.instructions.md) | tool_mirror | mirror | yes | Path-scoped client instruction mirror | 3aa1faea8fe0 |
 | [.github/instructions/governance.instructions.md](../../.github/instructions/governance.instructions.md) | tool_mirror | mirror | yes | Path-scoped governance instruction mirror | c7d9ab20e71c |
 | [.github/ISSUE_TEMPLATE/bug_report.md](../../.github/ISSUE_TEMPLATE/bug_report.md) | platform_template | active | yes | GitHub bug-report form body | 608e6c365e37 |
 | [.github/ISSUE_TEMPLATE/feature_request.md](../../.github/ISSUE_TEMPLATE/feature_request.md) | platform_template | active | yes | GitHub feature-request form body | 3940adddc1e1 |
 | [.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) | platform_template | active | yes | GitHub pull-request template | 0dea45ebf511 |
-| [AGENTS.md](../../AGENTS.md) | canonical | active | yes | Repository AI rules and protected-domain boundaries | 8feefcff2c19 |
-| [CLAUDE.md](../../CLAUDE.md) | tool_entry | mirror | no | Claude automatic-discovery symlink | 8feefcff2c19 |
+| [AGENTS.md](../../AGENTS.md) | canonical | active | yes | Repository AI rules and protected-domain boundaries | 026b9c781438 |
+| [CLAUDE.md](../../CLAUDE.md) | tool_entry | mirror | no | Claude automatic-discovery symlink | 026b9c781438 |
 | [README.md](../../README.md) | canonical | active | yes | Human product orientation and quick start | 93d0ca43d822 |
 | [docs/README.md](../README.md) | generated | generated | no | Generated platform-discoverable documentation entry and task router | generated |
 | [docs/architecture/overview.md](../architecture/overview.md) | canonical | active | yes | System map, runtime entrypoints, and component ownership | 3e3e0b18e316 |
@@ -83,7 +79,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/operations/operator-evidence.md](../operations/operator-evidence.md) | canonical | active | yes | Sanitized offline operator-evidence runbook | a819a54cae32 |
 | [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | b12def381196 |
 
-Inventory summary: registered=32, discovered=32; canonical=13, generated=2, platform_template=3, temporary_evidence=5, tool_entry=1, tool_mirror=4, tool_workflow=4.
+Inventory summary: registered=28, discovered=28; canonical=13, generated=2, platform_template=3, temporary_evidence=5, tool_entry=1, tool_mirror=4.
 
 ## Temporary Evidence Lifecycle
 

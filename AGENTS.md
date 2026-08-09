@@ -174,7 +174,7 @@ python scripts/check_ai_assets.py
 - `CLAUDE.md` 必须保持为指向 `AGENTS.md` 的软链接。
 - `.github/copilot-instructions.md` 与 `.github/instructions/*.instructions.md`
   是 GitHub/Copilot 镜像说明；若冲突，以本文件为准。
-- `.claude/skills/` 是仓库内保留的 skill 资产；`.claude/reviews/` 是本地分析产物。
+- `.claude/reviews/` 等本地分析产物不提交；技能与方法层由全局 aegis 提供，仓库内不保留 `.claude/skills/`。
 - `docs/README.md`、`docs/generated/AI_PROJECT_MANUAL.md` 与
   `docs/generated/AI_PROJECT_MANUAL_SOURCES.json` 是生成文件；修改
   `docs/documentation-manifest.json` 或相应 canonical source，再运行生成器。

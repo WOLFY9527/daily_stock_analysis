@@ -3,8 +3,8 @@
 Canonical source: [`AGENTS.md`](../AGENTS.md).
 
 If any instruction in this file conflicts with `AGENTS.md`, follow `AGENTS.md`.
-`CLAUDE.md` must remain a symlink to `AGENTS.md`. Repository skills retained for
-Claude-compatible workflows live in `.claude/skills/`.
+`CLAUDE.md` must remain a symlink to `AGENTS.md`. Repository skills are not
+retained; methods and skills come from the global aegis layer.
 
 ## Core Rules
 

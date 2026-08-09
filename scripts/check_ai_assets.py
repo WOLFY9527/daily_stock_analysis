@@ -18,7 +18,6 @@ AGENTS = ROOT / "AGENTS.md"
 CLAUDE = ROOT / "CLAUDE.md"
 COPILOT = ROOT / ".github" / "copilot-instructions.md"
 INSTRUCTIONS_DIR = ROOT / ".github" / "instructions"
-CLAUDE_SKILLS_DIR = ROOT / ".claude" / "skills"
 
 REQUIRED_INSTRUCTION_FILES = {
     "backend.instructions.md",
@@ -26,17 +25,8 @@ REQUIRED_INSTRUCTION_FILES = {
     "governance.instructions.md",
 }
 
-REQUIRED_SKILL_FILES = {
-    "README.md",
-    "analyze-issue/SKILL.md",
-    "analyze-pr/SKILL.md",
-    "fix-issue/SKILL.md",
-}
-
 REQUIRED_GITIGNORE_SNIPPETS = (
     ".claude/*",
-    "!.claude/skills/",
-    "!.claude/skills/**",
 )
 
 
@@ -69,7 +59,6 @@ def ensure_copilot_entry() -> None:
         "Canonical source:",
         "AGENTS.md",
         "CLAUDE.md",
-        ".claude/skills/",
     )
     for fragment in required_fragments:
         if fragment not in content:
@@ -82,18 +71,6 @@ def ensure_instruction_files() -> None:
     missing = REQUIRED_INSTRUCTION_FILES - actual
     if missing:
         fail(f"missing instruction files: {', '.join(sorted(missing))}")
-
-
-def ensure_skill_files() -> None:
-    ensure_file_exists(CLAUDE_SKILLS_DIR, "Claude skills directory")
-    for relative_path in REQUIRED_SKILL_FILES:
-        path = CLAUDE_SKILLS_DIR / relative_path
-        if not path.exists():
-            fail(f"missing repository skill asset: {path.relative_to(ROOT)}")
-        if path.is_file():
-            content = path.read_text(encoding="utf-8")
-            if relative_path != "README.md" and "AGENTS.md" not in content:
-                fail(f"{path.relative_to(ROOT)} must reference AGENTS.md as the rule source")
 
 
 def ensure_gitignore_rules() -> None:
@@ -112,11 +89,11 @@ def ensure_no_tracked_claude_artifacts() -> None:
         check=True,
     )
     tracked = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    allowed_prefixes = (".claude/skills/",)
+    allowed_prefixes = ()
     for path in tracked:
         if path.startswith(allowed_prefixes):
             continue
-        fail(f"tracked .claude artifact outside skills/: {path}")
+        fail(f"tracked .claude artifact: {path}")
 
 
 def ensure_ai_project_manual_fresh() -> None:
@@ -135,7 +112,6 @@ def main() -> None:
     ensure_symlink()
     ensure_copilot_entry()
     ensure_instruction_files()
-    ensure_skill_files()
     ensure_gitignore_rules()
     ensure_no_tracked_claude_artifacts()
     ensure_ai_project_manual_fresh()

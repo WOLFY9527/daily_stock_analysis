@@ -72,12 +72,8 @@
     }
   ],
   "discovery": {
-    "markdownDiscovered": 32,
+    "markdownDiscovered": 28,
     "markdownPaths": [
-      ".claude/skills/README.md",
-      ".claude/skills/analyze-issue/SKILL.md",
-      ".claude/skills/analyze-pr/SKILL.md",
-      ".claude/skills/fix-issue/SKILL.md",
       ".github/ISSUE_TEMPLATE/bug_report.md",
       ".github/ISSUE_TEMPLATE/feature_request.md",
       ".github/PULL_REQUEST_TEMPLATE.md",
@@ -125,13 +121,12 @@
       "platform_template": 3,
       "temporary_evidence": 5,
       "tool_entry": 1,
-      "tool_mirror": 4,
-      "tool_workflow": 4
+      "tool_mirror": 4
     },
-    "markdownDiscovered": 32,
-    "registeredMarkdown": 32,
+    "markdownDiscovered": 28,
+    "registeredMarkdown": 28,
     "statusCounts": {
-      "active": 20,
+      "active": 16,
       "generated": 2,
       "mirror": 5,
       "temporary": 5
@@ -141,64 +136,16 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "13dfe620e5494380ba186fba34ce01c1d6fab769fbe2855ca6d8efd927ed417c",
+    "manualSha256": "c4bb7b23947f800503f50a3779a42511ec041253a5a96b756056be5d1a2feb9d",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
     "path": "docs/documentation-manifest.json",
     "schemaVersion": 1,
-    "sha256": "2ce6e0d336efa53312c0c0f5f30b47052487677b9365d56671b8fc9238268b98"
+    "sha256": "b1c0dbbb9e9346ca39742b5a90b5fee6ea037d2da60055268aa823e8fccaf859"
   },
   "schemaVersion": 3,
   "sources": [
-    {
-      "bytes": 633,
-      "editable": true,
-      "id": "claude-skills-index",
-      "kind": "tool_workflow",
-      "lineCount": 14,
-      "path": ".claude/skills/README.md",
-      "sha256": "12c76fe1a6449fb7d8588991fe8ad51e46fe922e4ee68016101405b1597ce514",
-      "status": "active",
-      "summary": "Claude-compatible repository skill index; defers to AGENTS.md",
-      "title": "Repository Claude Skills"
-    },
-    {
-      "bytes": 2857,
-      "editable": true,
-      "id": "claude-analyze-issue",
-      "kind": "tool_workflow",
-      "lineCount": 124,
-      "path": ".claude/skills/analyze-issue/SKILL.md",
-      "sha256": "7087b69f11dc4bc551b48c546395ef875c2b33e0ce213a40954390260f2075eb",
-      "status": "active",
-      "summary": "Claude issue-analysis workflow; defers to AGENTS.md",
-      "title": "Analyze Issue"
-    },
-    {
-      "bytes": 3096,
-      "editable": true,
-      "id": "claude-analyze-pr",
-      "kind": "tool_workflow",
-      "lineCount": 123,
-      "path": ".claude/skills/analyze-pr/SKILL.md",
-      "sha256": "4f1459bd4114dfb95c6ddae09115355f98ee113b4a3d33cd53faa7f29f35d6f5",
-      "status": "active",
-      "summary": "Claude pull-request analysis workflow; defers to AGENTS.md",
-      "title": "Analyze PR"
-    },
-    {
-      "bytes": 2822,
-      "editable": true,
-      "id": "claude-fix-issue",
-      "kind": "tool_workflow",
-      "lineCount": 102,
-      "path": ".claude/skills/fix-issue/SKILL.md",
-      "sha256": "b8cb440145f8aa0abad2fbdd6b650e42c897db059be15d13ad97d5830b3ea62a",
-      "status": "active",
-      "summary": "Claude issue-fix workflow; defers to AGENTS.md",
-      "title": "Fix Issue"
-    },
     {
       "bytes": 1872,
       "editable": true,
@@ -236,13 +183,13 @@
       "title": "example"
     },
     {
-      "bytes": 1810,
+      "bytes": 1813,
       "editable": true,
       "id": "copilot-entry",
       "kind": "tool_mirror",
       "lineCount": 38,
       "path": ".github/copilot-instructions.md",
-      "sha256": "cd70c0093d9cd88218189a96053ef1a833669b4ce12805f354a634de907b0c16",
+      "sha256": "ec815061324a0e916c07a12f5ed43725d91a4aaf0685d54def6fea1afb8bf1e8",
       "status": "mirror",
       "summary": "GitHub Copilot compatibility entry",
       "title": "Repository Instructions"
@@ -284,25 +231,25 @@
       "title": "Governance Instructions"
     },
     {
-      "bytes": 11083,
+      "bytes": 11119,
       "editable": true,
       "id": "repository-rules",
       "kind": "canonical",
       "lineCount": 186,
       "path": "AGENTS.md",
-      "sha256": "8feefcff2c19bf4dc0587bda2c03e81b00baf780bdffe60c18e31277c832303e",
+      "sha256": "026b9c7814380f0293fad4cfcbaabdf8b2f5235a59e39b9873ad1125c17fabdd",
       "status": "active",
       "summary": "Repository AI rules and protected-domain boundaries",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 11083,
+      "bytes": 11119,
       "editable": false,
       "id": "claude-discovery",
       "kind": "tool_entry",
       "lineCount": 186,
       "path": "CLAUDE.md",
-      "sha256": "8feefcff2c19bf4dc0587bda2c03e81b00baf780bdffe60c18e31277c832303e",
+      "sha256": "026b9c7814380f0293fad4cfcbaabdf8b2f5235a59e39b9873ad1125c17fabdd",
       "status": "mirror",
       "summary": "Claude automatic-discovery symlink",
       "title": "AGENTS.md"

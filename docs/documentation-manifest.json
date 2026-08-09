@@ -210,38 +210,6 @@
   ],
   "documents": [
     {
-      "id": "claude-skills-index",
-      "path": ".claude/skills/README.md",
-      "kind": "tool_workflow",
-      "status": "active",
-      "editable": true,
-      "summary": "Claude-compatible repository skill index; defers to AGENTS.md"
-    },
-    {
-      "id": "claude-analyze-issue",
-      "path": ".claude/skills/analyze-issue/SKILL.md",
-      "kind": "tool_workflow",
-      "status": "active",
-      "editable": true,
-      "summary": "Claude issue-analysis workflow; defers to AGENTS.md"
-    },
-    {
-      "id": "claude-analyze-pr",
-      "path": ".claude/skills/analyze-pr/SKILL.md",
-      "kind": "tool_workflow",
-      "status": "active",
-      "editable": true,
-      "summary": "Claude pull-request analysis workflow; defers to AGENTS.md"
-    },
-    {
-      "id": "claude-fix-issue",
-      "path": ".claude/skills/fix-issue/SKILL.md",
-      "kind": "tool_workflow",
-      "status": "active",
-      "editable": true,
-      "summary": "Claude issue-fix workflow; defers to AGENTS.md"
-    },
-    {
       "id": "copilot-entry",
       "path": ".github/copilot-instructions.md",
       "kind": "tool_mirror",
