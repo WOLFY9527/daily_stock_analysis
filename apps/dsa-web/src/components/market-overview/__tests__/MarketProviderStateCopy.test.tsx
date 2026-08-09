@@ -182,7 +182,10 @@ it('does not add a provider-state notice to a healthy usable panel', () => {
       eyebrow="Test"
       description="Test market data"
       sourceLabel="Market provider"
-      panel={panel()}
+      panel={panel({
+        freshness: 'live',
+        items: [{ ...usableItem, freshness: 'live' }],
+      })}
       onRefresh={() => undefined}
     />,
   );

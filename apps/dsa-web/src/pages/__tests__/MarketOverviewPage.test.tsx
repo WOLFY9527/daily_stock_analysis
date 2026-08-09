@@ -3275,7 +3275,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it.each([
-    ['cached', '缓存可用', /[1-9]\d* 缓存/],
+    ['cached', '部分可用', /[1-9]\d* 缓存/],
     ['delayed', '延迟可用', /[1-9]\d* 延迟/],
   ] as const)('keeps %s evidence distinct from fresh availability', (freshness, expectedStatus, expectedCoverage) => {
     renderMarketOverviewWorkbenchWithProps({
