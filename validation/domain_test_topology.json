@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8166,
-      "sha256": "f80cd78d2b0ea54008c8b7a1c89b8eda25a22d94b1336d83005a0e6da0f93e13"
+      "count": 8171,
+      "sha256": "1ccc4bf8b4179843c1cc65239ff37717b1d5cc9be90683d5e04ab2cb021d10f8"
     },
     "tests": [
       {
@@ -28372,6 +28372,31 @@
         "id": "tests/test_personal_summary_service.py::test_no_connected_portfolio_state_is_safe_and_can_mark_sample_data",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_personal_summary_service.py::test_personal_summary_preserves_exact_authoritative_total[portfolio_truth0-100000.00]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_personal_summary_service.py::test_personal_summary_preserves_exact_authoritative_total[portfolio_truth1-0.00]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_personal_summary_service.py::test_personal_summary_preserves_exact_authoritative_total[portfolio_truth2-9007199254740993.12]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_personal_summary_service.py::test_personal_summary_preserves_exact_authoritative_total[portfolio_truth3-None]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_personal_summary_service.py::test_personal_summary_rejects_binary_float_total",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_personal_summary_service.py::test_response_does_not_leak_internal_diagnostics_or_secrets",

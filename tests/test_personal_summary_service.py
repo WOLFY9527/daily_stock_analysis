@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from pydantic import ValidationError
+
+from api.v1.schemas.personal_summary import PersonalSummaryPortfolioSnapshot
 from api.v1.schemas.portfolio import PortfolioSnapshotResponse
 from api.v1.schemas.watchlist import WatchlistItemResponse
 from src.services.personal_summary_service import PersonalSummaryService
@@ -53,13 +57,13 @@ def test_contract_serializes_portfolio_and_watchlist_summary() -> None:
 
     response = service.build_summary(
         portfolio_snapshot={
-            "total_equity": 250000.0,
+            "total_equity": "250000.00",
             "portfolio_truth": {
                 "state": "fully_valued_nonzero",
                 "account_state": "holdings_present",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 250000.0,
+                "authoritative_total": "250000.00",
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 1,
@@ -99,7 +103,7 @@ def test_contract_serializes_portfolio_and_watchlist_summary() -> None:
     payload = response.model_dump(mode="json")
 
     assert payload["status"] == "partial"
-    assert payload["portfolioSnapshot"]["totalValue"] == 250000.0
+    assert payload["portfolioSnapshot"]["totalValue"] == "250000.00"
     assert payload["portfolioSnapshot"]["dailyChange"] == 1800.5
     assert payload["portfolioSnapshot"]["cashPercent"] == 12.5
     assert payload["portfolioSnapshot"]["largestExposure"] == 28.1
@@ -291,7 +295,7 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
                 "account_state": "no_holdings",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 0.0,
+                "authoritative_total": "0.00",
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 0,
@@ -306,7 +310,7 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
                 "valuation_state": "partial",
                 "value_semantics": "covered_subtotal",
                 "authoritative_total": None,
-                "covered_subtotal": 6.0,
+                "covered_subtotal": "6.00",
                 "account_count": 1,
                 "position_count": 1,
             },
@@ -318,7 +322,7 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
                 "account_state": "holdings_present",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 0.0,
+                "authoritative_total": "0.00",
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 1,
@@ -331,7 +335,7 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
                 "account_state": "holdings_present",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 10.0,
+                "authoritative_total": "10.00",
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 1,
@@ -343,7 +347,7 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
 
     for truth, expected_status in truth_statuses:
         response = service.build_summary(
-            portfolio_snapshot={"total_equity": 0.0, "portfolio_truth": truth},
+            portfolio_snapshot={"total_equity": "0.00", "portfolio_truth": truth},
             portfolio_connected=True,
         )
         payload = response.model_dump(mode="json")
@@ -355,6 +359,89 @@ def test_summary_never_projects_an_unavailable_valuation_as_zero() -> None:
     assert unavailable_payload is not None
     assert unavailable_payload["portfolioSnapshot"]["totalValue"] is None
     assert unavailable_payload["portfolioSnapshot"]["portfolioTruth"] == unavailable_truth
+
+
+@pytest.mark.parametrize(
+    ("portfolio_truth", "expected_total"),
+    (
+        (
+            {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": "100000.00",
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "100000.00",
+        ),
+        (
+            {
+                "state": "account_no_holdings",
+                "account_state": "no_holdings",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": "0.00",
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 0,
+            },
+            "0.00",
+        ),
+        (
+            {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": "9007199254740993.12",
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "9007199254740993.12",
+        ),
+        (
+            {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            },
+            None,
+        ),
+    ),
+)
+def test_personal_summary_preserves_exact_authoritative_total(
+    portfolio_truth: dict[str, object],
+    expected_total: str | None,
+) -> None:
+    response = PersonalSummaryService().build_summary(
+        portfolio_snapshot={"portfolio_truth": portfolio_truth},
+        portfolio_connected=expected_total is not None,
+    )
+
+    payload = response.model_dump(mode="json")
+
+    assert payload["portfolioSnapshot"]["totalValue"] == expected_total
+    assert (
+        payload["portfolioSnapshot"]["portfolioTruth"]["authoritative_total"]
+        == expected_total
+    )
+
+
+def test_personal_summary_rejects_binary_float_total() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="portfolio public numeric values must not be binary floats",
+    ):
+        PersonalSummaryPortfolioSnapshot(totalValue=100000.0)
 
 
 def test_response_does_not_leak_internal_diagnostics_or_secrets() -> None:
@@ -399,20 +486,20 @@ def test_existing_watchlist_and_portfolio_safe_shapes_can_be_imported() -> None:
         cost_method="fifo",
         currency="USD",
         account_count=1,
-        total_cash=12000.0,
-        total_market_value=88000.0,
-        total_equity=100000.0,
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-        fee_total=0.0,
-        tax_total=0.0,
+        total_cash="12000.00",
+        total_market_value="88000.00",
+        total_equity="100000.00",
+        realized_pnl="0.00",
+        unrealized_pnl="0.00",
+        fee_total="0.00",
+        tax_total="0.00",
         fx_stale=False,
         portfolio_truth={
             "state": "fully_valued_nonzero",
             "account_state": "holdings_present",
             "valuation_state": "fully_valued",
             "value_semantics": "authoritative_total",
-            "authoritative_total": 100000.0,
+            "authoritative_total": "100000.00",
             "covered_subtotal": None,
             "account_count": 1,
             "position_count": 4,
@@ -422,13 +509,21 @@ def test_existing_watchlist_and_portfolio_safe_shapes_can_be_imported() -> None:
         analytics={
             "pnl": {
                 "display_currency": "USD",
-                "realized": {"amount": 0.0, "currency": "USD"},
-                "unrealized": {"amount": 0.0, "currency": "USD"},
-                "total": {"amount": 0.0, "currency": "USD"},
+                "realized": {"amount": "0.00", "currency": "USD"},
+                "unrealized": {"amount": "0.00", "currency": "USD"},
+                "total": {"amount": "0.00", "currency": "USD"},
             },
             "exposure": {"by_account": [], "by_currency": [], "by_market": [], "by_symbol": [], "by_sector": []},
             "risk": {
-                "largest_position": {"symbol": "NVDA", "percent": 26.4},
+                "largest_position": {
+                    "key": "symbol:NVDA",
+                    "label": "NVDA",
+                    "market_value": "23232.00",
+                    "display_value": "23232.00",
+                    "display_currency": "USD",
+                    "symbol": "NVDA",
+                    "percent": 26.4,
+                },
                 "holding_count": 4,
                 "account_count": 1,
                 "cash_percent": 12.0,
@@ -456,7 +551,7 @@ def test_existing_watchlist_and_portfolio_safe_shapes_can_be_imported() -> None:
     )
     payload = response.model_dump(mode="json")
 
-    assert payload["portfolioSnapshot"]["totalValue"] == 100000.0
+    assert payload["portfolioSnapshot"]["totalValue"] == "100000.00"
     assert payload["portfolioSnapshot"]["cashPercent"] == 12.0
     assert payload["watchlistExceptions"]["items"][0]["researchStatus"] == "stale"
     assert payload["watchlistExceptions"]["items"][0]["evidenceStatus"] == "stale"

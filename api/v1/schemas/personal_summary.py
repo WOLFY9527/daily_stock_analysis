@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.v1.schemas.portfolio import PortfolioTruth
+from api.v1.schemas.portfolio import PortfolioTransportDecimal, PortfolioTruth
 
 
 PersonalSummaryStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
@@ -33,7 +33,7 @@ PERSONAL_SUMMARY_NO_ADVICE_DISCLOSURE = (
 class PersonalSummaryPortfolioSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    totalValue: Optional[float] = None
+    totalValue: Optional[PortfolioTransportDecimal] = None
     portfolioTruth: Optional[PortfolioTruth] = None
     dailyChange: Optional[float] = None
     cashPercent: Optional[float] = None
