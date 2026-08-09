@@ -1847,7 +1847,7 @@ describe('DeterministicBacktestResultPage', () => {
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith('比较运行 99,123 | 基准 #99 ORCL | 整体 部分可比 | 画像 同标的不同区间 | 可比 2/2');
     });
-    expect(screen.getByText('已复制比较摘要')).toBeInTheDocument();
+    expect(await screen.findByText('已复制比较摘要')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '设为基准 123' }));
     await waitFor(() => {
