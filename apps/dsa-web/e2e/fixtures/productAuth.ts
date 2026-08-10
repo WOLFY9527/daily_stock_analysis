@@ -21,7 +21,10 @@ type ProductAuthHarness = {
   requests: ApiRequestLog;
 };
 
-const timestamp = '2026-05-06T09:45:00-04:00';
+const fixtureSource = 'synthetic_options_lab_fixture';
+const fixtureProvider = 'synthetic_fixture';
+const fixtureFreshness = 'synthetic_delayed';
+const fixtureTimestamp = '2026-05-06T13:45:00Z';
 const expiration = '2026-06-19';
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
@@ -45,8 +48,8 @@ function metadata() {
     read_only: true,
     no_external_calls_in_tests: true,
     limitations: ['mocked_playwright_product_auth'],
-    source_label: 'Playwright Fixture',
-    updated_at: timestamp,
+    source_label: fixtureSource,
+    updated_at: fixtureTimestamp,
   };
 }
 
@@ -54,9 +57,9 @@ function underlying() {
   return {
     price: 52.34,
     change_pct: 1.2,
-    source: 'playwright_fixture',
-    as_of: timestamp,
-    freshness: 'mock',
+    source: fixtureSource,
+    as_of: fixtureTimestamp,
+    freshness: fixtureFreshness,
   };
 }
 
@@ -67,7 +70,7 @@ function optionsSummary(symbol: string) {
     underlying: underlying(),
     options_availability: {
       supported: true,
-      provider: 'playwright_fixture',
+      provider: fixtureProvider,
       limitations: ['mocked_product_route_harness'],
     },
     metadata: metadata(),
@@ -83,8 +86,8 @@ function optionsExpirations(symbol: string) {
         dte: 44,
         type: 'monthly',
         chain_available: true,
-        as_of: timestamp,
-        source: 'playwright_fixture',
+        as_of: fixtureTimestamp,
+        source: fixtureSource,
         warnings: ['mocked_chain'],
       },
     ],
@@ -122,8 +125,8 @@ function optionsChain(symbol: string) {
     calls: [contract(symbol, 'call', 55, 4.23), contract(symbol, 'call', 60, 2.28)],
     puts: [contract(symbol, 'put', 50, 2.42), contract(symbol, 'put', 45, 1.16)],
     filters_applied: { min_open_interest: 100, max_spread_pct: 25 },
-    chain_as_of: timestamp,
-    source: 'playwright_fixture',
+    chain_as_of: fixtureTimestamp,
+    source: fixtureSource,
     limitations: ['mocked_chain'],
     metadata: metadata(),
   };
@@ -175,7 +178,7 @@ function strategyComparison(symbol: string) {
       no_broker_connection: true,
       no_portfolio_mutation: true,
       no_trading_recommendation: true,
-      strategy_engine: 'playwright_fixture',
+      strategy_engine: fixtureProvider,
       force_refresh_ignored: true,
     },
   };
@@ -256,7 +259,7 @@ function decision(symbol: string) {
     data_quality: {
       data_quality_score: 62,
       data_quality_tier: 'synthetic_demo_only',
-      source_type: 'playwright_fixture',
+      source_type: fixtureSource,
       as_of_age_minutes: 0,
       blocking_reasons: ['mocked_product_route_harness'],
       warnings: ['provider_validation_required'],
@@ -324,9 +327,9 @@ function decision(symbol: string) {
     },
     no_advice_disclosure: 'Scenario analysis only; not personalized financial advice.',
     freshness: {
-      source: 'playwright_fixture',
-      freshness: 'mock',
-      as_of: timestamp,
+      source: fixtureSource,
+      freshness: fixtureFreshness,
+      as_of: fixtureTimestamp,
     },
     metadata: {
       read_only: true,
@@ -337,7 +340,7 @@ function decision(symbol: string) {
       no_broker_connection: true,
       no_portfolio_mutation: true,
       no_trading_recommendation: true,
-      strategy_engine: 'playwright_fixture',
+      strategy_engine: fixtureProvider,
       force_refresh_ignored: true,
     },
   };
