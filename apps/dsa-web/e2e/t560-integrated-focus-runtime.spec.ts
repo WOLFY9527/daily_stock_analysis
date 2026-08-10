@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { closeSync, existsSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,7 +19,6 @@ let runtimeDir = '';
 let runtimeLogFd: number | undefined;
 let baseUrl = '';
 let adminPassword = '';
-let taskBuiltStatic = false;
 
 async function reservePort(): Promise<number> {
   const server = net.createServer();
@@ -236,20 +235,6 @@ test.describe('T560 integrated real-runtime focus authority', () => {
 
   test.beforeAll(async () => {
     test.setTimeout(180_000);
-    const staticRoot = path.join(repoRoot, 'static');
-    if (existsSync(staticRoot)) {
-      throw new Error('T560 requires an absent canonical static directory before its task-owned build');
-    }
-    execFileSync(python, [
-      path.join(repoRoot, 'scripts', 'web_build_artifact.py'),
-      'build',
-      '--repo-root',
-      repoRoot,
-    ], {
-      cwd: repoRoot,
-      stdio: ['ignore', 'ignore', 'inherit'],
-    });
-    taskBuiltStatic = true;
     runtimeDir = mkdtempSync(path.join(os.tmpdir(), 'wolfystock-t560-browser-'));
     const port = await reservePort();
     baseUrl = `http://127.0.0.1:${port}`;
@@ -306,7 +291,6 @@ test.describe('T560 integrated real-runtime focus authority', () => {
     }
     if (runtimeLogFd !== undefined) closeSync(runtimeLogFd);
     if (runtimeDir) rmSync(runtimeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-    if (taskBuiltStatic) rmSync(path.join(repoRoot, 'static'), { recursive: true, force: true });
   });
 
   test('contains focus at 390x844 and restores it across integrated desktop overlays', async ({ browser }) => {
