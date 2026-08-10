@@ -3,6 +3,7 @@ import type { Locator, Page, Request } from '@playwright/test';
 import {
   expectForbiddenTradingWordingAbsent,
   expectNoHorizontalOverflow,
+  installProductAuthHarness,
   test as productTest,
   expect as productExpect,
 } from './fixtures/productAuth';
@@ -156,6 +157,7 @@ productTest.describe('Options Lab launch research surface', () => {
         requestCalls.push(`${request.method()} ${url.pathname}`);
       };
       page.on('request', recordRequest);
+      await installProductAuthHarness(page);
       await installAuthenticatedAppSmokeSession(page);
       await page.goto('/options-lab');
       await page.waitForLoadState('domcontentloaded');
