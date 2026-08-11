@@ -233,6 +233,13 @@ function optionsStructure(symbol: string) {
 }
 
 function strategyAnalysis(symbol: string) {
+  const analysis = {
+    status: 'observation_only',
+    summary: 'Fixture scenario analysis is bounded to read-only product route verification.',
+    key_risks: ['provider_validation_required'],
+    next_evidence: ['authorized_options_structure_source'],
+  };
+
   return {
     symbol,
     underlying: underlying(),
@@ -242,12 +249,7 @@ function strategyAnalysis(symbol: string) {
       direction: 'bullish',
       risk_budget: 1000,
     },
-    analysis: {
-      status: 'observation_only',
-      summary: 'Fixture scenario analysis is bounded to read-only product route verification.',
-      key_risks: ['provider_validation_required'],
-      next_evidence: ['authorized_options_structure_source'],
-    },
+    analyses: [analysis],
     metadata: metadata(),
   };
 }
