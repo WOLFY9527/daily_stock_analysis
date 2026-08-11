@@ -42328,11 +42328,11 @@
     "inventory": {
       "specCount": 68,
       "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
-      "projectCaseCount": 728,
-      "projectCaseSha256": "2cf8ea92a648dc42d4ffbdf26b763b629f6daa5d4e50c7cd10715cba7d8e45b1",
+      "projectCaseCount": 738,
+      "projectCaseSha256": "6c041780160bf423a690d04dad5be737b5debc3f45734d4512106bba376ead37",
       "projectCaseCounts": {
-        "chromium": 362,
-        "chromium-mobile": 362,
+        "chromium": 367,
+        "chromium-mobile": 367,
         "release-real-runtime": 4
       }
     },
@@ -43751,14 +43751,35 @@
         "mandatory": true
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps the empty-state CTA stack readable at 390px without header duplication",
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps confirmed first use visible when a later history read fails on desktop",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium-mobile",
         "owner": "route_owner",
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › suppresses operator CTAs on desktop while keeping consumer research entrypoints",
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps no-account permission limits truthful on mobile",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps unavailable truth distinct from first use at 390px without horizontal overflow",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › shows a 503 as unavailable with only the retry action",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › uses one executable first-use action on desktop and keeps later steps in a native disclosure",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium-mobile",
         "owner": "route_owner",
@@ -44045,13 +44066,6 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › retries loaded run params with a valid shortlist fallback in the workspace layout",
-        "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
-        "project": "chromium-mobile",
-        "owner": "route_owner",
-        "mandatory": false
-      },
-      {
         "id": "chromium-mobile::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › separates scanner state: candidate-generation-blocked",
         "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
         "project": "chromium-mobile",
@@ -44116,6 +44130,13 @@
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › shows no-candidate next steps with manual research handoff",
+        "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › uses the one explicit retry action for loaded no-candidate params in the workspace layout",
         "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
         "project": "chromium-mobile",
         "owner": "route_owner",
@@ -45186,7 +45207,21 @@
         "mandatory": false
       },
       {
+        "id": "chromium-mobile::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps a list failure unavailable until the user explicitly retries on desktop",
+        "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
         "id": "chromium-mobile::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps a single primary scanner CTA in the empty state on desktop",
+        "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps filtered-empty distinct from first use and clears filters on mobile",
         "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
         "project": "chromium-mobile",
         "owner": "route_owner",
@@ -46285,14 +46320,35 @@
         "mandatory": true
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps the empty-state CTA stack readable at 390px without header duplication",
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps confirmed first use visible when a later history read fails on desktop",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium",
         "owner": "route_owner",
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › suppresses operator CTAs on desktop while keeping consumer research entrypoints",
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps no-account permission limits truthful on mobile",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps unavailable truth distinct from first use at 390px without horizontal overflow",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › shows a 503 as unavailable with only the retry action",
+        "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › uses one executable first-use action on desktop and keeps later steps in a native disclosure",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium",
         "owner": "route_owner",
@@ -46579,13 +46635,6 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › retries loaded run params with a valid shortlist fallback in the workspace layout",
-        "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
-        "project": "chromium",
-        "owner": "route_owner",
-        "mandatory": false
-      },
-      {
         "id": "chromium::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › separates scanner state: candidate-generation-blocked",
         "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
         "project": "chromium",
@@ -46650,6 +46699,13 @@
       },
       {
         "id": "chromium::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › shows no-candidate next steps with manual research handoff",
+        "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › uses the one explicit retry action for loaded no-candidate params in the workspace layout",
         "spec": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
         "project": "chromium",
         "owner": "route_owner",
@@ -47720,7 +47776,21 @@
         "mandatory": false
       },
       {
+        "id": "chromium::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps a list failure unavailable until the user explicitly retries on desktop",
+        "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
         "id": "chromium::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps a single primary scanner CTA in the empty state on desktop",
+        "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts::watchlist-empty-state-cta.spec.ts › keeps filtered-empty distinct from first use and clears filters on mobile",
         "spec": "apps/dsa-web/e2e/watchlist-empty-state-cta.spec.ts",
         "project": "chromium",
         "owner": "route_owner",
