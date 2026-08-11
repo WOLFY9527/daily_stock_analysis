@@ -1019,6 +1019,52 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
   });
 }
 
+export function deterministicStockValidationFixture(encodedSymbol: string) {
+  let rawSymbol = '';
+  try {
+    rawSymbol = decodeURIComponent(encodedSymbol).trim();
+  } catch {
+    rawSymbol = '';
+  }
+
+  const upperSymbol = rawSymbol.toUpperCase();
+  const hkMatch = /^(?:HK(\d{1,5})|(\d{1,5})\.HK)$/.exec(upperSymbol);
+  const cnMatch = /^(?:(?:SH|SZ|SS|BJ)(\d{6})|(\d{6})\.(?:SH|SZ|SS|BJ))$/.exec(upperSymbol);
+  const isCnSymbol = /^\d{6}$/.test(upperSymbol);
+  const isUsSymbol = /^(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?|\^(?:GSPC|DJI|IXIC|NDX|VIX|RUT))$/.test(upperSymbol);
+  const normalizedSymbol = hkMatch
+    ? `HK${(hkMatch[1] ?? hkMatch[2]).padStart(5, '0')}`
+    : cnMatch
+      ? (cnMatch[1] ?? cnMatch[2])
+      : upperSymbol;
+  const market = hkMatch ? 'hk' : (cnMatch || isCnSymbol) ? 'cn' : isUsSymbol ? 'us' : null;
+
+  if (market) {
+    return {
+      stock_code: normalizedSymbol,
+      normalized_symbol: normalizedSymbol,
+      market,
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stock_name: null,
+      message: 'Symbol verified by deterministic browser fixture.',
+    };
+  }
+
+  const ambiguous = /^\d{5}$/.test(upperSymbol);
+  return {
+    stock_code: upperSymbol,
+    normalized_symbol: upperSymbol,
+    market: null,
+    status: ambiguous ? 'ambiguous' : 'invalid_format',
+    valid: false,
+    exists: false,
+    stock_name: null,
+    message: ambiguous ? 'Add a market to validate this symbol.' : 'Enter a supported stock symbol format.',
+  };
+}
+
 async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
   let isLoggedIn = false;
 
@@ -1110,6 +1156,11 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
     if (method === 'POST' && path.startsWith('/api/v1/auth/login')) {
       isLoggedIn = true;
       return fulfillJson(route, { ok: true });
+    }
+
+    const stockValidationMatch = /^\/api\/v1\/stocks\/([^/]+)\/validate$/.exec(path);
+    if (method === 'GET' && stockValidationMatch) {
+      return fulfillJson(route, deterministicStockValidationFixture(stockValidationMatch[1]));
     }
 
     if (method === 'GET' && path === '/api/v1/scanner/themes') {

@@ -4473,9 +4473,17 @@ describe('HomeSurfacePage', () => {
     expect(within(commandPlane).getByTestId('home-bento-analyze-button')).toBeEnabled();
   });
 
-  it('hands a valid home search submission to the canonical stock structure route', async () => {
+  it('hands a valid home search submission to the server-validated canonical stock structure route', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
-    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('AAPL'));
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+    });
+    vi.mocked(publicAnalysisApi.preview).mockImplementationOnce(() => pendingPromise());
     renderSurfaceWithLocation('/');
 
     const input = screen.getByTestId('home-bento-omnibar-input');
@@ -4485,13 +4493,21 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
     ));
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('AAPL');
     expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'AAPL' }));
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
   });
 
-  it('uses the public preview canonical HK identity for guest navigation without authenticated validation', async () => {
+  it('uses the server validation canonical HK identity while preview remains enrichment', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
-    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('HK00700'));
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: '0700.HK',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'valid',
+      valid: true,
+      exists: true,
+    });
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('HK99999'));
     renderSurfaceWithLocation('/');
 
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: '0700.HK' } });
@@ -4500,15 +4516,23 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       '/stocks/HK00700/structure-decision?symbol=HK00700&source=manual',
     ));
-    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: '0700.HK' }));
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('0700.HK');
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'HK00700' }));
   });
 
   it.each([
     ['A-share', '600519', '600519'],
     ['Hong Kong', '0700.HK', 'HK00700'],
-  ])('uses the public preview canonical %s identity before routing', async (_market, query, normalized) => {
+  ])('uses the server validation canonical %s identity before routing', async (_market, query, normalized) => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: query,
+      normalizedSymbol: normalized,
+      market: _market === 'Hong Kong' ? 'hk' : 'cn',
+      status: 'valid',
+      valid: true,
+      exists: true,
+    });
     vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse(normalized));
     renderSurfaceWithLocation('/');
 
@@ -4518,11 +4542,11 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       `/stocks/${normalized}/structure-decision?symbol=${normalized}&source=manual`,
     ));
-    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: query }));
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith(query);
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: normalized }));
   });
 
-  it('keeps empty and public-preview-rejected guest searches on the current route', async () => {
+  it('keeps empty, preview-unavailable, and invalid-validation guest searches truthful', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurfaceWithLocation('/market-overview');
 
@@ -4532,13 +4556,40 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByText('请输入股票代码后再开始分析')).toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
 
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+    });
     vi.mocked(publicAnalysisApi.preview).mockRejectedValueOnce(new Error('preview unavailable'));
-    fireEvent.change(input, { target: { value: 'not-a-symbol!' } });
+    fireEvent.change(input, { target: { value: 'AAPL' } });
     fireEvent.submit(form);
     expect(await screen.findByTestId('guest-preview-unavailable-state')).toBeInTheDocument();
-    expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
-    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'not-a-symbol!' }));
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(screen.getByTestId('home-location-path')).toHaveTextContent(
+      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+    );
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('AAPL');
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'AAPL' }));
+
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'not-a-symbol!',
+      normalizedSymbol: null,
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+    });
+    fireEvent.change(input, { target: { value: 'not-a-symbol!' } });
+    fireEvent.submit(form);
+    expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
+    expect(screen.getByTestId('home-location-path')).toHaveTextContent(
+      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+    );
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('not-a-symbol!');
+    expect(publicAnalysisApi.preview).toHaveBeenCalledTimes(1);
   });
 
   it('stops malformed ticker input after server validation without analysis', async () => {

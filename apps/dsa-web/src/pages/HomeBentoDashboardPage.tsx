@@ -7204,17 +7204,33 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     if (isGuest) {
-      const canonicalSymbol = await handleAnalyze(rawQuery);
+      let canonicalSymbol;
+      try {
+        canonicalSymbol = await resolveCanonicalHomeSymbol(rawQuery);
+      } catch {
+        setStatusToast({
+          message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
+          tone: 'error',
+        });
+        return;
+      }
       if (!canonicalSymbol) {
+        setStatusToast({
+          message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
+          tone: 'error',
+        });
         return;
       }
 
       const builtPath = stockSearchRouteAuthority('stock-structure', language, {
-        symbol: canonicalSymbol,
+        symbol: canonicalSymbol.symbol,
         source: 'manual',
       });
       const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
+      setStatusToast(null);
+      setSearchQuery('');
       navigate(target);
+      void handleAnalyze(rawQuery, canonicalSymbol.symbol);
       return;
     }
 
@@ -7268,7 +7284,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
       try {
         const response = await withGuestPreviewTimeout(publicAnalysisApi.preview({
-          stockCode: rawQuery,
+          stockCode: verifiedSymbol ?? rawQuery,
           stockName: undefined,
           reportType: 'brief',
         }));
