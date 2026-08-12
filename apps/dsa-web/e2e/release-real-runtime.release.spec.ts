@@ -225,7 +225,7 @@ test.describe.serial('qualified release real runtime', () => {
       await expect(memberPage.getByTestId('portfolio-permission-limited-state')).toHaveCount(0);
       await expect(memberPage.getByTestId('portfolio-empty-onboarding-row')).toBeVisible();
       const onboarding = memberPage.getByTestId('portfolio-empty-actions');
-      const createAccountAction = onboarding.getByRole('button', { name: '创建账户' });
+      const createAccountAction = onboarding.getByRole('button', { name: /创建账户|新建账户/ });
       await expect(createAccountAction).toBeEnabled();
       await createAccountAction.click();
       const accountForm = memberPage.locator('form').filter({ has: memberPage.getByLabel('账户名称') });
