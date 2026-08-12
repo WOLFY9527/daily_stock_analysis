@@ -328,7 +328,6 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
 @router.get(
     "/{stock_code}/validate",
-    dependencies=[Depends(get_current_user)],
     response_model=StockValidationResponse,
     responses={
         200: {"description": "股票代码真实性校验结果"},

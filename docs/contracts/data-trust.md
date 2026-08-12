@@ -67,7 +67,9 @@ consumer. Ambiguous or malformed input remains rejected. Consumers must not
 introduce local aliases, regex parsers, inferred-market defaults, or a raw
 symbol fallback after canonical resolution fails. Web consumers use the server
 validation response's canonical symbol and market rather than deriving one
-locally.
+locally. The consumer-safe validation precheck is public so anonymous research
+entry can establish symbol identity; research packets, evidence, history, and
+structure routes remain authenticated.
 
 ### Provenance vocabulary guard
 

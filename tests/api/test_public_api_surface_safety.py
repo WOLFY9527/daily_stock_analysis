@@ -585,6 +585,11 @@ def test_guest_stock_quote_baseline_is_public_while_adjacent_stock_routes_and_pr
     client = _auth_guarded_client()
     stock_service = MagicMock()
     stock_service.get_realtime_quote.side_effect = lambda symbol: _stock_quote_payload(symbol)
+    stock_service.validate_ticker_exists.return_value = {
+        "stock_code": "AAPL",
+        "exists": True,
+        "stock_name": "Apple",
+    }
     evidence_service = MagicMock()
     evidence_service.get_stock_evidence.return_value = _stock_evidence_payload("AAPL")
     structure_service = MagicMock()
@@ -605,6 +610,8 @@ def test_guest_stock_quote_baseline_is_public_while_adjacent_stock_routes_and_pr
             public_responses = {
                 "/api/v1/stocks/ORCL/quote": client.get("/api/v1/stocks/ORCL/quote"),
                 "/api/v1/stocks/600519/quote": client.get("/api/v1/stocks/600519/quote"),
+                "/api/v1/stocks/AAPL/validate": client.get("/api/v1/stocks/AAPL/validate"),
+                "/api/v1/stocks/AAPL$/validate": client.get("/api/v1/stocks/AAPL$/validate"),
             }
             protected_responses = {
                 "/api/v1/stocks/ORCL/evidence": client.get("/api/v1/stocks/ORCL/evidence"),
@@ -630,6 +637,8 @@ def test_guest_stock_quote_baseline_is_public_while_adjacent_stock_routes_and_pr
         assert {path: response.status_code for path, response in public_responses.items()} == {
             "/api/v1/stocks/ORCL/quote": 200,
             "/api/v1/stocks/600519/quote": 200,
+            "/api/v1/stocks/AAPL/validate": 200,
+            "/api/v1/stocks/AAPL$/validate": 200,
         }
         assert {path: response.status_code for path, response in protected_responses.items()} == {
             "/api/v1/stocks/ORCL/evidence": 401,
@@ -649,6 +658,7 @@ def test_guest_stock_quote_baseline_is_public_while_adjacent_stock_routes_and_pr
             "/api/v1/watchlist/items": 401,
         }
         assert stock_service.get_realtime_quote.call_count == 2
+        stock_service.validate_ticker_exists.assert_called_once_with("AAPL")
         evidence_service.get_stock_evidence.assert_not_called()
         structure_service.get_structure_decision.assert_not_called()
         for response in (
@@ -858,6 +868,7 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
         "/api/v1/market-overview/funds-flow",
         "/api/v1/market-overview/macro",
         "/api/v1/stocks/AAPL/quote",
+        "/api/v1/stocks/AAPL/validate",
     ):
         assert limiter._is_safe_read_bypass("GET", path)
 

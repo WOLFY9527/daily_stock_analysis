@@ -164,6 +164,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/research/queue"): "authenticated_member",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
     ("GET", "/api/v1/stocks/{stock_code}/quote"): "public_consumer_safe_read",
+    ("GET", "/api/v1/stocks/{stock_code}/validate"): "public_consumer_safe_read",
     ("GET", "/api/v1/stocks/{stock_code}/structure-decision"): "authenticated_member",
     ("POST", "/api/v1/stocks/structure-decisions/batch"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",

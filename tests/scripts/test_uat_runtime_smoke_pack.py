@@ -124,6 +124,7 @@ def _route_responses(
         ): _FakeResponse(200, payload=_auth_status_payload(auth_enabled=auth_enabled, logged_in=logged_in)),
         ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
         ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+        ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
         ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
         (
             "GET",
@@ -138,6 +139,7 @@ def _route_responses(
 
 def test_public_route_specs_only_include_quote_baseline_for_stocks() -> None:
     assert ("GET", "/api/v1/stocks/AAPL/quote") in smoke.PUBLIC_ROUTE_SPECS
+    assert ("GET", "/api/v1/stocks/AAPL/validate") in smoke.PUBLIC_ROUTE_SPECS
     assert ("GET", "/api/v1/stocks/AAPL/evidence") not in smoke.PUBLIC_ROUTE_SPECS
     assert ("GET", "/api/v1/stocks/AAPL/structure-decision") not in smoke.PUBLIC_ROUTE_SPECS
 
@@ -305,6 +307,7 @@ def test_unauthenticated_authenticated_routes_are_partial_not_fail() -> None:
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
             (
                 "GET",
@@ -367,6 +370,7 @@ def test_auth_disabled_runtime_treats_open_protected_routes_as_expected() -> Non
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
         }
@@ -420,6 +424,7 @@ def test_auth_disabled_runtime_still_fails_when_protected_route_rejects() -> Non
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
             ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
         }
@@ -468,6 +473,7 @@ def test_true_public_route_failure_still_fails_smoke() -> None:
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
             (
                 "GET",
@@ -512,6 +518,7 @@ def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
             (
                 "GET",
@@ -569,6 +576,7 @@ def test_authenticated_routes_fail_when_auth_supplied_but_route_unavailable() ->
             ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
             (
                 "GET",
@@ -694,6 +702,7 @@ def test_runtime_auth_mode_fails_closed_when_auth_status_payload_is_ambiguous() 
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"loggedIn": False}),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/validate"): _FakeResponse(200, payload={"status": "valid"}),
             ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
         }

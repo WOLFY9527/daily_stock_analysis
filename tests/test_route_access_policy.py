@@ -48,6 +48,8 @@ def test_normalize_policy_path_trims_trailing_slash() -> None:
 def test_quote_routes_are_public_baseline_reads() -> None:
     assert is_public_baseline_read("GET", "/api/v1/stocks/ORCL/quote")
     assert is_public_baseline_read("get", "/api/v1/stocks/600519/quote/")
+    assert is_public_baseline_read("GET", "/api/v1/stocks/AAPL/validate")
+    assert is_public_baseline_read("get", "/api/v1/stocks/600519/validate/")
     assert is_public_baseline_read("POST", "/api/v1/analysis/preview")
 
 
@@ -106,6 +108,7 @@ def test_auth_middleware_keeps_only_guest_market_secondary_reads_public() -> Non
 def test_adjacent_stock_research_routes_are_not_public_baseline_reads() -> None:
     assert not is_public_baseline_read("GET", "/api/v1/stocks/ORCL/evidence")
     assert not is_public_baseline_read("GET", "/api/v1/stocks/ORCL/structure-decision")
+    assert not is_public_baseline_read("POST", "/api/v1/stocks/ORCL/validate")
     assert not is_public_baseline_read("POST", "/api/v1/stocks/ORCL/quote")
     assert not is_public_baseline_read("GET", "/stocks/ORCL/quote")
 

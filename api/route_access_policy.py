@@ -52,6 +52,10 @@ _PUBLIC_STOCK_READ_RE = re.compile(
     r"^/api/v1/stocks/[^/]+/quote$"
 )
 
+_PUBLIC_STOCK_VALIDATION_RE = re.compile(
+    r"^/api/v1/stocks/[^/]+/validate$"
+)
+
 
 def normalize_policy_path(path: str) -> str:
     return str(path or "").rstrip("/") or "/"
@@ -64,4 +68,8 @@ def is_public_baseline_read(method: str, path: str) -> bool:
         return True
     if normalized_method != "GET":
         return False
-    return normalized in PUBLIC_BASELINE_PATHS or _PUBLIC_STOCK_READ_RE.match(normalized) is not None
+    return (
+        normalized in PUBLIC_BASELINE_PATHS
+        or _PUBLIC_STOCK_READ_RE.match(normalized) is not None
+        or _PUBLIC_STOCK_VALIDATION_RE.match(normalized) is not None
+    )
