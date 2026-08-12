@@ -17,6 +17,28 @@ vi.mock('../../api/publicAnalysis', () => ({
   },
 }));
 
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists: vi.fn(async (stockCode: string) => {
+        const normalizedSymbol = stockCode.trim().toUpperCase();
+        return {
+          stockCode: normalizedSymbol,
+          normalizedSymbol,
+          market: 'us',
+          status: 'valid',
+          valid: true,
+          exists: true,
+          stockName: null,
+        };
+      }),
+    },
+  };
+});
+
 vi.mock('../../api/market', () => ({
   marketApi: {
     getMarketBriefing: (...args: unknown[]) => marketBriefingMock(...args),
