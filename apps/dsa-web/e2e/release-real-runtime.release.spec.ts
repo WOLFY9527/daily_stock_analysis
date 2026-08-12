@@ -235,7 +235,7 @@ test.describe.serial('qualified release real runtime', () => {
       const createResponsePromise = memberPage.waitForResponse(
         (response) => response.url().endsWith('/api/v1/portfolio/accounts') && response.request().method() === 'POST',
       );
-      await accountForm.getByRole('button', { name: '创建账户' }).click();
+      await accountForm.getByRole('button', { name: /创建账户|新建账户/ }).click();
       const createResponse = await createResponsePromise;
       expect(createResponse.status()).toBe(200);
       await expect(memberPage.getByText(memberAccountName, { exact: true })).toBeVisible();
