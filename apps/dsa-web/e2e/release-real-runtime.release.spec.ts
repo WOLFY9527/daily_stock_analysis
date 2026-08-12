@@ -238,7 +238,7 @@ test.describe.serial('qualified release real runtime', () => {
       await accountForm.getByRole('button', { name: /创建账户|新建账户/ }).click();
       const createResponse = await createResponsePromise;
       expect(createResponse.status()).toBe(200);
-      await expect(memberPage.getByTestId('portfolio-command-strip').getByText(memberAccountName, { exact: true })).toBeVisible();
+      await expect(memberPage.getByTestId('portfolio-total-assets-card').getByText(memberAccountName, { exact: true })).toBeVisible();
       const createdAccounts = await memberPage.request.get(`${baseUrl}/api/v1/portfolio/accounts`);
       expect(createdAccounts.status()).toBe(200);
       expect((await createdAccounts.json()).accounts).toEqual(
