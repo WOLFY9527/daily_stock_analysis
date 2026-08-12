@@ -222,6 +222,28 @@ test.describe.serial('qualified release real runtime', () => {
       const portfolio = await memberPage.request.get(`${baseUrl}/api/v1/portfolio/accounts`);
       expect(portfolio.status()).toBe(200);
       expect((await portfolio.json()).accounts).toEqual([]);
+      await expect(memberPage.getByTestId('portfolio-permission-limited-state')).toHaveCount(0);
+      await expect(memberPage.getByTestId('portfolio-empty-onboarding-row')).toBeVisible();
+      const onboarding = memberPage.getByTestId('portfolio-empty-actions');
+      const createAccountAction = onboarding.getByRole('button', { name: '创建账户' });
+      await expect(createAccountAction).toBeEnabled();
+      await createAccountAction.click();
+      const accountForm = memberPage.locator('form').filter({ has: memberPage.getByLabel('账户名称') });
+      await expect(accountForm).toBeVisible();
+      const memberAccountName = `Release member account ${memberUsername}`;
+      await memberPage.getByLabel('账户名称').fill(memberAccountName);
+      const createResponsePromise = memberPage.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/portfolio/accounts') && response.request().method() === 'POST',
+      );
+      await accountForm.getByRole('button', { name: '创建账户' }).click();
+      const createResponse = await createResponsePromise;
+      expect(createResponse.status()).toBe(200);
+      await expect(memberPage.getByText(memberAccountName, { exact: true })).toBeVisible();
+      const createdAccounts = await memberPage.request.get(`${baseUrl}/api/v1/portfolio/accounts`);
+      expect(createdAccounts.status()).toBe(200);
+      expect((await createdAccounts.json()).accounts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: memberAccountName })]),
+      );
 
       await login(adminPage, adminUsername, adminPassword, '/zh/admin/logs');
       expect((await adminPage.request.get(`${baseUrl}/api/v1/admin/users`)).status()).toBe(200);

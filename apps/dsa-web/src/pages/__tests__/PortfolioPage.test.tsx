@@ -153,6 +153,7 @@ function makeAccounts(items: AccountItem[] = [{ id: 1, name: 'Main' }]) {
 
 function setAdminPortfolioSurface() {
   useProductSurfaceMock.mockReturnValue({
+    isAuthenticated: true,
     isAdminMode: true,
     canReadProviders: true,
     isAdmin: true,
@@ -162,6 +163,7 @@ function setAdminPortfolioSurface() {
 
 function setConsumerPortfolioSurface() {
   useProductSurfaceMock.mockReturnValue({
+    isAuthenticated: true,
     isAdminMode: false,
     canReadProviders: false,
     isAdmin: false,
@@ -1384,24 +1386,23 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-total-assets-value')).not.toHaveTextContent('CNY 0.00');
   });
 
-  it('keeps confirmed empty portfolio access limitations distinct from first-use actions', async () => {
+  it('exposes confirmed empty portfolio first-use actions to authenticated members', async () => {
     setConsumerPortfolioSurface();
 
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
-    expect(permissionState).toHaveTextContent('组合编辑权限受限');
-    expect(within(permissionState).getAllByRole('button')).toHaveLength(1);
-    expect(within(permissionState).getByRole('button', { name: '刷新组合快照' })).toBeInTheDocument();
-    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-permission-limited-state')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-empty-actions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
     expect(createAccount).not.toHaveBeenCalled();
     expect(createTrade).not.toHaveBeenCalled();
     expect(commitCsvImport).not.toHaveBeenCalled();
   });
 
-  it('keeps a confirmed no-account permission limit distinct from an account-without-holdings limit', async () => {
+  it('exposes confirmed no-account onboarding to authenticated members', async () => {
     setConsumerPortfolioSurface();
     getAccounts.mockResolvedValue(makeAccounts([]));
     getSnapshot.mockResolvedValue(makeSnapshot({ accountCount: 0, includePosition: false, fxStale: false }));
@@ -1410,10 +1411,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
-    expect(permissionState).toHaveTextContent('当前状态已确认尚未创建组合账户');
-    expect(permissionState).not.toHaveTextContent('当前账户已确认没有持仓');
-    expect(screen.queryByTestId('portfolio-empty-onboarding-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-permission-limited-state')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') })).toBeInTheDocument();
   });
 
   it('keeps confirmed first use visible when a later event read fails', async () => {
@@ -4121,15 +4121,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByText(translate('zh', 'portfolio.syncRequiresToken'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.brokerFallbackEmpty'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.brokerFallbackUnavailable'))).not.toBeInTheDocument();
-    expect(screen.queryByText('手工记账')).not.toBeInTheDocument();
+    expect(screen.getByText('手工记账')).toBeInTheDocument();
     expect(screen.queryByText('编辑')).not.toBeInTheDocument();
     expect(screen.queryByText('作废')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-consumer-setup-boundary')).toHaveTextContent('当前视图仅展示已接入的组合、持仓与估值状态。');
-    expect(screen.getByTestId('portfolio-consumer-setup-boundary')).not.toHaveTextContent(/IBKR|token|API|账户引用|会话令牌|连接地址|同步控件|sync controls|request|trace|cache|payload/i);
-    const permissionState = screen.getByTestId('portfolio-permission-limited-state');
-    expect(permissionState).toHaveTextContent('组合编辑权限受限');
-    expect(within(permissionState).getByRole('button', { name: '刷新组合快照' })).toBeInTheDocument();
-    expect(screen.queryByTestId('portfolio-research-state-preview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-consumer-setup-boundary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-permission-limited-state')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-empty-onboarding-row')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-research-state-preview')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '同步' })).not.toBeInTheDocument();
   });
 
   it('keeps new account broker blank instead of defaulting to Demo', async () => {

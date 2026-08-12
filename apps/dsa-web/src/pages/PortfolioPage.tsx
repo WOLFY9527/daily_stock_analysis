@@ -1823,7 +1823,8 @@ const PortfolioPage: React.FC = () => {
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const productSurface = useProductSurface();
-  const canManagePortfolioOperations = Boolean(productSurface.isAdminMode && productSurface.canReadProviders);
+  const canManagePortfolioOperations = productSurface.isAuthenticated;
+  const canManagePortfolioProviderOperations = Boolean(productSurface.isAdminMode && productSurface.canReadProviders);
   const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const copy = getPortfolioCopy(t, language);
@@ -2085,7 +2086,7 @@ const PortfolioPage: React.FC = () => {
   }, []);
 
   const loadBrokers = useCallback(async () => {
-    if (!canManagePortfolioOperations) {
+    if (!canManagePortfolioProviderOperations) {
       setBrokers([]);
       setSelectedBroker('');
       setBrokerListUnavailable(false);
@@ -2112,10 +2113,10 @@ const PortfolioPage: React.FC = () => {
       setSelectedBroker('');
       setBrokerListUnavailable(true);
     }
-  }, [canManagePortfolioOperations]);
+  }, [canManagePortfolioProviderOperations]);
 
   const loadBrokerConnections = useCallback(async (accountId?: number) => {
-    if (!canManagePortfolioOperations || !accountId) {
+    if (!canManagePortfolioProviderOperations || !accountId) {
       setBrokerConnections([]);
       return;
     }
@@ -2125,7 +2126,7 @@ const PortfolioPage: React.FC = () => {
     } catch {
       setBrokerConnections([]);
     }
-  }, [canManagePortfolioOperations]);
+  }, [canManagePortfolioProviderOperations]);
 
   const loadSnapshotAndRisk = useCallback(async () => {
     setIsLoading(true);
@@ -2424,7 +2425,7 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handleSyncIbkr = async () => {
-    if (!canManagePortfolioOperations) {
+    if (!canManagePortfolioProviderOperations) {
       return;
     }
     if (!writableAccountId) {
@@ -2463,7 +2464,7 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handlePreviewImport = async () => {
-    if (!canManagePortfolioOperations) {
+    if (!canManagePortfolioProviderOperations) {
       return;
     }
     if (!writableAccountId) {
@@ -2494,7 +2495,7 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handleConfirmImport = async () => {
-    if (!canManagePortfolioOperations) {
+    if (!canManagePortfolioProviderOperations) {
       return;
     }
     if (!writableAccountId) {
@@ -3314,7 +3315,7 @@ const PortfolioPage: React.FC = () => {
   );
   const syncDataActionLabel = language === 'zh' ? '同步数据' : 'Sync data';
   const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
-    if (!canManagePortfolioOperations) {
+    if (!canManagePortfolioOperations || (nextLeftTab === 'sync' && !canManagePortfolioProviderOperations)) {
       return;
     }
     setLeftTab(nextLeftTab);
@@ -3772,9 +3773,11 @@ const PortfolioPage: React.FC = () => {
           >
             {researchStateNextAction}
           </TerminalButton>
-          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-            {importTradesActionLabel}
-          </TerminalButton>
+          {canManagePortfolioProviderOperations ? (
+            <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+              {importTradesActionLabel}
+            </TerminalButton>
+          ) : null}
           {stockResearchHandoffPath ? (
             <a
               data-testid="portfolio-stock-research-handoff"
@@ -4168,12 +4171,16 @@ const PortfolioPage: React.FC = () => {
                       <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
                         {addHoldingActionLabel}
                       </TerminalButton>
-                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                        {importTradesActionLabel}
-                      </TerminalButton>
-                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                        {syncDataActionLabel}
-                      </TerminalButton>
+                      {canManagePortfolioProviderOperations ? (
+                        <>
+                          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                            {importTradesActionLabel}
+                          </TerminalButton>
+                          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                            {syncDataActionLabel}
+                          </TerminalButton>
+                        </>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -4402,7 +4409,7 @@ const PortfolioPage: React.FC = () => {
                           </li>
                         ))}
                       </ol>
-                      {canManagePortfolioOperations ? (
+                      {canManagePortfolioProviderOperations ? (
                         <TerminalButton type="button" variant="secondary" className="mt-3 h-9 px-3 text-xs" onClick={() => openManualLedger('sync')}>
                           {importTradesActionLabel}
                         </TerminalButton>
@@ -4964,9 +4971,11 @@ const PortfolioPage: React.FC = () => {
                       <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
                         {manualLedgerActionLabel}
                       </TerminalButton>
-                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                        {syncDataActionLabel}
-                      </TerminalButton>
+                      {canManagePortfolioProviderOperations ? (
+                        <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                          {syncDataActionLabel}
+                        </TerminalButton>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs text-[color:var(--wolfy-text-muted)]">
@@ -5200,7 +5209,9 @@ const PortfolioPage: React.FC = () => {
                 options={[
                   { value: 'trade', label: language === 'en' ? 'Ledger' : '记账' },
                   { value: 'account', label: language === 'en' ? 'Account' : '账户' },
-                  { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
+                  ...(canManagePortfolioProviderOperations
+                    ? [{ value: 'sync' as const, label: language === 'en' ? 'Sync' : '同步' }]
+                    : []),
                   { value: 'fx', label: language === 'en' ? 'FX' : '汇率' },
                 ]}
                 dataTestId="portfolio-left-tab-switcher"
@@ -5291,7 +5302,7 @@ const PortfolioPage: React.FC = () => {
                 />
               ) : null}
 
-              {leftTab === 'sync' ? (
+              {leftTab === 'sync' && canManagePortfolioProviderOperations ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.dataSyncTitle}</p>
