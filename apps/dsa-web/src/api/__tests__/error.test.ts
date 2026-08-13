@@ -23,6 +23,23 @@ describe('parseApiError', () => {
     expect(parsed.rawMessage).toBe('请求参数格式不正确。');
   });
 
+  it('prefers an explicit response error code over the Axios transport code', () => {
+    const parsed = parseApiError({
+      code: 'ERR_BAD_REQUEST',
+      response: {
+        status: 400,
+        data: {
+          error: 'invalid_password',
+          message: '密码不能只包含数字',
+        },
+      },
+    });
+
+    expect(parsed.status).toBe(400);
+    expect(parsed.code).toBe('invalid_password');
+    expect(parsed.message).toBe('密码不能只包含数字');
+  });
+
   it('parses { detail: "..." } payloads', () => {
     const parsed = parseApiError({
       response: {

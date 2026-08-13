@@ -411,7 +411,7 @@ function extractCommonParsedErrorMetadata(error: unknown): {
   const errorMessage = getErrorMessage(error);
   const responseText = pickString(response?.statusText, isRecord(error) ? (error as ErrorCarrier).statusText : undefined);
   const causeMessage = getCauseMessage(error);
-  const code = getErrorCode(error) || extractErrorCode(responseData);
+  const code = extractErrorCode(responseData) || getErrorCode(error);
   const rawMessage = pickString(
     payloadText,
     responseText,
