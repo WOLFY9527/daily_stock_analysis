@@ -272,12 +272,18 @@ function normalizeScannerMarket(market?: string | null): string | null {
   return normalized === 'CN' || normalized === 'US' || normalized === 'HK' ? normalized : null;
 }
 
-function sanitizeScannerProfileLabel(label?: string | null): string {
+function sanitizeScannerProfileLabel(label: string | null | undefined, language: 'zh' | 'en' = 'zh'): string {
   const raw = String(label || '').trim();
   if (!raw) return '';
-  if (raw === 'cn_preopen_v1') return 'A股盘前扫描';
+  if (raw === 'cn_preopen_v1') return language === 'en' ? 'A-share Pre-open Scanner' : 'A股盘前扫描';
   if (raw === 'us_preopen_v1') return 'US Pre-open Scanner';
   if (raw === 'hk_preopen_v1') return 'HK Pre-open Scanner';
+  if (language === 'en' && raw === 'A股盘前扫描') return 'A-share Pre-open Scanner';
+  if (language === 'en' && raw === 'A股盘前扫描 v1') return 'A-share Pre-open Scanner';
+  if (language === 'en' && raw === '美股盘前扫描') return 'US Pre-open Scanner';
+  if (language === 'en' && raw === '美股盘前扫描 v1') return 'US Pre-open Scanner';
+  if (language === 'en' && raw === '港股盘前扫描') return 'HK Pre-open Scanner';
+  if (language === 'en' && raw === '港股盘前扫描 v1') return 'HK Pre-open Scanner';
   return raw
     .replace(/^[A-Z]{2}\s*[·-]\s*/u, '')
     .replace(/\s+v\d+$/iu, '')
@@ -446,6 +452,9 @@ function localizedDataReadinessLabel(
 function sanitizeScannerDataReadinessText(value: string | null | undefined, language: 'zh' | 'en'): string | null {
   const text = String(value || '').trim();
   if (!text) return null;
+  if (language === 'en' && text === '标的池可用，但行情或历史覆盖不足，暂不生成候选。') {
+    return 'The scope is available, but quote or history coverage is insufficient to produce candidates yet.';
+  }
   if (/provider|debug|trace|schema|raw|request|cache|runtime|sourceauthority|blockerbucket|pipeline|dry[-_\s]?run|\bscanner\b/i.test(text)) {
     return sanitizeConsumerDataStateText(text, 'partial');
   }
@@ -1046,7 +1055,7 @@ function getRunMarketDisplayLabel(value: string | null | undefined, language: 'z
 function buildScannerRunFactItems(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): ScannerLabeledValue[] {
   if (!runDetail) return [];
   const counts = getScannerRunFactCounts(runDetail);
-  const profileLabel = sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile);
+  const profileLabel = sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile, language);
   const items: ScannerLabeledValue[] = [
     {
       label: language === 'en' ? 'Market' : '市场',
@@ -1101,7 +1110,7 @@ function buildScannerHistoryScopeHint(
   language: 'zh' | 'en',
 ): string {
   const runMarket = normalizeScannerRunMarket(runDetail?.market) || market;
-  const runProfile = sanitizeScannerProfileLabel(runDetail?.profileLabel || runDetail?.profile || profile);
+  const runProfile = sanitizeScannerProfileLabel(runDetail?.profileLabel || runDetail?.profile || profile, language);
   return language === 'en'
     ? `Personal history is scoped to scanner runs available to this account; this view is loaded around ${getScannerMarketLabel(runMarket, language)} · ${runProfile || '--'}.`
     : `个人历史仅基于当前账号可访问的扫描记录；本视图按 ${getScannerMarketLabel(runMarket, language)} · ${runProfile || '--'} 加载。`;
@@ -2647,9 +2656,9 @@ const UserScannerPage: React.FC = () => {
   const profileOptions = useMemo(
     () => getScannerProfileOptions(market, t).map((option) => ({
       ...option,
-      label: sanitizeScannerProfileLabel(option.label),
+      label: sanitizeScannerProfileLabel(option.label, language),
     })),
-    [market, t],
+    [language, market, t],
   );
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
   const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
@@ -3278,7 +3287,7 @@ const UserScannerPage: React.FC = () => {
       statusLabel: compactScannerStateLabel(item.status, language),
       statusVariant: statusVariant(item.status),
       watchlistDateLabel: item.watchlistDate ? formatDateOnly(item.watchlistDate, language) : null,
-      profileLabel: sanitizeScannerProfileLabel(item.profileLabel || item.profile),
+      profileLabel: sanitizeScannerProfileLabel(item.profileLabel || item.profile, language),
       title: historyHeadline.title,
       detail: historyHeadline.detail,
       shortlistSize: item.shortlistSize,
@@ -3869,9 +3878,9 @@ const UserScannerPage: React.FC = () => {
   const isScannerRunBlocked = scannerWorkspaceState === 'blocked';
   const scannerRunButtonLabel = isRunning
     ? t('scanner.running')
-    : language === 'en'
-      ? (isRetryScanState ? 'Run again' : t('scanner.run'))
-      : (isRetryScanState ? '重新扫描' : '启动扫描');
+    : isRetryScanState
+      ? t('scanner.runAgain')
+      : language === 'en' ? t('scanner.run') : '启动扫描';
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const showWorkflowNextSteps = !scannerHasPseudoEmptyRun && (!runDetail
     || scannerConclusion.state === 'waiting'
@@ -3971,8 +3980,8 @@ const UserScannerPage: React.FC = () => {
     },
   ];
   const scannerRailProfileLabel = runDetail
-    ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile)
-    : sanitizeScannerProfileLabel(SCANNER_PROFILE_DEFAULTS[market]?.profile || profile);
+    ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile, language)
+    : sanitizeScannerProfileLabel(SCANNER_PROFILE_DEFAULTS[market]?.profile || profile, language);
   const scannerRailItems = [
     {
       label: language === 'en' ? 'Scope' : '范围',
@@ -4091,7 +4100,7 @@ const UserScannerPage: React.FC = () => {
                 data-testid="scanner-page-heading"
                 eyebrow={(
                   <span data-testid="scanner-page-profile-label">
-                    {runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
+                    {runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile, language) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
                   </span>
                 )}
                 title={language === 'en' ? 'Discovery / Scanner' : '发现 / 扫描器'}

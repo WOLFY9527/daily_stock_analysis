@@ -1458,6 +1458,7 @@ export const enCatalog = {
       runHintUs: 'Run before open. Review against live quotes, indices, and opening flow.',
       runHintHk: 'Run before the HK open. Review against live quotes and opening follow-through.',
       run: 'Run scanner',
+      runAgain: 'Run again',
       running: 'Scanning...',
       currentRunEyebrow: 'Current Result',
       currentRunTitle: 'Current scan',

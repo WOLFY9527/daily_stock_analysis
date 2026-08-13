@@ -241,6 +241,9 @@ describe('Shell', () => {
 
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') }));
     const marketMenu = await screen.findByTestId('shell-nav-group-menu-market');
+    expect(marketMenu).toHaveAttribute('role', 'group');
+    expect(marketMenu).toHaveAttribute('aria-label', translate('zh', 'nav.group.market'));
+    expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') })).not.toHaveAttribute('aria-haspopup');
     expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveAttribute('href', '/market-overview');
     expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).toHaveAttribute('href', '/market/liquidity-monitor');
     expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.rotationRadar') })).toHaveAttribute('href', '/market/rotation-radar');

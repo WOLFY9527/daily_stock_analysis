@@ -1456,6 +1456,7 @@ export const zhCatalog = {
       runHintUs: '美股盘前运行，结合实时报价与开盘确认复核观察排序。',
       runHintHk: '港股开盘前运行，结合实时报价与开盘承接复核观察排序。',
       run: '运行扫描',
+      runAgain: '重新扫描',
       running: '扫描中...',
       currentRunEyebrow: '当前结果',
       currentRunTitle: '当前扫描结果',

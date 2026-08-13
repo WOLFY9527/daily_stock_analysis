@@ -991,7 +991,7 @@ function DecisionTracePanel({
     return (
       <div className="min-w-0 space-y-3" data-testid="home-bento-decision-trace-panel">
         <div className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 text-sm text-[color:var(--wolfy-text-muted)]">
-          当前分析未包含决策溯源
+          {locale === 'en' ? 'Decision trace is unavailable for this analysis.' : '当前分析未包含决策溯源'}
         </div>
         <DecisionSourceDetailsPanel report={dataQualityReport} locale={locale} trace={trace} sourceSummary={sourceSummary} />
         {quality ? (
@@ -5107,12 +5107,12 @@ function buildHomeDailyResearchView(
   const marketPulse = overview?.marketPulse;
   const queue = (overview?.researchQueue.items || [])
     .map((item) => {
-      const title = normalizeHomeDailyText(item.title);
-      const summary = normalizeHomeDailyText(item.summary);
+      const title = isEnglish ? localizeNarrativeText(locale, item.title, 'Research item') : normalizeHomeDailyText(item.title);
+      const summary = isEnglish ? localizeNarrativeText(locale, item.summary, 'Supporting details are unavailable.') : normalizeHomeDailyText(item.summary);
       return {
         title,
         summary,
-        action: normalizeHomeDailyText(item.action),
+        action: isEnglish ? localizeMetricValue(locale, item.action, 'Review') : normalizeHomeDailyText(item.action),
         priority: normalizeHomeDailyText(item.priority),
         symbol: undefined,
         href: undefined,
@@ -5132,25 +5132,25 @@ function buildHomeDailyResearchView(
     {
       key: 'money-flow',
       label: isEnglish ? 'Flow / style' : '资金 / 风格',
-      value: normalizeHomeDailyText(overview?.moneyFlow.styleBias),
+      value: isEnglish ? localizeMetricValue(locale, overview?.moneyFlow.styleBias, 'Unavailable') : normalizeHomeDailyText(overview?.moneyFlow.styleBias),
       detail: [
-        normalizeHomeDailyText(overview?.moneyFlow.offensiveDefensiveBias),
+        isEnglish ? localizeMetricValue(locale, overview?.moneyFlow.offensiveDefensiveBias, 'Unavailable') : normalizeHomeDailyText(overview?.moneyFlow.offensiveDefensiveBias),
         overview?.moneyFlow.topInflows?.filter(Boolean).slice(0, 2).join(' / ') || '',
       ].filter(Boolean).join(' · '),
     },
     {
       key: 'sector-rotation',
       label: isEnglish ? 'Theme rotation' : '主题轮动',
-      value: normalizeHomeDailyText(overview?.sectorThemeRotation.summary || overview?.sectorThemeRotation.diffusion),
+      value: isEnglish ? localizeNarrativeText(locale, overview?.sectorThemeRotation.summary || overview?.sectorThemeRotation.diffusion, 'Unavailable') : normalizeHomeDailyText(overview?.sectorThemeRotation.summary || overview?.sectorThemeRotation.diffusion),
       detail: overview?.sectorThemeRotation.leadingThemes?.filter(Boolean).slice(0, 2).join(' / ') || '',
     },
     {
       key: 'liquidity-risk',
       label: isEnglish ? 'Risk / liquidity' : '风险 / 流动性',
-      value: normalizeHomeDailyText(overview?.liquidityRisk.summary || overview?.liquidityRisk.volatilityTone),
+      value: isEnglish ? localizeNarrativeText(locale, overview?.liquidityRisk.summary || overview?.liquidityRisk.volatilityTone, 'Unavailable') : normalizeHomeDailyText(overview?.liquidityRisk.summary || overview?.liquidityRisk.volatilityTone),
       detail: [
-        normalizeHomeDailyText(overview?.liquidityRisk.fundingStress),
-        normalizeHomeDailyText(overview?.liquidityRisk.dollarRatePressure),
+        isEnglish ? localizeMetricValue(locale, overview?.liquidityRisk.fundingStress, 'Unavailable') : normalizeHomeDailyText(overview?.liquidityRisk.fundingStress),
+        isEnglish ? localizeMetricValue(locale, overview?.liquidityRisk.dollarRatePressure, 'Unavailable') : normalizeHomeDailyText(overview?.liquidityRisk.dollarRatePressure),
       ].filter(Boolean).join(' · '),
     },
   ].filter((item) => item.value || item.detail);
@@ -5174,14 +5174,14 @@ function buildHomeDailyResearchView(
   const briefingLimitsReliability = brief.reliabilityState !== 'ready';
 
   return {
-    observation: normalizeHomeDailyText(overview?.marketBrief.headline) || brief.regimeDetail,
-    why: normalizeHomeDailyText(overview?.marketBrief.summary) || brief.summary,
+    observation: isEnglish ? localizeNarrativeText(locale, overview?.marketBrief.headline, brief.regimeDetail) : normalizeHomeDailyText(overview?.marketBrief.headline) || brief.regimeDetail,
+    why: isEnglish ? localizeNarrativeText(locale, overview?.marketBrief.summary, brief.summary) : normalizeHomeDailyText(overview?.marketBrief.summary) || brief.summary,
     reliabilityLabel: briefingLimitsReliability
       ? brief.reliabilityLabel
-      : normalizeHomeDailyText(overview?.dataQuality.label) || brief.reliabilityLabel,
+      : isEnglish ? localizeMetricValue(locale, overview?.dataQuality.label, brief.reliabilityLabel) : normalizeHomeDailyText(overview?.dataQuality.label) || brief.reliabilityLabel,
     reliabilityDetail: briefingLimitsReliability
       ? brief.reliabilityDetail
-      : normalizeHomeDailyText(overview?.dataQuality.summary) || brief.reliabilityDetail,
+      : isEnglish ? localizeNarrativeText(locale, overview?.dataQuality.summary, brief.reliabilityDetail) : normalizeHomeDailyText(overview?.dataQuality.summary) || brief.reliabilityDetail,
     healthFacets: brief.healthFacets,
     nextCheck: queue[0]?.action || (isEnglish ? 'Start with the market path, then open Research Radar if a candidate appears.' : '先复核市场路径；若出现真实候选，再进入研究雷达继续检查。'),
     queue,
@@ -5279,6 +5279,19 @@ function toneFromFieldValue(value?: string): SignalTone {
 }
 
 const REPORT_TEXT_EN_BY_KEY: Record<string, string> = {
+  市场状态以观察与复核为主: 'Market conditions remain in observation and review mode.',
+  当前首页概览组合市场脉冲资金流代理主题强弱研究队列与公开数据质量合同不提供交易判断: 'The dashboard combines market pulse, flow proxy, theme strength, research queue, and public data quality without making trading judgments.',
+  主题轮动暂无可复用证据当前仅保留观察口径: 'Theme rotation has no reusable evidence yet; observation only.',
+  流动性与风险偏好以市场脉冲观察项为依据证据不足时保持收敛表述: 'Liquidity and risk appetite follow market-pulse observations; wording stays bounded when evidence is limited.',
+  核心模块已更新适合研究观察: 'Core modules updated; suitable for research observation.',
+  暂无证据: 'No evidence',
+  观察: 'Observe',
+  复核: 'Review',
+  正常: 'Normal',
+  走强: 'Strengthening',
+  走弱: 'Weakening',
+  适合研究观察: 'Suitable for research observation',
+  当前仅保留研究观察等待更多证据: 'Research observation only, awaiting more evidence.',
   中性偏多: 'Neutral to bullish',
   乐观: 'Bullish',
   偏多: 'Constructive',

@@ -886,8 +886,10 @@ const MarketRegimeReadModelSurface = ({
         </div>
       ) : error ? (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
-          <p className="min-w-0 text-xs leading-5 text-amber-100/80">{error}</p>
-          <TerminalButton variant="compact" onClick={onRetry}>重试</TerminalButton>
+          <p className="min-w-0 text-xs leading-5 text-amber-100/80">
+            {locale === 'en' ? 'Local regime evidence is unavailable.' : error}
+          </p>
+          <TerminalButton variant="compact" onClick={onRetry}>{locale === 'en' ? 'Retry' : '重试'}</TerminalButton>
         </div>
       ) : (
         <>
@@ -1258,7 +1260,7 @@ const MarketOverviewPage = () => {
     } catch {
       if (!cancelledRef?.current) {
         setProfessionalDataCapabilities(null);
-        setProfessionalDataCapabilitiesError('市场状态数据可用性暂不可用，请稍后重试。');
+        setProfessionalDataCapabilitiesError('unavailable');
       }
     } finally {
       if (!cancelledRef?.current) {

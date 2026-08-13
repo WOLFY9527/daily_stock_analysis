@@ -687,7 +687,6 @@ function useSidebarNavView({
           )}
           onClick={() => toggleNavGroupMenu(groupKey)}
           onKeyDown={(event) => handleNavGroupButtonKeyDown(event, groupKey, groupRoutes.length)}
-          aria-haspopup="menu"
           aria-expanded={isOpen}
           aria-controls={menuId}
           aria-label={groupLabel}
@@ -702,7 +701,8 @@ function useSidebarNavView({
         {isOpen ? (
           <div
             id={menuId}
-            role="menu"
+            role="group"
+            aria-label={groupLabel}
             data-testid={menuTestId}
             className="absolute left-0 top-full z-20 mt-1.5 flex min-w-[11.5rem] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-1.5 shadow-[var(--shadow-tight)]"
             onKeyDown={(event) => handleNavGroupMenuKeyDown(event, groupKey)}
