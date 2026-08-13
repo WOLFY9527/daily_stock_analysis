@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -14,7 +14,7 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 type LoginLanguage = UiLanguage;
 
 type ClientValidationError = {
-  field: 'username' | 'passwordConfirm';
+  field: 'username' | 'password' | 'passwordConfirm';
   message: string;
 };
 
@@ -180,6 +180,12 @@ const LoginPage: React.FC = () => {
   const [validationError, setValidationError] = useState<ClientValidationError | null>(null);
   const submitInFlightRef = useRef(false);
 
+  useEffect(() => {
+    if (!isSubmitting && validationError) {
+      document.getElementById(validationError.field)?.focus();
+    }
+  }, [isSubmitting, validationError]);
+
   const isAdminBootstrap = setupState === 'no_password';
   const isAuthReenable = !authEnabled && setupState === 'password_retained';
 
@@ -260,10 +266,26 @@ const LoginPage: React.FC = () => {
       if (result.success) {
         navigate(postAuthPath, { replace: true });
       } else {
-        setError(resolveLoginErrorMessage(result.error, copy.errorLoginFailed));
+        const parsedError = getParsedApiError(result.error);
+        if ((isAdminBootstrap || isCreateUserMode) && parsedError.code === 'invalid_password') {
+          setValidationError({
+            field: 'password',
+            message: parsedError.message || copy.errorLoginFailed,
+          });
+        } else {
+          setError(resolveLoginErrorMessage(result.error, copy.errorLoginFailed));
+        }
       }
     } catch (submitError) {
-      setError(resolveLoginErrorMessage(submitError, copy.errorLoginFailed));
+      const parsedError = getParsedApiError(submitError);
+      if ((isAdminBootstrap || isCreateUserMode) && parsedError.code === 'invalid_password') {
+        setValidationError({
+          field: 'password',
+          message: parsedError.message || copy.errorLoginFailed,
+        });
+      } else {
+        setError(resolveLoginErrorMessage(submitError, copy.errorLoginFailed));
+      }
     } finally {
       submitInFlightRef.current = false;
       setIsSubmitting(false);
@@ -340,7 +362,10 @@ const LoginPage: React.FC = () => {
                 label={copy.usernameLabel}
                 placeholder={isCreateUserMode ? copy.usernamePlaceholderCreate : copy.usernamePlaceholderLogin}
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                onChange={(event) => {
+                  setUsername(event.target.value);
+                  setValidationError((current) => current?.field === 'username' ? null : current);
+                }}
                 disabled={isSubmitting}
                 autoFocus
                 autoComplete="username"
@@ -379,10 +404,14 @@ const LoginPage: React.FC = () => {
               label={isAdminBootstrap ? copy.passwordLabelSetup : copy.passwordLabelLogin}
               placeholder={isAdminBootstrap ? copy.passwordPlaceholderSetup : copy.passwordPlaceholderLogin}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setValidationError((current) => current?.field === 'password' ? null : current);
+              }}
               disabled={isSubmitting}
               autoComplete={isAdminBootstrap || isCreateUserMode ? 'new-password' : 'current-password'}
               aria-describedby={isAdminBootstrap || isCreateUserMode ? 'enrollment-password-policy' : undefined}
+              error={validationError?.field === 'password' ? validationError.message : undefined}
             />
 
             {isAdminBootstrap || isCreateUserMode ? (
@@ -394,7 +423,10 @@ const LoginPage: React.FC = () => {
                 label={copy.passwordConfirmLabel}
                 placeholder={isAdminBootstrap ? copy.passwordConfirmPlaceholderSetup : copy.passwordConfirmPlaceholderLogin}
                 value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
+                onChange={(event) => {
+                  setPasswordConfirm(event.target.value);
+                  setValidationError((current) => current?.field === 'passwordConfirm' ? null : current);
+                }}
                 disabled={isSubmitting}
                 autoComplete="new-password"
                 error={validationError?.field === 'passwordConfirm' ? validationError.message : undefined}

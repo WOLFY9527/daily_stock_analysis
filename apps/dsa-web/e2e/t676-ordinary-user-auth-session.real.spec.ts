@@ -628,7 +628,13 @@ test('creates and restores an ordinary-user session through the real browser jou
   await expect(page).toHaveURL(/\/zh\/register\?redirect=%2Fzh$/);
   await expect(page.getByText('密码不能只包含数字')).toBeVisible();
   await expect(passwordPolicy).toContainText('密码至少 6 位，且不能只包含数字。');
-  await expect(page.locator('#password')).toHaveAttribute('aria-describedby', /enrollment-password-policy/);
+  const invalidPassword = page.locator('#password');
+  await expect(invalidPassword).toBeFocused();
+  await expect(invalidPassword).toHaveAttribute('aria-invalid', 'true');
+  await expect(invalidPassword).toHaveAttribute('aria-describedby', /enrollment-password-policy.*password-error/);
+  await expect(page.locator('#password-error')).toHaveAttribute('role', 'alert');
+  await expect(invalidPassword).toHaveValue('123456');
+  await expect(page.locator('#passwordConfirm')).toHaveValue('123456');
 
   await page.locator('#password').fill(password);
   await page.locator('#passwordConfirm').fill(password);

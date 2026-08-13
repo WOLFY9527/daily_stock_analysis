@@ -348,6 +348,52 @@ describe('LoginPage', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it('associates numeric-only registration password errors with the password field', async () => {
+    window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    const login = vi.fn().mockResolvedValue({
+      success: false,
+      error: createParsedApiError({
+        title: '密码无效',
+        message: '密码不能只包含数字',
+        rawMessage: '密码不能只包含数字',
+        code: 'invalid_password',
+        category: 'validation_error',
+        status: 400,
+      }),
+    });
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login,
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    const username = screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'));
+    const password = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+    const passwordConfirm = screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel'));
+    fireEvent.change(username, { target: { value: 'numeric-policy-user' } });
+    fireEvent.change(password, { target: { value: '123456' } });
+    fireEvent.change(passwordConfirm, { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
+
+    expect(await screen.findByText('密码不能只包含数字')).toBeInTheDocument();
+    await waitFor(() => expect(password).toHaveFocus());
+    expect(password).toHaveAttribute('aria-invalid', 'true');
+    expect(password).toHaveAttribute('aria-describedby', expect.stringContaining('password-error'));
+    expect(document.getElementById('password-error')).toHaveAttribute('role', 'alert');
+    expect(username).toHaveValue('numeric-policy-user');
+    expect(password).toHaveValue('123456');
+    expect(passwordConfirm).toHaveValue('123456');
+    expect(screen.queryByText('验证未通过')).not.toBeInTheDocument();
+
+    fireEvent.change(password, { target: { value: '1234567a' } });
+    expect(password).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText('密码不能只包含数字')).not.toBeInTheDocument();
+  });
+
   it('syncs create mode when search params change after mount', async () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
     useAuthMock.mockReturnValue({

@@ -6615,6 +6615,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
   const [softTimedOutTaskId, setSoftTimedOutTaskId] = useState<string | null>(null);
@@ -6622,6 +6623,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [hasObservedInitialHistoryFetch, setHasObservedInitialHistoryFetch] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
+  const [searchFieldError, setSearchFieldError] = useState<string | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [isGuestPreviewUnavailable, setGuestPreviewUnavailable] = useState(false);
   const [guestMarketBriefing, setGuestMarketBriefing] = useState<MarketBriefingResponse | null>(null);
@@ -7203,13 +7205,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return canonicalStockSymbolFromValidation(validation);
   };
 
+  const setSearchValidationError = (message: string) => {
+    setSearchFieldError(message);
+    searchInputRef.current?.focus();
+  };
+
   const handleStockSearchSubmit = async () => {
     const rawQuery = searchQuery.trim();
     if (!rawQuery) {
-      setStatusToast({
-        message: locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析',
-        tone: 'error',
-      });
+      setSearchValidationError(locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析');
       return;
     }
 
@@ -7218,17 +7222,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       try {
         canonicalSymbol = await resolveCanonicalHomeSymbol(rawQuery);
       } catch {
-        setStatusToast({
-          message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
-          tone: 'error',
-        });
+        setSearchValidationError(locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。');
         return;
       }
       if (!canonicalSymbol) {
-        setStatusToast({
-          message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
-          tone: 'error',
-        });
+        setSearchValidationError(locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码');
         return;
       }
 
@@ -7237,6 +7235,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         source: 'manual',
       });
       const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
+      setSearchFieldError(null);
       setStatusToast(null);
       setSearchQuery('');
       navigate(target);
@@ -7248,17 +7247,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     try {
       canonicalSymbol = await resolveCanonicalHomeSymbol(rawQuery);
     } catch {
-      setStatusToast({
-        message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
-        tone: 'error',
-      });
+      setSearchValidationError(locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。');
       return;
     }
     if (!canonicalSymbol) {
-      setStatusToast({
-        message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
-        tone: 'error',
-      });
+      setSearchValidationError(locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码');
       return;
     }
 
@@ -7267,6 +7260,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       source: 'manual',
     });
     const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
+    setSearchFieldError(null);
     setStatusToast(null);
     setSearchQuery('');
     navigate(target);
@@ -7276,10 +7270,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const handleAnalyze = async (tickerOverride?: string, verifiedSymbol?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
     if (!rawQuery) {
-      setStatusToast({
-        message: locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析',
-        tone: 'error',
-      });
+      setSearchValidationError(locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析');
       return null;
     }
 
@@ -7323,17 +7314,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       try {
         canonicalSymbol = (await resolveCanonicalHomeSymbol(rawQuery))?.symbol;
       } catch {
-        setStatusToast({
-          message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
-          tone: 'error',
-        });
+        setSearchValidationError(locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。');
         return null;
       }
       if (!canonicalSymbol) {
-        setStatusToast({
-          message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
-          tone: 'error',
-        });
+        setSearchValidationError(locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码');
         return null;
       }
     }
@@ -7607,13 +7592,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <Search className="h-4 w-4 text-[color:var(--wolfy-text-muted)]" />
             </div>
             <input
+              ref={searchInputRef}
               data-testid="home-bento-omnibar-input"
               type="text"
               className="h-full min-h-10 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-[color:var(--wolfy-text-primary)] caret-[color:var(--sage-deep)] outline-none [appearance:textfield] placeholder:text-[color:var(--wolfy-text-muted)]"
               value={searchQuery}
               aria-label={locale === 'en' ? 'Search ticker' : '搜索股票代码'}
+              aria-invalid={searchFieldError ? true : undefined}
+              aria-describedby={searchFieldError ? 'home-bento-omnibar-error' : undefined}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
+                setSearchFieldError(null);
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -7628,6 +7617,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </div>
         </CompactFilterBar>
       </form>
+      {searchFieldError ? (
+        <p
+          id="home-bento-omnibar-error"
+          data-testid="home-bento-omnibar-error"
+          role="alert"
+          aria-live="assertive"
+          className="mt-2 text-sm text-[color:var(--wolfy-market-down)]"
+        >
+          {searchFieldError}
+        </p>
+      ) : null}
       {isGuest && isGuestPreviewUnavailable ? (
         <GuestPreviewUnavailableState locale={locale} />
       ) : null}
@@ -7641,7 +7641,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       data-route-surface="ResearchConsole"
       data-route-identity={isGuest ? 'guest-home' : 'member-home'}
       data-home-surface-role={isGuest ? 'guest' : 'member'}
-      aria-live={shouldGuardA11y ? 'polite' : undefined}
+      aria-live={shouldGuardA11y && !searchFieldError ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
         'relative isolate w-full flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden bg-transparent',

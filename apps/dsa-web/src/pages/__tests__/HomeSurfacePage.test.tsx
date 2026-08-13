@@ -4568,6 +4568,11 @@ describe('HomeSurfacePage', () => {
     const input = screen.getByTestId('home-bento-omnibar-input');
     fireEvent.submit(form);
     expect(await screen.findByText('请输入股票代码后再开始分析')).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', 'home-bento-omnibar-error');
+    expect(screen.getByTestId('home-bento-omnibar-error')).toHaveAttribute('role', 'alert');
+    expect(screen.queryByTestId('home-bento-fallback-toast')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
 
     vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
@@ -4599,6 +4604,10 @@ describe('HomeSurfacePage', () => {
     fireEvent.change(input, { target: { value: 'not-a-symbol!' } });
     fireEvent.submit(form);
     expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', 'home-bento-omnibar-error');
+    expect(screen.queryByTestId('home-bento-fallback-toast')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
     );

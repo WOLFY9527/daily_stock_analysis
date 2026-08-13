@@ -23,6 +23,23 @@ describe('Input', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Required');
   });
 
+  it('preserves caller descriptions while appending the generated error description', () => {
+    render(
+      <Input
+        label="Password"
+        name="password"
+        hint="Use a strong password"
+        error="Password policy failed"
+        aria-describedby="password-policy"
+      />,
+    );
+
+    expect(screen.getByLabelText('Password')).toHaveAttribute(
+      'aria-describedby',
+      'password-policy password-error',
+    );
+  });
+
   it('renders a trailing action when provided', () => {
     render(
       <Input

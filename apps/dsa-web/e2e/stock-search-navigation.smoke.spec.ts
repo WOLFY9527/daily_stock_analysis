@@ -151,12 +151,20 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await page.getByTestId('home-bento-analyze-button').click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText('请输入格式正确的股票代码')).toBeVisible();
+  await expect(homeInput).toBeFocused();
+  await expect(homeInput).toHaveAttribute('aria-invalid', 'true');
+  await expect(homeInput).toHaveAttribute('aria-describedby', 'home-bento-omnibar-error');
+  await expect(page.getByTestId('home-bento-omnibar-error')).toHaveAttribute('role', 'alert');
+  await expect(page.getByTestId('home-bento-fallback-toast')).toHaveCount(0);
   expect(validatedSymbols).toContain('not-a-symbol!');
   expect(previewStockCodes).toHaveLength(previewRequestCountBeforeInvalid);
   await homeInput.fill('');
   await page.getByTestId('home-bento-analyze-button').click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText('请输入股票代码后再开始分析')).toBeVisible();
+  await expect(homeInput).toBeFocused();
+  await expect(homeInput).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByTestId('home-bento-fallback-toast')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(4);
 
   const isMobile = page.viewportSize()?.width !== undefined && (page.viewportSize()?.width || 0) < 700;

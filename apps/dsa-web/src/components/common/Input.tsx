@@ -115,6 +115,7 @@ export const Input = ({
           </div>
         )}
         <input
+          {...props}
           id={inputId}
           aria-describedby={describedBy}
           aria-invalid={ariaInvalid}
@@ -129,7 +130,6 @@ export const Input = ({
             'disabled:cursor-not-allowed disabled:opacity-60',
             className,
           )}
-          {...props}
           type={effectiveType}
         />
         {finalTrailingAction ? (
