@@ -857,6 +857,7 @@ function getLeftTabButton(name: string) {
 describe('PortfolioPage FX refresh', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    window.history.replaceState(window.history.state, '', '/portfolio');
     window.localStorage.clear();
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
     setAdminPortfolioSurface();
@@ -1682,6 +1683,30 @@ describe('PortfolioPage FX refresh', () => {
     expect(JSON.stringify(exported)).not.toMatch(/raw-provider-must-not-leak|request-id-must-not-leak|debug-trace-must-not-leak/i);
     expect(JSON.stringify(exported)).not.toMatch(/provider|runtime|credential|requestId|trace|debug|raw|cacheKey/i);
     expect(JSON.stringify(exported)).not.toMatch(/\b(buy|sell|hold|target|best|recommended|optimal|winner)\b|stop loss|position sizing|买入|卖出|持有|目标价|止损|仓位建议|最佳|推荐|赢家/i);
+  });
+
+  it('uses an English evidence sentinel on /en portfolio exports', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    window.history.replaceState(window.history.state, '', '/en/portfolio');
+    getSnapshot.mockResolvedValue(makeValuationEvidenceSnapshot());
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+    fireEvent.click(within(screen.getByTestId('portfolio-valuation-evidence-pack')).getByRole('button', { name: 'Copy valuation evidence' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+
+    const exported = JSON.parse(writeText.mock.calls[0][0]);
+    expect(JSON.stringify(exported)).toContain('"unknown"');
+    expect(JSON.stringify(exported)).not.toContain('unknown/待补证');
   });
 
   it('does not show valuation evidence export controls without portfolio valuation data', async () => {

@@ -111,7 +111,8 @@ const LEGACY_RECOVERY_TOKEN = ['fall', 'back'].join('');
 const LEGACY_PRICE_RECOVERY_TOKEN = ['price', LEGACY_RECOVERY_TOKEN].join('_');
 const LEGACY_FX_RECOVERY_TOKEN = ['fx', LEGACY_RECOVERY_TOKEN, '1', 'to', '1'].join('_');
 const PORTFOLIO_VALUATION_EVIDENCE_PACK_SCHEMA = 'portfolio_valuation_evidence_pack_v1';
-const UNKNOWN_EVIDENCE_VALUE = 'unknown/待补证';
+const UNKNOWN_EVIDENCE_VALUE_ZH = 'unknown/待补证';
+const UNKNOWN_EVIDENCE_VALUE_EN = 'unknown';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -704,12 +705,12 @@ function hasPortfolioLineage(summary: PortfolioLineageSummary | null | undefined
   return Boolean(summary?.hasLineage);
 }
 
-function safeEvidenceString(value: string | null | undefined): string {
-  return value && value.trim() ? value : UNKNOWN_EVIDENCE_VALUE;
+function safeEvidenceString(value: string | null | undefined, unknownValue: string): string {
+  return value && value.trim() ? value : unknownValue;
 }
 
-function safeEvidenceNumber(value: number | null | undefined): number | string {
-  return typeof value === 'number' && Number.isFinite(value) ? value : UNKNOWN_EVIDENCE_VALUE;
+function safeEvidenceNumber(value: number | null | undefined, unknownValue: string): number | string {
+  return typeof value === 'number' && Number.isFinite(value) ? value : unknownValue;
 }
 
 function portfolioTruthDisplayLabel(truth: PortfolioTruth | null, language: PortfolioLanguage): string {
@@ -788,6 +789,7 @@ function buildPortfolioValuationEvidencePack(options: {
   const valuationLineage = options.valuationLineage;
   const priceLineage = options.priceLineage;
   const fxLineage = options.fxLineage;
+  const unknownEvidenceValue = options.language === 'zh' ? UNKNOWN_EVIDENCE_VALUE_ZH : UNKNOWN_EVIDENCE_VALUE_EN;
   const safeWarnings = uniqueSafeEvidenceList(options.warnings);
   const authoritativeTotals = options.portfolioTruth.valueSemantics === 'authoritative_total';
   const formatAuthoritativeAmount = (value: PortfolioDecimal | null): string | null => (
@@ -804,26 +806,26 @@ function buildPortfolioValuationEvidencePack(options: {
     appSurface: 'Portfolio valuation',
     account: {
       scope: options.accountScope,
-      label: safeEvidenceString(options.accountLabel),
+      label: safeEvidenceString(options.accountLabel, unknownEvidenceValue),
     },
     holdingsCount: options.positions.length,
-    valuationAsOf: safeEvidenceString(options.snapshot.asOf),
+    valuationAsOf: safeEvidenceString(options.snapshot.asOf, unknownEvidenceValue),
     priceLineage: {
-      label: safeEvidenceString(priceSummary?.label || priceFreshnessSummary?.label),
-      freshness: safeEvidenceString(priceAsOfSummary?.label || priceFreshnessSummary?.label),
-      priceSourceLabels: priceLabels.length ? priceLabels : [UNKNOWN_EVIDENCE_VALUE],
-      missingQuoteCount: safeEvidenceNumber(priceLineage?.counts.missing),
-      staleQuoteCount: safeEvidenceNumber(priceLineage?.counts.stale),
-      totalQuoteCount: safeEvidenceNumber(priceLineage?.counts.total ?? priceSummary?.total),
+      label: safeEvidenceString(priceSummary?.label || priceFreshnessSummary?.label, unknownEvidenceValue),
+      freshness: safeEvidenceString(priceAsOfSummary?.label || priceFreshnessSummary?.label, unknownEvidenceValue),
+      priceSourceLabels: priceLabels.length ? priceLabels : [unknownEvidenceValue],
+      missingQuoteCount: safeEvidenceNumber(priceLineage?.counts.missing, unknownEvidenceValue),
+      staleQuoteCount: safeEvidenceNumber(priceLineage?.counts.stale, unknownEvidenceValue),
+      totalQuoteCount: safeEvidenceNumber(priceLineage?.counts.total ?? priceSummary?.total, unknownEvidenceValue),
       affectedSymbols: uniqueSafeEvidenceList([
         ...(priceSummary?.affectedSymbols ?? []),
         ...(priceLineage?.affectedSymbols.missing ?? []),
         ...(priceLineage?.affectedSymbols.stale ?? []),
       ]),
-      lastUpdatedAt: safeEvidenceString(priceLineage?.lastUpdatedAt ?? priceSummary?.lastUpdatedAt),
+      lastUpdatedAt: safeEvidenceString(priceLineage?.lastUpdatedAt ?? priceSummary?.lastUpdatedAt, unknownEvidenceValue),
     },
     fxLineage: {
-      label: safeEvidenceString(fxSummary?.label),
+      label: safeEvidenceString(fxSummary?.label, unknownEvidenceValue),
       affectedCurrencies: uniqueSafeEvidenceList([
         ...(fxSummary?.affectedCurrencies ?? []),
         ...(fxLineage?.affectedCurrencies.missing ?? []),
@@ -834,20 +836,20 @@ function buildPortfolioValuationEvidencePack(options: {
         ...(fxLineage?.affectedPairs.missing ?? []),
         ...(fxLineage?.affectedPairs.stale ?? []),
       ]),
-      lastUpdatedAt: safeEvidenceString(fxLineage?.lastUpdatedAt ?? fxSummary?.lastUpdatedAt),
+      lastUpdatedAt: safeEvidenceString(fxLineage?.lastUpdatedAt ?? fxSummary?.lastUpdatedAt, unknownEvidenceValue),
     },
     valuationLineage: {
-      label: safeEvidenceString(valuationSummary?.label),
-      positionCount: safeEvidenceNumber(valuationLineage?.positionCount ?? valuationSummary?.total),
-      completePositionCount: safeEvidenceNumber(valuationLineage?.completePositionCount),
-      partialPositionCount: safeEvidenceNumber(valuationLineage?.partialPositionCount),
-      blockedPositionCount: safeEvidenceNumber(valuationLineage?.blockedPositionCount),
+      label: safeEvidenceString(valuationSummary?.label, unknownEvidenceValue),
+      positionCount: safeEvidenceNumber(valuationLineage?.positionCount ?? valuationSummary?.total, unknownEvidenceValue),
+      completePositionCount: safeEvidenceNumber(valuationLineage?.completePositionCount, unknownEvidenceValue),
+      partialPositionCount: safeEvidenceNumber(valuationLineage?.partialPositionCount, unknownEvidenceValue),
+      blockedPositionCount: safeEvidenceNumber(valuationLineage?.blockedPositionCount, unknownEvidenceValue),
       blockedBy: {
         priceSymbols: uniqueSafeEvidenceList(valuationLineage?.blockedBy.priceSymbols ?? []),
         fxPairs: uniqueSafeEvidenceList(valuationLineage?.blockedBy.fxPairs ?? []),
         fxCurrencies: uniqueSafeEvidenceList(valuationLineage?.blockedBy.fxCurrencies ?? []),
       },
-      lastUpdatedAt: safeEvidenceString(valuationLineage?.lastUpdatedAt ?? valuationSummary?.lastUpdatedAt),
+      lastUpdatedAt: safeEvidenceString(valuationLineage?.lastUpdatedAt ?? valuationSummary?.lastUpdatedAt, unknownEvidenceValue),
     },
     portfolioTruth: options.portfolioTruth,
     valuationSummary: {
@@ -859,7 +861,7 @@ function buildPortfolioValuationEvidencePack(options: {
       coveredSubtotal,
       currency: options.currency,
     },
-    warnings: safeWarnings.length ? safeWarnings : [UNKNOWN_EVIDENCE_VALUE],
+    warnings: safeWarnings.length ? safeWarnings : [unknownEvidenceValue],
     consumerBoundary: options.language === 'zh'
       ? '仅导出估值证据，不包含交易指令。'
       : 'Exports valuation evidence only; no trade instruction is included.',

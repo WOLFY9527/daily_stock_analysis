@@ -3194,6 +3194,20 @@ describe('HomeSurfacePage', () => {
     expect(within(panel).getByText('仅供参考')).toBeInTheDocument();
   });
 
+  it('localizes decision trace status labels on English routes', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    window.localStorage.setItem('dsa-ui-language', 'en');
+
+    renderSurface('/en?fixture=analysis-trace&trace=open');
+
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(within(panel).getByText('Data Used')).toBeInTheDocument();
+    expect(within(panel).getByText('Available')).toBeInTheDocument();
+    expect(within(panel).getAllByText('Missing').length).toBeGreaterThan(0);
+    expect(within(panel).getByText('Unknown')).toBeInTheDocument();
+    expect(panel).not.toHaveTextContent(/可用|备用|陈旧|缺失|部分可用|异常|未知/);
+  });
+
   it('can auto-open the dev/test full report fixture drawer for browser smoke', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({

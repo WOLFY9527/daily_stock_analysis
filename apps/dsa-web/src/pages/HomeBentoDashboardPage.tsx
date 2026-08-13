@@ -641,8 +641,18 @@ function traceStatusTone(status?: string): 'neutral' | 'used' | 'warning' | 'mis
   return 'neutral';
 }
 
-function traceStatusLabel(status?: string | null): string {
+function traceStatusLabel(status?: string | null, locale: DashboardLocale = 'zh'): string {
   const normalized = String(status || '').trim().toLowerCase();
+  if (locale === 'en') {
+    if (normalized === 'used' || normalized === 'available') return 'Available';
+    if (normalized === 'fallback') return 'Fallback';
+    if (normalized === 'stale') return 'Stale';
+    if (normalized === 'missing') return 'Missing';
+    if (normalized === 'partial') return 'Partially available';
+    if (normalized === 'error') return 'Error';
+    if (normalized === 'unknown' || !normalized) return 'Unknown';
+    return status || 'Unknown';
+  }
   if (normalized === 'used' || normalized === 'available') return '可用';
   if (normalized === 'fallback') return '备用';
   if (normalized === 'stale') return '陈旧';
@@ -1031,7 +1041,7 @@ function DecisionTracePanel({
             <div key={`${source.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
               <span className="truncate text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{traceDataSourceLabel(source.name, locale)}</span>
               <div className="flex min-w-0 flex-wrap justify-end gap-2">
-                <TraceBadge tone={traceStatusTone(source.status)}>{traceStatusLabel(source.status)}</TraceBadge>
+                <TraceBadge tone={traceStatusTone(source.status)}>{traceStatusLabel(source.status, locale)}</TraceBadge>
               </div>
             </div>
           )) : <p className="text-sm text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'No source metadata available.' : '暂无数据源元信息。'}</p>}
