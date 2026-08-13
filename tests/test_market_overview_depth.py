@@ -278,6 +278,36 @@ def test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative() -
     assert items["ETF"]["scoreContributionAllowed"] is False
 
 
+def test_us_funds_flow_provider_unavailable_preserves_missing_numeric_truth() -> None:
+    service = MarketOverviewService()
+
+    with patch.object(service, "_latest_quote", side_effect=RuntimeError("provider unavailable")):
+        payload = service.get_funds_flow()
+
+    assert payload["status"] == "unavailable"
+    assert payload["source"] == "yfinance_proxy"
+    assert payload["freshness"] == "unavailable"
+    assert payload["isUnavailable"] is True
+    assert payload["isPartial"] is True
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert all(item["value"] is None for item in payload["items"])
+    assert all(item["change_pct"] is None for item in payload["items"])
+    assert all(item["trend"] == [] for item in payload["items"])
+    assert all(item["isUnavailable"] is True for item in payload["items"])
+
+
+def test_us_funds_flow_static_fallback_does_not_emit_zero_values() -> None:
+    service = MarketOverviewService()
+
+    items = service._fallback_overview_items("funds_flow", "2026-08-13T00:00:00+00:00")
+
+    assert items
+    assert all(item["value"] is None for item in items)
+    assert all(item["change_pct"] is None for item in items)
+    assert all(item["trend"] == [] for item in items)
+
+
 def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:
     service = MarketOverviewService()
     observed_at = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")

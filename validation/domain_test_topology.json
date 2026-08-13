@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8171,
-      "sha256": "1ccc4bf8b4179843c1cc65239ff37717b1d5cc9be90683d5e04ab2cb021d10f8"
+      "count": 8173,
+      "sha256": "7904f4614ffa3353d6598bf8f46da5331185b80f0f1d5e7eca28e100fa4f483c"
     },
     "tests": [
       {
@@ -22279,9 +22279,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_overview_depth.py::test_us_funds_flow_provider_unavailable_preserves_missing_numeric_truth",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_overview_depth.py::test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_overview_depth.py::test_us_funds_flow_static_fallback_does_not_emit_zero_values",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_consumer_evidence_projection_is_whitelist_only_and_status_only",

@@ -2998,6 +2998,9 @@ class MarketOverviewService:
             status = "failure"
             snapshot["error_message"] = error_message
             raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": error_message}
+        elif cache_key == "funds_flow" and str(snapshot.get("status") or "").lower() in {"partial", "unavailable"}:
+            status = str(snapshot["status"]).lower()
+            raw_response = {"cache": "unavailable_or_partial"}
         elif snapshot.get("isRefreshing"):
             raw_response = {"cache": "stale_refreshing"}
         else:
@@ -3731,7 +3734,11 @@ class MarketOverviewService:
 
         def store_success() -> Dict[str, Any]:
             payload = fetcher()
-            if self._is_fallback_only_market_snapshot(payload):
+            explicit_unavailable_funds_flow = (
+                cache_key == "funds_flow"
+                and str(payload.get("status") or "").lower() in {"partial", "unavailable"}
+            )
+            if self._is_fallback_only_market_snapshot(payload) and not explicit_unavailable_funds_flow:
                 raise RuntimeError("market provider unavailable")
             if not self._is_storable_market_snapshot(payload):
                 raise RuntimeError("market provider returned no usable data")
@@ -7024,22 +7031,30 @@ class MarketOverviewService:
             "INDUSTRY": ("Industry breadth proxy", "IWM", "score"),
         }
         items = []
+        unavailable_count = 0
         for key, (label, ticker, unit) in symbols.items():
             try:
                 quote = self._latest_quote(ticker)
             except Exception:
                 quote = {"value": None, "change_pct": None, "trend": []}
-            change_pct = quote.get("change_pct")
-            volume = float(quote.get("volume") or 0)
-            value = round((volume * float(change_pct or 0)) / 1_000_000_000, 2) if unit == "B USD" else round(float(change_pct or 0), 2)
+            change_pct = self._clean_number(quote.get("change_pct"))
+            volume = self._clean_number(quote.get("volume"))
+            value = (
+                round((volume * change_pct) / 1_000_000_000, 2)
+                if unit == "B USD" and volume is not None and change_pct is not None
+                else round(change_pct, 2) if unit != "B USD" and change_pct is not None
+                else None
+            )
+            is_unavailable = value is None
+            unavailable_count += int(is_unavailable)
             items.append({
                 "symbol": key,
                 "label": label,
                 "value": value,
                 "unit": unit,
                 "change_pct": change_pct,
-                "risk_direction": "decreasing" if value >= 0 else "increasing",
-                "trend": quote.get("trend", []),
+                "risk_direction": self._risk_direction(change_pct) if not is_unavailable else "neutral",
+                "trend": quote.get("trend", []) if not is_unavailable else [],
                 "asOf": quote.get("asOf"),
                 "source": "yfinance_proxy",
                 "sourceType": "unofficial_public_api",
@@ -7047,15 +7062,29 @@ class MarketOverviewService:
                 "sourceAuthorityAllowed": False,
                 "scoreContributionAllowed": False,
                 "sourceAuthorityReason": "quote_derived_etf_flow_proxy",
+                "isUnavailable": is_unavailable,
+                "isPartial": is_unavailable,
+                "isProxy": True,
+                "freshness": "unavailable" if is_unavailable else None,
+                "sourceAuthorityState": "unavailable" if is_unavailable else "proxy",
+                "unavailableReason": "quote_derived_etf_flow_proxy" if is_unavailable else None,
             })
+        panel_status = "unavailable" if unavailable_count == len(items) else "partial" if unavailable_count else "success"
         return {
             **self._success_panel("FundsFlowCard", items),
+            "status": panel_status,
             "source": "yfinance_proxy",
             "sourceType": "unofficial_public_api",
             "observationOnly": True,
             "sourceAuthorityAllowed": False,
             "scoreContributionAllowed": False,
             "sourceAuthorityReason": "quote_derived_etf_flow_proxy",
+            "freshness": "unavailable" if unavailable_count else "proxy",
+            "isUnavailable": unavailable_count == len(items),
+            "isPartial": bool(unavailable_count),
+            "isProxy": True,
+            "asOf": None if unavailable_count else next((item.get("asOf") for item in items if item.get("asOf")), None),
+            "unavailableReason": "quote_derived_etf_flow_proxy" if unavailable_count else None,
         }
 
     def _fetch_macro(self) -> PanelPayload:
@@ -11512,38 +11541,44 @@ class MarketOverviewService:
                 {
                     "symbol": "ETF",
                     "label": "ETF flow proxy",
-                    "value": 0.0,
+                    "value": None,
                     "unit": "B USD",
-                    "change_pct": 0.0,
-                    "trend": [0.0, 0.0],
+                    "change_pct": None,
+                    "trend": [],
                     "observationOnly": True,
                     "sourceAuthorityAllowed": False,
                     "scoreContributionAllowed": False,
                     "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                    "isUnavailable": True,
+                    "unavailableReason": "static_etf_flow_proxy_fallback",
                 },
                 {
                     "symbol": "INSTITUTIONAL",
                     "label": "Institutional pressure proxy",
-                    "value": 0.0,
+                    "value": None,
                     "unit": "B USD",
-                    "change_pct": 0.0,
-                    "trend": [0.0, 0.0],
+                    "change_pct": None,
+                    "trend": [],
                     "observationOnly": True,
                     "sourceAuthorityAllowed": False,
                     "scoreContributionAllowed": False,
                     "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                    "isUnavailable": True,
+                    "unavailableReason": "static_etf_flow_proxy_fallback",
                 },
                 {
                     "symbol": "INDUSTRY",
                     "label": "Industry breadth proxy",
-                    "value": 0.0,
+                    "value": None,
                     "unit": "score",
-                    "change_pct": 0.0,
-                    "trend": [0.0, 0.0],
+                    "change_pct": None,
+                    "trend": [],
                     "observationOnly": True,
                     "sourceAuthorityAllowed": False,
                     "scoreContributionAllowed": False,
                     "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                    "isUnavailable": True,
+                    "unavailableReason": "static_etf_flow_proxy_fallback",
                 },
             ],
             "macro": [
