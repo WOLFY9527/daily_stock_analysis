@@ -6,8 +6,8 @@ import { zhCatalog } from '../catalogs/zh';
 type CatalogEntry = readonly [key: string, value: string];
 
 const PRE_CHANGE_CATALOG_BASELINE = {
-  en: { entryCount: 2628, sha256: '2ed54c8fbcb70f316558bfa4f7b49028b5d5f728ce7a261734cd401afd7cabee' },
-  zh: { entryCount: 2628, sha256: '9ca44e2abe5760ae6cb82de34dfcc7bc221041aef4b418249a92115473d8e2d7' },
+  en: { entryCount: 2629, sha256: '60e7c1cfdd1be516174f8029470f84fd04d7acbe843d5ef950107e218cac6d30' },
+  zh: { entryCount: 2629, sha256: '9f70fa9d174311028704caa7b93d53bdf7ba922415abdd04a899134e2b72ac92' },
 } as const;
 
 function collectCatalogEntries(value: unknown, prefix = ''): CatalogEntry[] {

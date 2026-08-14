@@ -7636,6 +7636,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           data-testid="home-bento-omnibar-error"
           role="alert"
           aria-live="assertive"
+          aria-atomic="true"
           className="mt-2 text-sm text-[color:var(--wolfy-market-down)]"
         >
           {searchFieldError}
