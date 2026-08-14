@@ -3,7 +3,7 @@ import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
-import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
+import { hasUsableMarketOverviewData, isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import { marketObservationCollectionState, marketObservationState } from './marketOverviewDecisionTypes';
 import {
   MarketOverviewCardFrame,
@@ -61,6 +61,9 @@ function resolveMarketOverviewProviderState(
   if (!hasUsableData) return 'noData';
   if (hasProviderFailure(panel)) return 'refreshFailed';
   const state = marketObservationCollectionState([panel, ...(panel?.items || [])]);
+  if (state === 'unavailable' && (panel?.status === 'success' || panel?.status === 'partial')) {
+    return 'partial';
+  }
   if (state === 'synthetic') return 'synthetic';
   if (state === 'partial') return 'partial';
   if (state === 'unavailable' || state === 'error') return 'refreshFailed';
@@ -241,7 +244,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 
         <MarketOverviewPanelStateNotice
           panel={panel}
-          hasUsableData={items.length > 0}
+          hasUsableData={hasUsableMarketOverviewData(items)}
           refreshing={refreshing || loading}
         />
 

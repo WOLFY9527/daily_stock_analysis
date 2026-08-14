@@ -10,16 +10,25 @@ export function getDirectionTone(direction?: MarketRiskDirection): string {
   return directionTone[direction || 'neutral'];
 }
 
+function hasMeaningfulChangeText(changeText?: string | null): boolean {
+  const normalized = changeText?.trim().toUpperCase();
+  return Boolean(normalized) && normalized !== 'N/A' && normalized !== '-';
+}
+
 export function isRenderableMarketOverviewItem(item: MarketOverviewItem): boolean {
   const value = item.value as unknown;
   if (value === null || value === undefined) {
-    return false;
+    return hasMeaningfulChangeText(item.changeText);
   }
   if (typeof value === 'string') {
     const normalized = value.trim().toUpperCase();
     return normalized !== 'N/A' && normalized !== '-';
   }
   return true;
+}
+
+export function hasUsableMarketOverviewData(items: MarketOverviewItem[]): boolean {
+  return items.some((item) => typeof item.value === 'number' && Number.isFinite(item.value));
 }
 
 export function formatMetricValue(

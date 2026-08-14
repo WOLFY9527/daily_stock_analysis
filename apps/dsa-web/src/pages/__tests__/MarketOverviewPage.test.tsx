@@ -143,6 +143,54 @@ const denseQuotePanel = (panelName: string, items: ReturnType<typeof quoteItem>[
   items,
 });
 
+const unavailableStaticIndexPanel = () => ({
+  ...denseQuotePanel('IndexTrendsCard', [
+    quoteItem('SPX', 'S&P 500', 5100, 0),
+    quoteItem('NDX', 'Nasdaq 100', 16100, 0),
+    quoteItem('DJIA', 'Dow Jones Industrial Average', 38600, 0),
+    quoteItem('RUT', 'Russell 2000', 2040, 0),
+  ], 'fallback'),
+  status: 'failure' as const,
+  source: 'fallback',
+  sourceLabel: 'Fallback snapshot',
+  freshness: 'unavailable' as const,
+  isFallback: true,
+  isUnavailable: true,
+  items: [
+    quoteItem('SPX', 'S&P 500', 5100, 0),
+    quoteItem('NDX', 'Nasdaq 100', 16100, 0),
+    quoteItem('DJIA', 'Dow Jones Industrial Average', 38600, 0),
+    quoteItem('RUT', 'Russell 2000', 2040, 0),
+  ].map((item) => ({
+    ...item,
+    value: null,
+    changePct: null,
+    trend: [],
+    riskDirection: 'neutral' as const,
+    freshness: 'unavailable' as const,
+    isFallback: true,
+    isUnavailable: true,
+  })),
+});
+
+const partiallyUnavailableIndexPanel = () => ({
+  ...denseQuotePanel('IndexTrendsCard', [
+    quoteItem('SPX', 'S&P 500', 5100, 0.4),
+    {
+      ...quoteItem('NDX', 'Nasdaq 100', 16100, 0),
+      value: null,
+      changePct: null,
+      trend: [],
+      changeText: '未接入',
+      freshness: 'unavailable' as const,
+      isUnavailable: true,
+    },
+  ]),
+  status: 'success' as const,
+  freshness: 'live' as const,
+  isUnavailable: false,
+});
+
 const officialRiskReadinessPayload = () => ({
   readinessStatus: 'ready',
   diagnosticOnly: true,
@@ -5693,6 +5741,33 @@ describe('MarketOverviewPage', () => {
     expect(truthStrip).toHaveTextContent('覆盖 0/7');
     expect(truthStrip).not.toHaveTextContent('评分级证据');
     expect(within(breadthCard).queryByText(/Advance \/ decline：未接入/)).not.toBeInTheDocument();
+  });
+
+  it('does not render unavailable static index rows as neutral context metrics', async () => {
+    renderMarketOverviewWorkbenchWithPanels({
+      indices: unavailableStaticIndexPanel(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+
+    const module = await screen.findByTestId('market-overview-module-usIndices');
+    expect(module).toHaveTextContent(/刷新失败，暂无可用数据|暂无可用数据/);
+    expect(within(module).queryAllByTestId('market-overview-dense-quote-item')).toHaveLength(0);
+    expect(module).not.toHaveTextContent('N/A');
+    expect(module).not.toHaveTextContent('中性');
+  });
+
+  it('labels mixed context metrics as partial instead of refresh failure', async () => {
+    renderMarketOverviewWorkbenchWithPanels({
+      indices: partiallyUnavailableIndexPanel(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+
+    const module = await screen.findByTestId('market-overview-module-usIndices');
+    expect(module).toHaveTextContent('当前证据部分可用');
+    expect(module).not.toHaveTextContent('刷新失败，继续显示可用快照');
+    expect(module).toHaveTextContent('未接入');
   });
 
   it('renders crypto funding and compact unavailable liquidity context without market dumps', async () => {

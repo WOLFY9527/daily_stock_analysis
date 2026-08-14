@@ -297,15 +297,21 @@ def test_us_funds_flow_provider_unavailable_preserves_missing_numeric_truth() ->
     assert all(item["isUnavailable"] is True for item in payload["items"])
 
 
-def test_us_funds_flow_static_fallback_does_not_emit_zero_values() -> None:
+def test_static_market_overview_fallbacks_preserve_missing_numeric_truth() -> None:
     service = MarketOverviewService()
 
-    items = service._fallback_overview_items("funds_flow", "2026-08-13T00:00:00+00:00")
+    for cache_key in ("indices", "volatility", "funds_flow", "macro"):
+        items = service._fallback_overview_items(cache_key, "2026-08-13T00:00:00+00:00")
 
-    assert items
-    assert all(item["value"] is None for item in items)
-    assert all(item["change_pct"] is None for item in items)
-    assert all(item["trend"] == [] for item in items)
+        assert items
+        assert all(item["value"] is None for item in items)
+        assert all(item["change_pct"] is None for item in items)
+        assert all(item["trend"] == [] for item in items)
+        assert all(item["isUnavailable"] is True for item in items)
+        assert all(item["observationOnly"] is True for item in items)
+        assert all(item["sourceAuthorityAllowed"] is False for item in items)
+        assert all(item["scoreContributionAllowed"] is False for item in items)
+        assert all(item["unavailableReason"] for item in items)
 
 
 def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:

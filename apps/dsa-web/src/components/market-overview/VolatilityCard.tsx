@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
+import { hasUsableMarketOverviewData, isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import { MarketOverviewPanelStateNotice } from './MarketOverviewCard';
 import {
   MarketOverviewCardFrame,
@@ -47,7 +47,7 @@ export const VolatilityCard: React.FC<{
 
         <MarketOverviewPanelStateNotice
           panel={panel}
-          hasUsableData={items.length > 0}
+          hasUsableData={hasUsableMarketOverviewData(items)}
           refreshing={refreshing || loading}
         />
 

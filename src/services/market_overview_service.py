@@ -131,6 +131,7 @@ PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
 US_EASTERN_TZ = ZoneInfo("America/New_York")
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
+STATIC_MARKET_FALLBACK_UNAVAILABLE_REASON = "static_market_overview_fallback_unavailable"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 MARKET_OVERVIEW_BRIEFING_SCHEMA_VERSION = "market_overview_briefing_v1"
 MARKET_OVERVIEW_BRIEFING_NO_ADVICE_DISCLOSURE = "仅供市场结构观察与研究整理，不用于个性化决策或执行。"
@@ -11525,17 +11526,33 @@ class MarketOverviewService:
         }
 
     def _fallback_overview_items(self, cache_key: str, updated_at: str) -> List[Dict[str, Any]]:
+        def unavailable_static_item(symbol: str, label: str, unit: str) -> Dict[str, Any]:
+            return {
+                "symbol": symbol,
+                "label": label,
+                "value": None,
+                "unit": unit,
+                "change_pct": None,
+                "trend": [],
+                "observationOnly": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "sourceAuthorityReason": STATIC_MARKET_FALLBACK_UNAVAILABLE_REASON,
+                "isUnavailable": True,
+                "unavailableReason": STATIC_MARKET_FALLBACK_UNAVAILABLE_REASON,
+            }
+
         fallback_items: Dict[str, List[Dict[str, Any]]] = {
             "indices": [
-                {"symbol": "SPX", "label": "S&P 500", "value": 5100.0, "unit": "pts", "change_pct": 0.0, "trend": [5080.0, 5100.0]},
-                {"symbol": "NASDAQ", "label": "NASDAQ Composite", "value": 16100.0, "unit": "pts", "change_pct": 0.0, "trend": [16020.0, 16100.0]},
-                {"symbol": "DJIA", "label": "Dow Jones Industrial Average", "value": 38600.0, "unit": "pts", "change_pct": 0.0, "trend": [38480.0, 38600.0]},
-                {"symbol": "RUT", "label": "Russell 2000", "value": 2040.0, "unit": "pts", "change_pct": 0.0, "trend": [2030.0, 2040.0]},
+                unavailable_static_item("SPX", "S&P 500", "pts"),
+                unavailable_static_item("NASDAQ", "NASDAQ Composite", "pts"),
+                unavailable_static_item("DJIA", "Dow Jones Industrial Average", "pts"),
+                unavailable_static_item("RUT", "Russell 2000", "pts"),
             ],
             "volatility": [
-                {"symbol": "VIX", "label": "VIX", "value": 15.0, "unit": "pts", "change_pct": 0.0, "trend": [15.4, 15.0]},
-                {"symbol": "VVIX", "label": "VVIX", "value": 88.0, "unit": "pts", "change_pct": 0.0, "trend": [89.0, 88.0]},
-                {"symbol": "VXN", "label": "VXN", "value": 18.0, "unit": "pts", "change_pct": 0.0, "trend": [18.5, 18.0]},
+                unavailable_static_item("VIX", "VIX", "pts"),
+                unavailable_static_item("VVIX", "VVIX", "pts"),
+                unavailable_static_item("VXN", "VXN", "pts"),
             ],
             "funds_flow": [
                 {
@@ -11582,10 +11599,10 @@ class MarketOverviewService:
                 },
             ],
             "macro": [
-                {"symbol": "US10Y", "label": "10Y yield", "value": 4.5, "unit": "%", "change_pct": 0.0, "trend": [4.48, 4.5]},
-                {"symbol": "DXY", "label": "US Dollar Index", "value": 105.0, "unit": "idx", "change_pct": 0.0, "trend": [104.8, 105.0]},
-                {"symbol": "GOLD", "label": "Gold futures", "value": 2300.0, "unit": "USD", "change_pct": 0.0, "trend": [2290.0, 2300.0]},
-                {"symbol": "OIL", "label": "WTI crude", "value": 82.0, "unit": "USD", "change_pct": 0.0, "trend": [81.5, 82.0]},
+                unavailable_static_item("US10Y", "10Y yield", "%"),
+                unavailable_static_item("DXY", "US Dollar Index", "idx"),
+                unavailable_static_item("GOLD", "Gold futures", "USD"),
+                unavailable_static_item("OIL", "WTI crude", "USD"),
             ],
         }
         return [

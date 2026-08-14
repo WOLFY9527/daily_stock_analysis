@@ -34,9 +34,14 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _assert_bounded_non_live(payload: dict, elapsed: float) -> None:
+def _assert_bounded_non_live(
+    payload: dict,
+    elapsed: float,
+    *,
+    expected_freshness: tuple[str, ...] = ("fallback", "stale"),
+) -> None:
     assert elapsed < 0.35
-    assert payload["freshness"] in {"fallback", "stale"}
+    assert payload["freshness"] in expected_freshness
     assert payload["freshness"] != "live"
     assert payload["providerHealth"]["status"] not in {"live"}
     assert payload["providerHealth"]["isRefreshing"] is True
@@ -119,7 +124,13 @@ def test_market_overview_macro_endpoint_returns_fallback_quickly_when_official_m
     assert payload["panel_name"] == "MacroIndicatorsCard"
     assert payload["items"]
     assert payload["isFallback"] is True
-    _assert_bounded_non_live(payload, elapsed)
+    assert payload["isUnavailable"] is True
+    assert payload["freshness"] == "unavailable"
+    assert all(item["value"] is None for item in payload["items"])
+    assert all(item["change_pct"] is None for item in payload["items"])
+    assert all(item["trend"] == [] for item in payload["items"])
+    assert all(item["isUnavailable"] is True for item in payload["items"])
+    _assert_bounded_non_live(payload, elapsed, expected_freshness=("unavailable",))
 
 
 def test_market_fx_commodities_endpoint_returns_fallback_quickly_when_proxy_hangs(monkeypatch: pytest.MonkeyPatch) -> None:

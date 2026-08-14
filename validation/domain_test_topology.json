@@ -60,7 +60,7 @@
     },
     "currentInventory": {
       "count": 8173,
-      "sha256": "7904f4614ffa3353d6598bf8f46da5331185b80f0f1d5e7eca28e100fa4f483c"
+      "sha256": "99403589712a55fafab80b3981700b494e5b89224867254ab77450cb60f742d2"
     },
     "tests": [
       {
@@ -22259,6 +22259,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_overview_depth.py::test_static_market_overview_fallbacks_preserve_missing_numeric_truth",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_overview_depth.py::test_us_breadth_configured_polygon_unavailable_preserves_provider_reason",
         "domain": "market",
         "baseline": true
@@ -22287,11 +22292,6 @@
         "id": "tests/test_market_overview_depth.py::test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative",
         "domain": "market",
         "baseline": true
-      },
-      {
-        "id": "tests/test_market_overview_depth.py::test_us_funds_flow_static_fallback_does_not_emit_zero_values",
-        "domain": "market",
-        "baseline": false
       },
       {
         "id": "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_consumer_evidence_projection_is_whitelist_only_and_status_only",

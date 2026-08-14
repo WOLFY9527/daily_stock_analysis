@@ -31,7 +31,7 @@ import {
 } from '../../pages/MarketOverviewTabConfig';
 import { FundsFlowCard } from './FundsFlowCard';
 import { MarketSentimentCard } from './MarketSentimentCard';
-import { MarketOverviewCard } from './MarketOverviewCard';
+import { MarketOverviewCard, MarketOverviewPanelStateNotice } from './MarketOverviewCard';
 import { VolatilityCard } from './VolatilityCard';
 import { CoreMarketChart, type CoreMarketChartPoint } from '../charts/CoreMarketChart';
 import type {
@@ -81,6 +81,7 @@ import {
   type MarketDirectionalSummary,
 } from '../../utils/marketIntelligenceGuidance';
 import { buildMarketIntelligenceEvidenceMarkdown } from '../../utils/marketIntelligenceEvidenceExport';
+import { hasUsableMarketOverviewData, isRenderableMarketOverviewItem } from './marketOverviewUtils';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -2736,8 +2737,9 @@ const ContextMetricModuleCard: React.FC<{
   onRefresh,
 }) => {
   const { t } = useI18n();
-  const visibleItems = panel.items.slice(0, 8);
-  const hiddenItemCount = Math.max(panel.items.length - visibleItems.length, 0);
+  const renderableItems = panel.items.filter(isRenderableMarketOverviewItem);
+  const visibleItems = renderableItems.slice(0, 8);
+  const hiddenItemCount = Math.max(renderableItems.length - visibleItems.length, 0);
 
   return (
     <MarketOverviewCardFrame
@@ -2762,6 +2764,11 @@ const ContextMetricModuleCard: React.FC<{
           ) : null}
         </div>
         {insightStrip}
+        <MarketOverviewPanelStateNotice
+          panel={panel}
+          hasUsableData={hasUsableMarketOverviewData(renderableItems)}
+          refreshing={refreshing}
+        />
         <div className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-[color:var(--wolfy-border-subtle)] ui-scroll-y-quiet">
           {visibleItems.map((item) => (
             <MarketOverviewDenseQuoteItem

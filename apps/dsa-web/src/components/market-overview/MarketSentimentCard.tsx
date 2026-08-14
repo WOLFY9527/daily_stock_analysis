@@ -7,6 +7,7 @@ import {
   formatChangeSummary,
   formatMetricValue,
   getDirectionTone,
+  hasUsableMarketOverviewData,
   isRenderableMarketOverviewItem,
 } from './marketOverviewUtils';
 import {
@@ -86,7 +87,7 @@ export const MarketSentimentCard: React.FC<{
 
         <MarketOverviewPanelStateNotice
           panel={panel}
-          hasUsableData={usableItems.length > 0}
+          hasUsableData={hasUsableMarketOverviewData(usableItems)}
           refreshing={refreshing || loading}
         />
 
