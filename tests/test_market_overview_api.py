@@ -760,6 +760,7 @@ def test_market_overview_sentiment_returns_partial_for_stale_last_known_good_sna
                 "change_pct": -2.0,
                 "trend": [38, 36, 33],
                 "source": "cnn",
+                "asOf": "2026-06-25T10:00:00+08:00",
             }
         ],
     }

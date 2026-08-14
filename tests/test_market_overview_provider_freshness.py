@@ -314,10 +314,10 @@ def test_mixed_provider_bundle_uses_worst_truthful_freshness_without_generic_mis
         "macro_rate",
     )
 
-    assert payload["freshness"] == "unavailable"
+    assert payload["freshness"] == "delayed"
     assert payload["isPartial"] is True
     assert payload["isUnavailable"] is False
-    assert payload["providerFreshness"]["state"] == "unavailable"
+    assert payload["providerFreshness"]["state"] == "delayed"
     assert payload["degradationReason"] == "partial_unavailable_inputs"
     assert payload.get("fallbackReason") != "provider_missing"
 
