@@ -911,6 +911,8 @@ def test_release_evidence_sanitizer_normalizes_reviewed_roots_and_rejects_unknow
     repo_root.mkdir()
     cache_root.mkdir()
     monkeypatch.setenv("WOLFYSTOCK_ENV_CACHE", str(cache_root))
+    host_home = Path("/Users/fixture")
+    monkeypatch.setattr(harness, "_release_home_roots", lambda: (Path.home(), host_home))
     payload = {
         "cwd": str(repo_root),
         "python": str(cache_root / "snapshots/python/bin/python"),
@@ -926,6 +928,13 @@ def test_release_evidence_sanitizer_normalizes_reviewed_roots_and_rejects_unknow
     }
     with pytest.raises(ValueError, match="release_evidence_private_path_remaining"):
         harness.sanitize_release_evidence({"cwd": "/Users/unreviewed/private"}, repo_root)
+    assert harness.sanitize_release_evidence(
+        {"cwd": str(host_home / "worktrees" / "candidate")},
+        repo_root,
+    ) == {"cwd": "$HOME/worktrees/candidate"}
+    for unreviewed_path in ("/Users/fixture2/private", "/Users/fixture/../private"):
+        with pytest.raises(ValueError, match="release_evidence_private_path_remaining"):
+            harness.sanitize_release_evidence({"cwd": unreviewed_path}, repo_root)
 
 
 def test_run_harness_fails_closed_for_wrong_process_cwd(monkeypatch, tmp_path: Path) -> None:

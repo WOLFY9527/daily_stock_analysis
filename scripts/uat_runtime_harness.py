@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import getpass
 import hashlib
 import http.cookiejar
 import json
@@ -26,6 +27,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+try:
+    import pwd
+except ImportError:  # pragma: no cover - Windows has no pwd module.
+    pwd = None
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -538,6 +545,30 @@ def read_runtime_json(client: Any, base_url: str, path: str) -> dict[str, Any] |
         return None
 
 
+def _release_home_roots() -> tuple[Path, ...]:
+    roots: list[Path] = [Path.home()]
+    if pwd is not None:
+        try:
+            roots.append(Path(pwd.getpwuid(os.getuid()).pw_dir))
+        except (KeyError, OSError):
+            pass
+    if os.name == "nt":
+        user_profile = os.environ.get("USERPROFILE")
+        if user_profile:
+            roots.append(Path(user_profile))
+    else:
+        username = getpass.getuser()
+        if username and pwd is None:
+            roots.append(Path.home().parent / username)
+    unique: dict[str, Path] = {}
+    for root in roots:
+        try:
+            unique[str(root.resolve())] = root.resolve()
+        except OSError:
+            continue
+    return tuple(unique.values())
+
+
 def sanitize_release_evidence(payload: Any, repo_root: Path) -> Any:
     """Normalize reviewed local roots and reject any remaining private user path."""
     replacements = [
@@ -545,9 +576,13 @@ def sanitize_release_evidence(payload: Any, repo_root: Path) -> Any:
         (str(Path(os.environ["WOLFYSTOCK_ENV_CACHE"]).resolve()), "$CACHE")
         if os.environ.get("WOLFYSTOCK_ENV_CACHE")
         else ("", ""),
-        (str(Path.home().resolve()), "$HOME"),
+        *((str(root), "$HOME") for root in _release_home_roots()),
     ]
     replacements = sorted((item for item in replacements if item[0]), key=lambda item: len(item[0]), reverse=True)
+
+    def replace_root(value: str, source: str, replacement: str) -> str:
+        boundary = re.compile(re.escape(source) + r"""(?=$|[\\/\s"'=:,;)\]}])""")
+        return boundary.sub(replacement, value)
 
     def normalize(value: Any) -> Any:
         if isinstance(value, dict):
@@ -558,7 +593,9 @@ def sanitize_release_evidence(payload: Any, repo_root: Path) -> Any:
             return value
         normalized = value
         for source, replacement in replacements:
-            normalized = normalized.replace(source, replacement)
+            normalized = replace_root(normalized, source, replacement)
+        if re.search(r"(?:^|[\\/])\.\.(?:[\\/]|$)", normalized):
+            raise ValueError("release_evidence_private_path_remaining")
         if re.search(r"(?:/Users/[^/\s\"']+|/home/[^/\s\"']+|[A-Za-z]:\\Users\\[^\\\s\"']+)", normalized):
             raise ValueError("release_evidence_private_path_remaining")
         return normalized
