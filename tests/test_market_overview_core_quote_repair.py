@@ -257,6 +257,11 @@ def test_spx_configured_quote_carries_delayed_source_and_trust_metadata() -> Non
     assert unavailable["isUnavailable"] is True
     assert unavailable["degradationReason"] == "provider_unavailable"
     assert unavailable["trustLevel"] == "unavailable"
+    assert payload["status"] == "partial"
+    assert payload["isPartial"] is True
+    assert payload["isUnavailable"] is False
+    assert payload["freshness"] == "delayed"
+    assert payload["providerHealth"]["status"] == "partial"
 
 
 def test_spx_uses_explicit_spy_proxy_when_index_quote_unavailable() -> None:

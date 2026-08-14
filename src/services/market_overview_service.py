@@ -3016,8 +3016,15 @@ class MarketOverviewService:
         snapshot.setdefault("updatedAt", snapshot["last_refresh_at"])
         snapshot.setdefault("source", "fallback" if snapshot.get("fallbackUsed") or snapshot.get("fallback_used") else "cached")
         snapshot.setdefault("items", [])
-        snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
-        snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
+        category = self._category_for_cache_key(cache_key)
+        snapshot["items"] = [self._with_item_meta(item, category, snapshot) for item in snapshot.get("items", [])]
+        snapshot = self._with_market_meta(snapshot, category)
+        if status == "success":
+            if snapshot.get("isPartial"):
+                status = "partial"
+            elif snapshot.get("isUnavailable") or str(snapshot.get("freshness") or "").lower() in {"unavailable", "error"}:
+                status = "unavailable"
+            snapshot["status"] = status
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         snapshot["consumerEvidenceSnapshot"] = project_market_overview_consumer_evidence_snapshot(
@@ -5871,6 +5878,10 @@ class MarketOverviewService:
         if unavailable_seen and len(unique_states) > 1:
             if anchor_state in {"live", "delayed", "cached", "proxy", "stale"}:
                 return anchor_state, None, proxy_seen or anchor_state == "proxy", True
+            available_states = unique_states - {"unavailable"}
+            for available_state in ("stale", "cached", "delayed", "proxy", "live"):
+                if available_state in available_states:
+                    return available_state, "partial_unavailable_inputs", proxy_seen or available_state == "proxy", True
             return "unavailable", "partial_unavailable_inputs", proxy_seen, True
         if unavailable_seen:
             return "unavailable", "unavailable_source", proxy_seen, False
