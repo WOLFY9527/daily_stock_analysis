@@ -1,0 +1,93 @@
+name: Release Operator Evidence Producer
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full commit SHA already reachable from origin/main
+        required: true
+        type: string
+
+concurrency:
+  group: release-operator-evidence-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Resolve immutable candidate on main
+        id: identity
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${CANDIDATE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          git fetch origin main --force
+          git cat-file -e "${CANDIDATE_SHA}^{commit}"
+          git merge-base --is-ancestor "${CANDIDATE_SHA}" origin/main
+          echo "sha=${CANDIDATE_SHA}" >> "${GITHUB_OUTPUT}"
+
+  package:
+    needs: identity
+    runs-on: [self-hosted, linux, operator-evidence-staging]
+    environment: operator-evidence-staging
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      run_id: ${{ steps.handoff.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Stage only sanitized operator evidence
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+          OPERATOR_EVIDENCE_DIR: ${{ vars.OPERATOR_EVIDENCE_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${OPERATOR_EVIDENCE_DIR}"
+          test -d "${OPERATOR_EVIDENCE_DIR}"
+          mkdir -p output/release/operator-evidence output/release/operator-evidence-review
+          PYTHONPATH=scripts python -c 'from operator_evidence_bundle_check import ARTIFACT_SPECS; print("\n".join(spec.filename for spec in ARTIFACT_SPECS))' \
+            | while IFS= read -r artifact_name; do
+            source_path="${OPERATOR_EVIDENCE_DIR}/${artifact_name}"
+            test -f "${source_path}"
+            test ! -L "${source_path}"
+            python scripts/evidence_artifact_sanitize.py scan --input "${source_path}" --fail-on-findings > /dev/null
+            cp -- "${source_path}" "output/release/operator-evidence/${artifact_name}"
+          done
+          python scripts/operator_evidence_workflow_run.py check \
+            --artifact-dir output/release/operator-evidence \
+            --output-dir output/release/operator-evidence-review \
+            --expected-candidate-sha "${CANDIDATE_SHA}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-operator-evidence-${{ needs.identity.outputs.sha }}
+          path: output/release/operator-evidence/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish release handoff
+        id: handoff
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          echo "run_id=${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Release operator evidence handoff"
+            echo
+            echo "candidate_sha=${CANDIDATE_SHA}"
+            echo "operator_evidence_run_id=${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"

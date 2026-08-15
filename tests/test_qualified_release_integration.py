@@ -419,6 +419,9 @@ def test_oci_inspection_records_exact_index_and_platform_digests(tmp_path: Path)
 
 def test_release_workflows_use_managed_environment_and_digest_only_promotion() -> None:
     release_text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    operator_evidence_producer_text = (ROOT / ".github/workflows/operator-evidence-producer.yml").read_text(
+        encoding="utf-8"
+    )
     ci_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     release_jobs = yaml.safe_load(release_text)["jobs"]
 
@@ -451,6 +454,38 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert "docker buildx build" not in promotion_text
     assert "npm run build" not in promotion_text
     assert "docker buildx imagetools create" in promotion_text
+
+    assert "candidate_sha:" in operator_evidence_producer_text
+    assert '[[ "${CANDIDATE_SHA}" =~ ^[0-9a-f]{40}$ ]]' in operator_evidence_producer_text
+    assert 'git merge-base --is-ancestor "${CANDIDATE_SHA}" origin/main' in operator_evidence_producer_text
+    assert "runs-on: [self-hosted, linux, operator-evidence-staging]" in operator_evidence_producer_text
+    assert "environment: operator-evidence-staging" in operator_evidence_producer_text
+    assert "OPERATOR_EVIDENCE_DIR: ${{ vars.OPERATOR_EVIDENCE_DIR }}" in operator_evidence_producer_text
+    assert "ref: ${{ github.sha }}" in operator_evidence_producer_text
+    assert 'print("\\n".join(spec.filename for spec in ARTIFACT_SPECS))' in operator_evidence_producer_text
+    artifact_registry = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            'from operator_evidence_bundle_check import ARTIFACT_SPECS; print("\\n".join(spec.filename for spec in ARTIFACT_SPECS))',
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": "scripts"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert artifact_registry.returncode == 0, artifact_registry.stderr
+    assert artifact_registry.stdout.splitlines()
+    assert "evidence_artifact_sanitize.py scan" in operator_evidence_producer_text
+    assert "--fail-on-findings" in operator_evidence_producer_text
+    assert "operator_evidence_workflow_run.py check" in operator_evidence_producer_text
+    assert "--expected-candidate-sha" in operator_evidence_producer_text
+    assert "name: release-operator-evidence-${{ needs.identity.outputs.sha }}" in operator_evidence_producer_text
+    assert "operator_evidence_run_id=${GITHUB_RUN_ID}" in operator_evidence_producer_text
+    assert "release-operator-evidence-${{ needs.identity.outputs.sha }}" in release_text
+    assert "operator_evidence_run_id:" in release_text
+    assert "promote-" not in operator_evidence_producer_text
 
     assert "pip install" not in ci_text
     assert "npm ci" not in ci_text

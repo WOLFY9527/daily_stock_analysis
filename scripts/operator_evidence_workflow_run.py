@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,8 @@ BUNDLE_SUMMARY_OUTPUT = "bundle-summary.json"
 REPORT_OUTPUT = "release-review-report.md"
 UNSAFE_MARKER_REASON = "unsafe_marker"
 REPORT_OK_STATUSES = {BUNDLE_STATUSES["complete"]}
+EXPECTED_CANDIDATE_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+CANDIDATE_SHA_MISMATCH_REASON = "release_candidate_sha_mismatch"
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -155,6 +158,24 @@ def _workflow_exit(bundle: dict[str, Any], verification: dict[str, Any]) -> tupl
     return EXIT_OK, "[OK] operator evidence workflow completed: review-required"
 
 
+def _candidate_binding_error(artifact_dir: Path, expected_candidate_sha: str | None) -> str | None:
+    if expected_candidate_sha is None:
+        return None
+    try:
+        manual_review = _load_json_object(artifact_dir / "manual_release_approval_review_record.json")
+    except (OSError, json.JSONDecodeError, ValueError):
+        return CANDIDATE_SHA_MISMATCH_REASON
+    if manual_review.get("releaseCandidateSha") != expected_candidate_sha:
+        return CANDIDATE_SHA_MISMATCH_REASON
+    return None
+
+
+def _parse_expected_candidate_sha(value: str) -> str:
+    if not EXPECTED_CANDIDATE_SHA_PATTERN.fullmatch(value):
+        raise argparse.ArgumentTypeError("expected_candidate_sha_must_be_full_lowercase_sha")
+    return value
+
+
 def _run_init(args: argparse.Namespace) -> int:
     try:
         templates = _build_templates("all")
@@ -186,6 +207,11 @@ def _run_check(args: argparse.Namespace) -> int:
     (output_dir / REPORT_OUTPUT).write_text(report, encoding="utf-8")
 
     exit_code, message = _workflow_exit(bundle, verification)
+    if exit_code == EXIT_OK:
+        candidate_binding_error = _candidate_binding_error(artifact_dir, args.expected_candidate_sha)
+        if candidate_binding_error is not None:
+            exit_code = EXIT_VALIDATOR_REJECTION
+            message = f"[FAIL] release candidate binding rejected: {candidate_binding_error}"
     stream = sys.stdout if exit_code == EXIT_OK else sys.stderr
     print(message, file=stream)
     return exit_code
@@ -222,6 +248,11 @@ def main(argv: list[str] | None = None) -> int:
     check_parser = subparsers.add_parser("check", help="Validate artifacts and render a review report.")
     check_parser.add_argument("--artifact-dir", required=True, help="Directory containing sanitized evidence artifacts.")
     check_parser.add_argument("--output-dir", required=True, help="Directory for workflow outputs.")
+    check_parser.add_argument(
+        "--expected-candidate-sha",
+        type=_parse_expected_candidate_sha,
+        help="Full candidate SHA that the sanitized manual review record must bind.",
+    )
     check_parser.set_defaults(func=_run_check)
 
     report_parser = subparsers.add_parser("report", help="Render a Markdown report from a bundle summary.")

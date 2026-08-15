@@ -88,6 +88,38 @@ Archive packaging is an operator evidence bundle operation, not permission to
 create a documentation archive lane. Temporary evidence retirement follows
 [`docs/audits/README.md`](../audits/README.md) and the documentation manifest.
 
+## Release Actions Handoff
+
+The manual `Release Operator Evidence Producer` workflow is the only repository
+producer for the `release-operator-evidence-<candidate-sha>` Actions artifact.
+It packages evidence for the release workflow; it has no deployment or
+promotion step.
+
+Before dispatch, a repository administrator must protect the
+`operator-evidence-staging` GitHub environment, attach an authorized
+Linux `operator-evidence-staging` self-hosted runner, and configure its
+`OPERATOR_EVIDENCE_DIR` environment variable to a staging-owned sanitized
+evidence inbox. The workflow refuses to run when that boundary is unavailable.
+Do not set this variable to a raw-evidence, credential, or log location.
+
+An authorized staging operator prepares the twelve canonical files in that
+inbox, including a `manual_release_approval_review_record.json` whose
+`releaseCandidateSha` is the full candidate SHA. The operator must use the
+sanitizer's `scan --fail-on-findings` path for every input before dispatch; the
+workflow repeats that scan and copies only the filenames from the canonical
+bundle specification. Missing, unsafe, invalid, or SHA-mismatched inputs stop
+before upload. The generated manifest, bundle summary, and review report are
+validation outputs, not target-environment evidence.
+
+Dispatch the workflow from the default branch with the full candidate SHA that
+is already on `origin/main`. After the protected staging job succeeds, copy its
+`operator_evidence_run_id` from the Actions job summary into the
+`operator_evidence_run_id` input of `Qualified Immutable Release Promotion`.
+The release workflow downloads the exact SHA-bound artifact and independently
+rechecks the bundle and candidate binding. A successful producer run remains
+manual-review evidence only; absent real staging observations remains
+EXTERNAL_NOT_QUALIFIED.
+
 ## Report Rendering
 
 Render a human-review report from the sanitized bundle summary:

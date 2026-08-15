@@ -68,9 +68,22 @@ def test_init_creates_all_templates(tmp_path: Path) -> None:
 def test_check_on_complete_sanitized_fixture_produces_review_required_report(tmp_path: Path) -> None:
     artifact_dir = tmp_path / "artifacts"
     assert _init_templates(artifact_dir).returncode == 0
+    expected_candidate_sha = "a" * 40
+    manual_review_path = artifact_dir / "manual_release_approval_review_record.json"
+    manual_review = _read_json(manual_review_path)
+    manual_review["releaseCandidateSha"] = expected_candidate_sha
+    manual_review_path.write_text(json.dumps(manual_review), encoding="utf-8")
     output_dir = tmp_path / "workflow-output"
 
-    result = _run("check", "--artifact-dir", artifact_dir, "--output-dir", output_dir)
+    result = _run(
+        "check",
+        "--artifact-dir",
+        artifact_dir,
+        "--output-dir",
+        output_dir,
+        "--expected-candidate-sha",
+        expected_candidate_sha,
+    )
 
     assert result.returncode == 0, result.stderr
     bundle = _read_json(output_dir / "bundle-summary.json")
@@ -81,6 +94,21 @@ def test_check_on_complete_sanitized_fixture_produces_review_required_report(tmp
     assert "Manual operator review is required before any release decision." in report
     assert "complete-review-required" in report
     assert "rawArtifactBodiesIncluded" not in report
+
+    manual_review["releaseCandidateSha"] = "b" * 40
+    manual_review_path.write_text(json.dumps(manual_review), encoding="utf-8")
+    mismatch = _run(
+        "check",
+        "--artifact-dir",
+        artifact_dir,
+        "--output-dir",
+        tmp_path / "mismatch-output",
+        "--expected-candidate-sha",
+        expected_candidate_sha,
+    )
+
+    assert mismatch.returncode == 11
+    assert "release_candidate_sha_mismatch" in mismatch.stderr
 
 
 def test_missing_artifact_exits_non_zero(tmp_path: Path) -> None:
