@@ -123,6 +123,11 @@ target-environment artifacts, known residual risks, rollback identity, and
 remote digest verification. Task acceptance, artifact creation, or individual
 green checks do not complete release qualification.
 
+The `release-approval` GitHub environment must exist with required reviewers
+before release qualification can claim a separate manual approval boundary.
+Naming the environment in the workflow does not create reviewer protection.
+Missing environment protection remains an external NO-GO condition.
+
 ### Highest-Risk Blockers
 
 Missing real target-environment evidence, identity mismatch, auth/RBAC gaps,

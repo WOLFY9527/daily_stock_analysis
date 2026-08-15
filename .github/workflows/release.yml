@@ -7,10 +7,6 @@ on:
         description: Existing annotated semver tag to qualify and promote
         required: true
         type: string
-      operator_evidence_run_id:
-        description: Run containing release-operator-evidence-<candidate SHA>
-        required: true
-        type: string
 
 concurrency:
   group: qualified-release-${{ inputs.release_tag }}
@@ -34,11 +30,9 @@ jobs:
         id: identity
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-          OPERATOR_EVIDENCE_RUN_ID: ${{ inputs.operator_evidence_run_id }}
         run: |
           set -euo pipefail
           [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ "${OPERATOR_EVIDENCE_RUN_ID}" =~ ^[0-9]+$ ]]
           git fetch origin main --tags --force
           test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = tag
           sha="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
@@ -315,20 +309,11 @@ jobs:
           set -euo pipefail
           ./wolfy exec --profile test -- python scripts/auth_rbac_release_audit.py --offline > output/release/raw/auth-rbac.json
           ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id auth-rbac --source-report output/release/raw/auth-rbac.json --output output/release/evidence/auth-rbac.json
-      - name: Download operator evidence
-        continue-on-error: true
-        uses: actions/download-artifact@v7
-        with:
-          name: release-operator-evidence-${{ needs.identity.outputs.sha }}
-          path: output/release/operator-evidence
-          run-id: ${{ inputs.operator_evidence_run_id }}
-          github-token: ${{ github.token }}
       - name: Gate - operator-evidence
         continue-on-error: true
         run: |
-          set -euo pipefail
-          ./wolfy exec --profile test -- python scripts/operator_evidence_bundle_check.py output/release/operator-evidence > output/release/raw/operator-evidence.json
-          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id operator-evidence --source-report output/release/raw/operator-evidence.json --operator-evidence-dir output/release/operator-evidence --detail environment=release-approval --output output/release/evidence/operator-evidence.json
+          echo "[NO-GO] isolated operator-evidence producer provenance is unavailable" >&2
+          exit 1
       - uses: actions/attest-build-provenance@v3
         id: provenance
         continue-on-error: true

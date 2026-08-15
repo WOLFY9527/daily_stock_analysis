@@ -809,7 +809,9 @@ def test_release_gate_summary_allows_dirty_repo_with_explicit_flag(tmp_path):
     assert "verify-promotion" in release_text
     assert "docker buildx imagetools create" in release_text
     assert "immutable image destination already exists" in release_text
-    assert "--operator-evidence-dir output/release/operator-evidence" in release_text
+    assert "--operator-evidence-dir output/release/operator-evidence" not in release_text
+    assert "operator_evidence_run_id" not in release_text
+    assert "[NO-GO] isolated operator-evidence producer provenance is unavailable" in release_text
     assert "npm --prefix apps/dsa-web test -- --maxWorkers=1" in release_text
 
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

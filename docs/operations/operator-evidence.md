@@ -90,35 +90,34 @@ create a documentation archive lane. Temporary evidence retirement follows
 
 ## Release Actions Handoff
 
-The manual `Release Operator Evidence Producer` workflow is the only repository
-producer for the `release-operator-evidence-<candidate-sha>` Actions artifact.
-It packages evidence for the release workflow; it has no deployment or
-promotion step.
+The public repository has no repository-level self-hosted operator-evidence
+producer. Do not register a self-hosted runner for this repository, including a
+runner carrying the `operator-evidence-staging` label. A fork pull request can
+propose workflow changes that select repository runner labels without using the
+protected environment. Environment branch policy, manual workflow approval,
+custom labels, and one-job registration do not isolate a staging inbox from
+that repository-wide runner selection boundary.
 
-Before dispatch, a repository administrator must protect the
-`operator-evidence-staging` GitHub environment, attach an authorized
-Linux `operator-evidence-staging` self-hosted runner, and configure its
-`OPERATOR_EVIDENCE_DIR` environment variable to a staging-owned sanitized
-evidence inbox. The workflow refuses to run when that boundary is unavailable.
-Do not set this variable to a raw-evidence, credential, or log location.
+Keep the protected `operator-evidence-staging` environment and its
+`OPERATOR_EVIDENCE_DIR` variable in place, but leave the environment runnerless.
+The variable must continue to identify only a staging-owned sanitized evidence
+inbox, never raw evidence, credentials, provider payloads, or logs.
 
-An authorized staging operator prepares the twelve canonical files in that
-inbox, including a `manual_release_approval_review_record.json` whose
-`releaseCandidateSha` is the full candidate SHA. The operator must use the
-sanitizer's `scan --fail-on-findings` path for every input before dispatch; the
-workflow repeats that scan and copies only the filenames from the canonical
-bundle specification. Missing, unsafe, invalid, or SHA-mismatched inputs stop
-before upload. The generated manifest, bundle summary, and review report are
-validation outputs, not target-environment evidence.
+Restoring an Actions handoff requires an execution boundary that
+public-repository workflow changes cannot select. That boundary must use fresh
+disposable compute, must not expose a persistent staging host or inbox to an
+untrusted job, and must deliver only the twelve sanitized canonical files. It
+must preserve the full candidate SHA binding, `origin/main` ancestry check,
+protected environment, independent release-side validation, and separate
+manual approval. A label-only, environment-only, or JIT-only repository runner
+is insufficient. Do not add a replacement producer until that external
+isolation is owned and qualified.
 
-Dispatch the workflow from the default branch with the full candidate SHA that
-is already on `origin/main`. After the protected staging job succeeds, copy its
-`operator_evidence_run_id` from the Actions job summary into the
-`operator_evidence_run_id` input of `Qualified Immutable Release Promotion`.
-The release workflow downloads the exact SHA-bound artifact and independently
-rechecks the bundle and candidate binding. A successful producer run remains
-manual-review evidence only; absent real staging observations remains
-EXTERNAL_NOT_QUALIFIED.
+`Qualified Immutable Release Promotion` does not accept an operator-evidence
+run ID while producer provenance is unavailable. Its operator-evidence gate
+remains initialized to FAIL and has no workflow step that can replace that
+state. Without an isolated producer and an authenticated handoff contract,
+operator evidence remains missing and release remains NO-GO.
 
 ## Report Rendering
 
