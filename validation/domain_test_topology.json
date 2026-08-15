@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8173,
-      "sha256": "99403589712a55fafab80b3981700b494e5b89224867254ab77450cb60f742d2"
+      "count": 8175,
+      "sha256": "a5e62b4c9ddba655154b6f423dc2f785661c2f622b8f1a6b9cee94c10b9d3128"
     },
     "tests": [
       {
@@ -5742,6 +5742,11 @@
         "id": "tests/api/test_stock_history_endpoint.py::test_stock_intraday_internal_error_does_not_echo_provider_exception",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_stock_quote_recovery.py::test_cn_and_hk_quote_endpoints_return_structured_unavailable_instead_of_raw_404",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/api/test_stock_quote_recovery.py::test_quote_endpoint_preserves_missing_price_as_null_not_false_zero",
@@ -38192,6 +38197,11 @@
         "id": "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_get_realtime_quote_placeholder_does_not_claim_live_freshness",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_get_realtime_quote_preserves_canonical_non_us_unavailable_state",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_validate_ticker_exists_accepts_meaningful_name_without_quote",

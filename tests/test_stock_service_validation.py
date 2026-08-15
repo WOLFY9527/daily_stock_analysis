@@ -122,6 +122,27 @@ class StockServiceValidationTestCase(unittest.TestCase):
         self.assertTrue(result["sourceConfidence"]["isUnavailable"])
         self.assertEqual(result["observed_at"], result["update_time"])
 
+    def test_get_realtime_quote_preserves_canonical_non_us_unavailable_state(self) -> None:
+        adapter = SimpleNamespace(get_quote_snapshot=lambda stock_code: None)
+        service = StockService(provider_adapter=adapter)
+
+        for raw_symbol, canonical_symbol, market in (
+            ("SH600519", "600519", "cn"),
+            ("0700.HK", "HK00700", "hk"),
+        ):
+            with self.subTest(raw_symbol=raw_symbol):
+                result = service.get_realtime_quote(raw_symbol)
+
+                self.assertEqual(result["stock_code"], canonical_symbol)
+                self.assertIsNone(result["current_price"])
+                self.assertEqual(result["freshness"], "unavailable")
+                self.assertTrue(result["is_unavailable"])
+                self.assertEqual(result["availability_state"], "missing")
+                self.assertEqual(result["unavailable_reason"], "quote_snapshot_missing")
+                self.assertEqual(result["quoteReadiness"]["market"], market)
+
+        self.assertIsNone(service.get_realtime_quote("not-a-symbol"))
+
 
 if __name__ == "__main__":
     unittest.main()

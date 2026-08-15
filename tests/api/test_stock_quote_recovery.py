@@ -86,6 +86,33 @@ def test_quote_endpoint_preserves_missing_price_as_null_not_false_zero() -> None
     assert payload["unavailableReason"] == "quote_snapshot_missing"
 
 
+def test_cn_and_hk_quote_endpoints_return_structured_unavailable_instead_of_raw_404(monkeypatch) -> None:
+    for key in (
+        "LOCAL_US_QUOTE_SNAPSHOT_CACHE_PATH",
+        "US_QUOTE_SNAPSHOT_CACHE_PATH",
+        "WOLFYSTOCK_US_QUOTE_SNAPSHOT_CACHE_PATH",
+        "QUOTE_SNAPSHOT_CACHE_PATH",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    with patch("src.services.stock_service.StockServiceProviderAdapter", return_value=_NoQuoteAdapter()):
+        for raw_symbol, canonical_symbol, market in (
+            ("600519", "600519", "cn"),
+            ("0700.HK", "HK00700", "hk"),
+        ):
+            response = _client().get(f"/api/v1/stocks/{raw_symbol}/quote")
+
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["stock_code"] == canonical_symbol
+            assert "current_price" not in payload
+            assert payload["freshness"] == "unavailable"
+            assert payload["isUnavailable"] is True
+            assert payload["availabilityState"] == "missing"
+            assert payload["unavailableReason"] == "quote_snapshot_missing"
+            assert payload["quoteReadiness"]["market"] == market
+
+
 def test_starter_quote_endpoint_reads_real_local_quote_snapshot_with_source_and_freshness(tmp_path, monkeypatch) -> None:
     quote_cache = tmp_path / "quotes.json"
     as_of = datetime.now(timezone.utc).replace(microsecond=0).isoformat()

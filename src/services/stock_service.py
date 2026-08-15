@@ -46,6 +46,7 @@ from src.services.uat_provider_isolation import (
     uat_no_live_providers_enabled,
 )
 from src.utils.symbol_classification import is_us_stock_code
+from src.utils.symbol_normalization import parse_canonical_symbol
 from src.utils.yfinance_symbol import to_yfinance_symbol
 
 logger = logging.getLogger(__name__)
@@ -244,15 +245,17 @@ class StockService:
         *,
         observed_at: str,
     ) -> Optional[Dict[str, Any]]:
-        normalized_code = str(stock_code or "").strip().upper()
-        if not is_us_stock_code(normalized_code) or not is_starter_market_data_symbol(normalized_code):
+        identity = parse_canonical_symbol(stock_code)
+        if identity is None or identity.ambiguous or identity.market is None:
             return None
 
-        cache_result = self._get_local_quote_snapshot_quote(normalized_code, observed_at=observed_at)
-        if cache_result is not None:
-            return cache_result
+        if identity.market == "us" and is_starter_market_data_symbol(identity.symbol):
+            cache_result = self._get_local_quote_snapshot_quote(identity.symbol, observed_at=observed_at)
+            if cache_result is not None:
+                return cache_result
         return self._get_unavailable_quote_state(
-            normalized_code,
+            identity.symbol,
+            market=identity.market,
             observed_at=observed_at,
             reason="quote_snapshot_missing",
         )
@@ -326,11 +329,12 @@ class StockService:
         self,
         stock_code: str,
         *,
+        market: str,
         observed_at: str,
         reason: str,
     ) -> Dict[str, Any]:
         readiness = QuoteSnapshotReadinessService().fetch(
-            QuoteSnapshotReadinessRequest(symbols=(stock_code,), market="us")
+            QuoteSnapshotReadinessRequest(symbols=(stock_code,), market=market)
         ).readiness
         missing_requirements = list(readiness.get("missingRequirements") or [])
         if reason not in missing_requirements:
