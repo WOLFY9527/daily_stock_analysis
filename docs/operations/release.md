@@ -55,6 +55,22 @@ nested environment evidence, reviewed Python lock, Web artifact identity, and
 amd64/arm64 image digests, then records twelve explicit qualification gates.
 Missing, skipped, cancelled, neutral, unknown, or failed gates remain NO-GO.
 
+The read-only operator-evidence consumer is a dedicated `release-approval` job.
+It uses explicit private producer run and artifact IDs, authenticates them
+against the pinned private repository/workflow/head commit, and validates the
+handoff with the annotated-tag candidate's canonical evidence owners after the
+credential-bearing process has ended. The public workflow uploads only the
+bounded derived operator-evidence gate record between jobs; raw private
+handoff files and evidence bodies are never public Actions artifacts.
+
+Qualification initializes operator evidence to FAIL. Only a successful
+authenticated consumer job and successfully imported canonical gate record can
+replace that file before the authoritative twelve-gate aggregate. Missing
+credential, missing or synthetic artifact, provenance or candidate mismatch,
+or candidate-validator rejection therefore remains NO-GO. This consumer gate
+does not replace the independent `release-approval` reviewer boundary, and a
+producer success cannot make the other release gates pass.
+
 Promotion consumes the qualified manifest and copies the existing registry
 digest. It does not rebuild or resolve dependencies. Electron Desktop remains
 outside the qualified graph while its legacy scripts install independently;
@@ -127,6 +143,11 @@ The `release-approval` GitHub environment must exist with required reviewers
 before release qualification can claim a separate manual approval boundary.
 Naming the environment in the workflow does not create reviewer protection.
 Missing environment protection remains an external NO-GO condition.
+
+That environment also supplies the private producer read credential described
+in [`docs/operations/operator-evidence.md`](operator-evidence.md). Credential
+availability authenticates transport only; it is not reviewer approval,
+operator-evidence acceptance, or release approval.
 
 ### Highest-Risk Blockers
 

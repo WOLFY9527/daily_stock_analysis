@@ -7,6 +7,14 @@ on:
         description: Existing annotated semver tag to qualify and promote
         required: true
         type: string
+      operator_evidence_run_id:
+        description: Immutable qualified private producer workflow run ID
+        required: true
+        type: string
+      operator_evidence_artifact_id:
+        description: Immutable production operator-evidence artifact ID from that run
+        required: true
+        type: string
 
 concurrency:
   group: qualified-release-${{ inputs.release_tag }}
@@ -20,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.identity.outputs.sha }}
+      tree: ${{ steps.identity.outputs.tree }}
       tag: ${{ steps.identity.outputs.tag }}
       tag_object: ${{ steps.identity.outputs.tag_object }}
     steps:
@@ -36,9 +45,11 @@ jobs:
           git fetch origin main --tags --force
           test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = tag
           sha="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+          tree="$(git rev-parse "${sha}^{tree}")"
           tag_object="$(git rev-parse "refs/tags/${RELEASE_TAG}")"
           git merge-base --is-ancestor "${sha}" origin/main
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "tree=${tree}" >> "${GITHUB_OUTPUT}"
           echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
 
@@ -158,9 +169,88 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  operator-evidence-consumer:
+    needs: [identity, build-candidate]
+    runs-on: ubuntu-latest
+    environment: release-approval
+    permissions:
+      actions: read
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+      CANDIDATE_TREE: ${{ needs.identity.outputs.tree }}
+      OPERATOR_EVIDENCE_RUN_ID: ${{ inputs.operator_evidence_run_id }}
+      OPERATOR_EVIDENCE_ARTIFACT_ID: ${{ inputs.operator_evidence_artifact_id }}
+      OPERATOR_EVIDENCE_WORK_ROOT: ${{ runner.temp }}/t707-operator-evidence-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: consumer
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: candidate-artifact
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch authenticated private operator-evidence handoff
+        env:
+          OPERATOR_EVIDENCE_READ_TOKEN: ${{ secrets.OPERATOR_EVIDENCE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          python consumer/scripts/private_operator_evidence_consumer.py fetch \
+            --candidate-sha "${CANDIDATE_SHA}" \
+            --run-id "${OPERATOR_EVIDENCE_RUN_ID}" \
+            --artifact-id "${OPERATOR_EVIDENCE_ARTIFACT_ID}" \
+            --work-root "${OPERATOR_EVIDENCE_WORK_ROOT}" \
+            --runner-temp "${RUNNER_TEMP}"
+      - name: Validate handoff with candidate-owned authorities
+        run: |
+          set -euo pipefail
+          python consumer/scripts/private_operator_evidence_consumer.py validate \
+            --candidate-root candidate \
+            --candidate-sha "${CANDIDATE_SHA}" \
+            --candidate-tree "${CANDIDATE_TREE}" \
+            --run-id "${OPERATOR_EVIDENCE_RUN_ID}" \
+            --artifact-id "${OPERATOR_EVIDENCE_ARTIFACT_ID}" \
+            --work-root "${OPERATOR_EVIDENCE_WORK_ROOT}" \
+            --runner-temp "${RUNNER_TEMP}"
+      - name: Derive canonical operator-evidence gate record
+        run: |
+          set -euo pipefail
+          mkdir -p output/operator-evidence-gate
+          python candidate/scripts/release_gate_summary.py record \
+            --candidate candidate-artifact/release-candidate.json \
+            --gate-id operator-evidence \
+            --source-report "${OPERATOR_EVIDENCE_WORK_ROOT}/validation-output/bundle-summary.json" \
+            --operator-evidence-dir "${OPERATOR_EVIDENCE_WORK_ROOT}/sanitized-evidence" \
+            --detail environment=release-approval \
+            --output output/operator-evidence-gate/operator-evidence.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-operator-evidence-gate-${{ needs.identity.outputs.sha }}-${{ inputs.operator_evidence_run_id }}-${{ inputs.operator_evidence_artifact_id }}
+          path: output/operator-evidence-gate/operator-evidence.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove private operator-evidence handoff
+        if: always()
+        run: |
+          set -euo pipefail
+          python consumer/scripts/private_operator_evidence_consumer.py cleanup \
+            --work-root "${OPERATOR_EVIDENCE_WORK_ROOT}" \
+            --runner-temp "${RUNNER_TEMP}"
+
   qualification:
     if: always()
-    needs: [identity, build-candidate]
+    needs: [identity, build-candidate, operator-evidence-consumer]
     runs-on: ubuntu-latest
     environment: release-approval
     permissions:
@@ -309,11 +399,25 @@ jobs:
           set -euo pipefail
           ./wolfy exec --profile test -- python scripts/auth_rbac_release_audit.py --offline > output/release/raw/auth-rbac.json
           ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id auth-rbac --source-report output/release/raw/auth-rbac.json --output output/release/evidence/auth-rbac.json
+      - name: Import verified operator-evidence gate record
+        id: operator-evidence-gate-import
+        if: needs.operator-evidence-consumer.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: release-operator-evidence-gate-${{ needs.identity.outputs.sha }}-${{ inputs.operator_evidence_run_id }}-${{ inputs.operator_evidence_artifact_id }}
+          path: output/release/operator-evidence-gate
       - name: Gate - operator-evidence
         continue-on-error: true
+        env:
+          OPERATOR_EVIDENCE_CONSUMER_RESULT: ${{ needs.operator-evidence-consumer.result }}
         run: |
-          echo "[NO-GO] isolated operator-evidence producer provenance is unavailable" >&2
-          exit 1
+          set -euo pipefail
+          test "${OPERATOR_EVIDENCE_CONSUMER_RESULT}" = success
+          test "${{ steps.operator-evidence-gate-import.outcome }}" = success
+          test -s output/release/operator-evidence-gate/operator-evidence.json
+          cp output/release/operator-evidence-gate/operator-evidence.json \
+            output/release/evidence/operator-evidence.json
       - uses: actions/attest-build-provenance@v3
         id: provenance
         continue-on-error: true

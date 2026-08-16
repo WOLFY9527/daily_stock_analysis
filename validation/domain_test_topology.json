@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8175,
-      "sha256": "a5e62b4c9ddba655154b6f423dc2f785661c2f622b8f1a6b9cee94c10b9d3128"
+      "count": 8213,
+      "sha256": "90228aaffdbc55a7d7d94161b94c7850ad950ee3da9198aeae26fbb0efea586a"
     },
     "tests": [
       {
@@ -31077,6 +31077,196 @@
         "id": "tests/test_private_beta_uat_evidence_check.py::test_template_is_safe_but_not_accepted_until_operator_fills_it",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_candidate_subprocess_environment_excludes_private_read_token",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_consumer_source_reuses_candidate_registry_and_validators_without_schema_copy",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_downloaded_digest_mismatch",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_synthetic_smoke_artifact_before_download",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_expired_or_digestless_artifact[mutation0-producer_artifact_id_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_expired_or_digestless_artifact[mutation1-producer_artifact_expired]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_expired_or_digestless_artifact[mutation2-artifact_api_digest_invalid]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_expired_or_digestless_artifact[mutation3-artifact_api_digest_invalid]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_producer_repository_identity_or_visibility[full_name-WOLFY9527/not-the-producer]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_producer_repository_identity_or_visibility[id-1335331929]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_producer_repository_identity_or_visibility[private-False]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_producer_repository_identity_or_visibility[visibility-public]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_association_and_duplicate_production_name",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[conclusion-failure-producer_run_not_successful]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[event-push-producer_run_event_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[head_branch-feature-producer_run_ref_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[head_sha-ffffffffffffffffffffffffffffffffffffffff-producer_commit_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[id-31923336453-producer_run_id_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[path-.github/workflows/other.yml-producer_workflow_path_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[run_attempt-0-producer_run_attempt_invalid]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_fetch_rejects_wrong_run_event_ref_conclusion_workflow_or_commit[status-in_progress-producer_run_not_completed]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_handoff_zip_rejects_duplicate_members",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_handoff_zip_rejects_traversal_nested_missing_or_extra_members[entries0]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_handoff_zip_rejects_traversal_nested_missing_or_extra_members[entries1]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_handoff_zip_rejects_traversal_nested_missing_or_extra_members[entries2]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_handoff_zip_rejects_traversal_nested_missing_or_extra_members[entries3]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_missing_credential_fails_before_api_or_candidate_execution",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_production_provenance_requires_exact_allowlist_and_identity_agreement",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[candidateSha-ffffffffffffffffffffffffffffffffffffffff-provenance_candidate_sha_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[candidateTree-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-provenance_candidate_tree_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[canonicalBundleSha256-0000000000000000000000000000000000000000000000000000000000000000-provenance_bundle_digest_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[event-push-provenance_event_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[ref-refs/heads/other-provenance_ref_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[runAttempt-2-provenance_run_attempt_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[runId-31923336453-provenance_run_id_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_provenance_rejects_candidate_tree_run_bundle_and_validator_mismatches[validatorResult-synthetic-candidate-validators-pass-provenance_validator_result_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_release_workflow_uses_least_privilege_bounded_fail_closed_handoff",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_private_operator_evidence_consumer.py::test_validate_handoff_preserves_strict_sanitizer_and_candidate_validator_ownership",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_product_read_model.py::test_backtest_readiness_projection_is_read_only_and_fail_closed",

@@ -103,21 +103,71 @@ Keep the protected `operator-evidence-staging` environment and its
 The variable must continue to identify only a staging-owned sanitized evidence
 inbox, never raw evidence, credentials, provider payloads, or logs.
 
-Restoring an Actions handoff requires an execution boundary that
-public-repository workflow changes cannot select. That boundary must use fresh
-disposable compute, must not expose a persistent staging host or inbox to an
-untrusted job, and must deliver only the twelve sanitized canonical files. It
-must preserve the full candidate SHA binding, `origin/main` ancestry check,
-protected environment, independent release-side validation, and separate
-manual approval. A label-only, environment-only, or JIT-only repository runner
-is insufficient. Do not add a replacement producer until that external
-isolation is owned and qualified.
+The qualified external producer trust anchor is intentionally immutable:
 
-`Qualified Immutable Release Promotion` does not accept an operator-evidence
-run ID while producer provenance is unavailable. Its operator-evidence gate
-remains initialized to FAIL and has no workflow step that can replace that
-state. Without an isolated producer and an authenticated handoff contract,
-operator evidence remains missing and release remains NO-GO.
+- private repository `WOLFY9527/wolfystock-operator-evidence`, numeric repository
+  ID `1335331928`;
+- workflow `.github/workflows/isolated-operator-evidence-producer.yml`;
+- workflow/head commit `bc5b6af9d6038931a9df52f6f0a67887270c8b23`.
+
+Any producer change requires explicit requalification and a public consumer
+trust-anchor update. Dispatch accepts only the explicit immutable
+`operator_evidence_run_id` and `operator_evidence_artifact_id`; it never searches
+for a latest run, newest artifact, mutable branch result, or friendly artifact
+name alone. Candidate identity still comes from the annotated release tag and
+the release identity job.
+
+The `release-approval` environment must provide one
+`OPERATOR_EVIDENCE_READ_TOKEN` secret. Its credential must be scoped only to
+`WOLFY9527/wolfystock-operator-evidence` with repository `Actions: read` and no
+Contents, Actions write, release, deployment, package, administration, or
+producer mutation authority. The native public-repository `GITHUB_TOKEN` has no
+cross-repository authority and is not a substitute.
+
+The credential is injected only into the authenticated fetch step. That step
+verifies repository visibility and identity, run/workflow/head identity,
+artifact association/name/expiry/size/API digest, and independently hashes the
+downloaded ZIP. The following validation step has no private credential. It
+safely inspects the two-member ZIP and canonical tar, validates the exact
+production provenance allowlist and candidate/run/digest agreement, discovers
+membership from the candidate's runtime `ARTIFACT_SPECS`, and reruns the
+candidate sanitizer, bundle checker, and workflow checker with a projected
+secret-free subprocess environment.
+
+Raw ZIP, tar, provenance, and operator JSON remain only in the disposable job
+work root and are removed after gate derivation. They are never uploaded by the
+public workflow. Only the bounded canonical `operator-evidence.json` release
+gate record crosses to the qualification job. Missing credential or inputs,
+API failure, synthetic artifact, expiry, unsafe archive, provenance mismatch,
+candidate mismatch, or validator rejection leaves the initialized gate at FAIL
+and release at NO-GO. Producer success never supplies manual reviewer approval
+and never determines release GO.
+
+The synthetic qualification smoke run `31923336452` and artifact `9257055688`
+are negative contract evidence only. Their synthetic artifact name and marker
+must be rejected by the production consumer.
+
+### Post-LAND live qualification
+
+After this consumer is on the public default branch:
+
+1. Configure `release-approval` with genuine independent required reviewers.
+2. Add `OPERATOR_EVIDENCE_READ_TOKEN` as an environment secret using a
+   single-repository, `Actions: read` credential for the private producer.
+3. Produce a real production artifact from the pinned private producer commit
+   for the exact annotated-tag candidate; do not use the synthetic smoke run.
+4. Record the explicit successful producer run ID and exact production artifact
+   ID, then dispatch the public release workflow for the annotated tag with
+   those two IDs.
+5. Verify the consumer job's first attempt, the bounded gate artifact, all
+   twelve release gates, independent environment approval, final candidate and
+   tree identity, and remote promotion identity before any release decision.
+
+No real production handoff is qualified yet. Current public evidence templates
+also expose a strict sanitizer-versus-validator conflict for several canonical
+fields, so T708 must repair or otherwise qualify that producer/candidate
+contract and complete a real credentialed handoff before real release
+qualification.
 
 ## Report Rendering
 

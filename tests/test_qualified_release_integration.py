@@ -455,10 +455,20 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert "docker buildx imagetools create" in promotion_text
 
     assert release_jobs["qualification"]["environment"] == "release-approval"
-    assert "operator_evidence_run_id" not in release_text
-    assert "release-operator-evidence-" not in release_text
-    assert "--gate-id operator-evidence" not in release_text
-    assert "[NO-GO] isolated operator-evidence producer provenance is unavailable" in release_text
+    assert release_jobs["operator-evidence-consumer"]["environment"] == "release-approval"
+    assert release_jobs["operator-evidence-consumer"]["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+    }
+    assert "operator_evidence_run_id" in release_text
+    assert "operator_evidence_artifact_id" in release_text
+    assert "private_operator_evidence_consumer.py fetch" in release_text
+    assert "private_operator_evidence_consumer.py validate" in release_text
+    assert "--gate-id operator-evidence" in release_text
+    assert "release-operator-evidence-gate-" in release_text
+    assert "output/operator-evidence-gate/operator-evidence.json" in release_text
+    assert "handoff.zip" not in release_text
+    assert "synthetic" not in release_text.lower()
     assert "auth-rbac operator-evidence secret-private-path-scan" in release_text
 
     assert "pip install" not in ci_text
