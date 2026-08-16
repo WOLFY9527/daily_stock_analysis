@@ -94,6 +94,9 @@ def run_market_review(
                 f"# 🎯 大盘复盘\n\n{review_report}", 
                 report_filename
             )
+            if not filepath:
+                logger.error("大盘复盘报告保存失败: persistence owner returned no path")
+                return None
             logger.info(f"大盘复盘报告已保存: {filepath}")
             
             # 推送通知（合并模式下跳过，由 main 层统一发送）

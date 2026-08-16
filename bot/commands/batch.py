@@ -113,13 +113,27 @@ class BatchCommand(BotCommand):
             )
             
             # 执行分析（会自动推送汇总报告）
-            results = pipeline.run(
+            execution_result = pipeline.run(
                 stock_codes=stock_list,
                 dry_run=False,
                 send_notification=True
             )
-            
-            logger.info(f"[BatchCommand] 批量分析完成，成功 {len(results)} 只")
+
+            if execution_result.is_failed:
+                logger.error(
+                    "[BatchCommand] 批量分析失败: reason=%s",
+                    execution_result.reason or "analysis_failed",
+                )
+            elif execution_result.is_skipped:
+                logger.info(
+                    "[BatchCommand] 批量分析跳过: reason=%s",
+                    execution_result.reason or "not_applicable",
+                )
+            else:
+                logger.info(
+                    "[BatchCommand] 批量分析完成，成功 %d 只",
+                    len(execution_result.results),
+                )
             
         except Exception as e:
             logger.error(f"[BatchCommand] 批量分析失败: {e}")

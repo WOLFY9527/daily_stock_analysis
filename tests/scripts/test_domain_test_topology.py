@@ -72,10 +72,10 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 8_171
+    assert result["backendTests"] == 8_236
     assert result["vitestFiles"] == 178
     assert result["playwrightSpecs"] == 68
-    assert result["playwrightProjectCases"] == 728
+    assert result["playwrightProjectCases"] == 738
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -209,10 +209,10 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     cases = playwright["projectCases"]
 
     assert len(specs) == 68
-    assert len(cases) == 728
+    assert len(cases) == 738
     assert playwright["inventory"]["projectCaseCounts"] == {
-        "chromium": 362,
-        "chromium-mobile": 362,
+        "chromium": 367,
+        "chromium-mobile": 367,
         "release-real-runtime": 4,
     }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
@@ -577,8 +577,8 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert canonical["schemaVersion"] == full["schemaVersion"]
     assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
     assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
-    assert canonical["selection"]["count"] == 8_155
-    assert release["selection"]["count"] == 8_173
+    assert canonical["selection"]["count"] == 8_218
+    assert release["selection"]["count"] == 8_236
     assert release["selection"] == full["selection"]
     assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
         node_id for item in canonical["shards"] for node_id in item["nodeIds"]

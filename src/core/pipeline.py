@@ -63,6 +63,7 @@ from src.services.single_stock_news_catalyst_extractor import (
     build_single_stock_news_catalyst_extractor_v1,
 )
 from src.enums import ReportType
+from src.contracts.analysis_execution import AnalysisExecutionResult
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from data_provider.us_index_mapping import is_us_stock_code
@@ -4719,7 +4720,7 @@ class StockAnalysisPipeline:
         dry_run: bool = False,
         send_notification: bool = True,
         merge_notification: bool = False
-    ) -> List[AnalysisResult]:
+    ) -> AnalysisExecutionResult:
         """
         运行完整的分析流程
 
@@ -4736,7 +4737,7 @@ class StockAnalysisPipeline:
             merge_notification: 是否合并推送（跳过本次推送，由 main 层合并个股+大盘后统一发送，Issue #190）
 
         Returns:
-            分析结果列表
+            Typed execution outcome including valid results and local report metadata.
         """
         start_time = time.time()
         
@@ -4747,7 +4748,7 @@ class StockAnalysisPipeline:
         
         if not stock_codes:
             logger.error("未配置自选股列表，请在 .env 文件中设置 STOCK_LIST")
-            return []
+            return AnalysisExecutionResult.skipped("no_stock_targets")
         
         logger.info(f"===== 开始分析 {len(stock_codes)} 只股票 =====")
         logger.info(f"股票列表: {', '.join(stock_codes)}")
@@ -4825,43 +4826,87 @@ class StockAnalysisPipeline:
             success_count = sum(1 for code in stock_codes if self.db.has_today_data(code))
             fail_count = len(stock_codes) - success_count
         else:
-            success_count = len(results)
+            success_count = sum(1 for result in results if getattr(result, "success", False))
             fail_count = len(stock_codes) - success_count
+
+        valid_results = [
+            result for result in results if getattr(result, "success", False)
+        ]
+        invalid_result_count = len(results) - len(valid_results)
         
         logger.info("===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
         
         # 保存报告到本地文件（无论是否推送通知都保存）
-        if results and not dry_run:
-            self._save_local_report(results, report_type)
+        report_path = None
+        if valid_results and not dry_run:
+            report_path = self._save_local_report(valid_results, report_type)
 
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
-        if results and send_notification and not dry_run:
+        if valid_results and send_notification and not dry_run:
             if single_stock_notify:
                 # 单股推送模式：只保存汇总报告，不再重复推送
                 logger.info("单股推送模式：跳过汇总推送，仅保存报告到本地")
-                self._send_notifications(results, report_type, skip_push=True)
+                self._send_notifications(valid_results, report_type, skip_push=True)
             elif merge_notification:
                 # 合并模式（Issue #190）：仅保存，不推送，由 main 层合并个股+大盘后统一发送
                 logger.info("合并推送模式：跳过本次推送，将在个股+大盘复盘后统一发送")
-                self._send_notifications(results, report_type, skip_push=True)
+                self._send_notifications(valid_results, report_type, skip_push=True)
             else:
-                self._send_notifications(results, report_type)
+                self._send_notifications(valid_results, report_type)
         
-        return results
+        if dry_run:
+            if success_count == 0:
+                return AnalysisExecutionResult.failed(
+                    "no_stock_data_available",
+                    failed_count=fail_count,
+                )
+            return AnalysisExecutionResult.success(failed_count=fail_count)
+
+        if not valid_results:
+            return AnalysisExecutionResult.failed(
+                "no_valid_stock_results",
+                failed_count=max(fail_count, invalid_result_count),
+            )
+
+        if not report_path:
+            return AnalysisExecutionResult.failed(
+                "stock_report_persistence_failed",
+                results=valid_results,
+                failed_count=max(fail_count, invalid_result_count),
+            )
+
+        if fail_count > 0 or invalid_result_count > 0:
+            return AnalysisExecutionResult.failed(
+                "stock_analysis_partial_failure",
+                results=valid_results,
+                report_path=report_path,
+                failed_count=max(fail_count, invalid_result_count),
+            )
+
+        return AnalysisExecutionResult.success(
+            results=valid_results,
+            report_path=report_path,
+            failed_count=max(fail_count, invalid_result_count),
+        )
     
     def _save_local_report(
         self,
         results: List[AnalysisResult],
         report_type: ReportType = ReportType.SIMPLE,
-    ) -> None:
-        """保存分析报告到本地文件（与通知推送解耦）"""
+    ) -> Optional[str]:
+        """保存分析报告 and return the durable path owned by the notifier."""
         try:
             report = self._generate_aggregate_report(results, report_type)
             filepath = self.notifier.save_report_to_file(report)
+            if not filepath:
+                logger.error("保存本地报告失败: persistence owner returned no path")
+                return None
             logger.info(f"研究观察仪表盘日报已保存: {filepath}")
+            return str(filepath)
         except Exception as e:
             logger.error(f"保存本地报告失败: {e}")
+            return None
 
     def _send_notifications(
         self,

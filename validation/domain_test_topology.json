@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8223,
-      "sha256": "62847366c0b79fba35accd6a47569014ccff829b31d670862bc580d09d45d894"
+      "count": 8236,
+      "sha256": "3eecae38366de0512237fe964f7bae7768415d30e9b312082ea889b255a6b7db"
     },
     "tests": [
       {
@@ -11007,6 +11007,71 @@
         "id": "tests/test_analysis_api_contract.py::ImageStockExtractorContractTestCase::test_litellm_completion_patch_target_remains_available",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_bot_batch_consumes_typed_analysis_result",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_main_maps_failed_one_shot_analysis_to_nonzero_exit",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_main_maps_market_review_without_report_to_nonzero_exit",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_pipeline_partial_stock_failure_preserves_report_but_fails_execution",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_pipeline_report_persistence_failure_is_failed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_pipeline_success_requires_a_durable_report_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_pipeline_total_stock_analysis_failure_is_failed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_combined_failure_keeps_successful_market_output",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_market_review_without_report_is_failed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_notification_failure_does_not_discard_reports",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_preserves_market_closed_skip",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduler_observes_failed_analysis_result",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_service_stays_alive_but_reports_startup_analysis_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_analysis_history.py::AnalysisHistoryTestCase::test_attach_persisted_report_enriches_canonical_payload_and_exposes_generated_at",

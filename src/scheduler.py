@@ -21,6 +21,8 @@ import threading
 from datetime import datetime
 from typing import Callable, Optional
 
+from src.contracts.analysis_execution import AnalysisExecutionResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +82,7 @@ class Scheduler:
         self.schedule_time = schedule_time
         self.shutdown_handler = GracefulShutdown()
         self._running = False
+        self._failed_task_labels: list[str] = []
         
     def set_daily_task(self, task: Callable, run_immediately: bool = True):
         """
@@ -111,10 +114,11 @@ class Scheduler:
 
         if run_immediately:
             logger.info("立即执行一次任务 [%s]...", task_label)
-            self._safe_run_task(task, task_label)
+            return self._safe_run_task(task, task_label)
+        return None
     
     def _safe_run_task(self, task: Callable, label: Optional[str] = None):
-        """安全执行任务（带异常捕获）"""
+        """Execute a task and preserve typed analysis failure outcomes."""
         if task is None:
             return
         
@@ -127,7 +131,25 @@ class Scheduler:
             )
             logger.info("=" * 50)
             
-            task()
+            result = task()
+
+            if isinstance(result, AnalysisExecutionResult):
+                if result.is_failed:
+                    task_label = label or "task"
+                    self._failed_task_labels.append(task_label)
+                    logger.error(
+                        "定时任务分析失败 [%s]: reason=%s",
+                        task_label,
+                        result.reason or "unknown",
+                    )
+                    return result
+                if result.is_skipped:
+                    logger.info(
+                        "定时任务分析跳过 [%s]: reason=%s",
+                        label or "task",
+                        result.reason or "not_applicable",
+                    )
+                    return result
             
             logger.info(
                 "定时任务执行完成 [%s] - %s",
@@ -135,8 +157,18 @@ class Scheduler:
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             )
             
+            return result
+
         except Exception as e:
+            if label:
+                self._failed_task_labels.append(label)
             logger.exception("定时任务执行失败 [%s]: %s", label or "task", e)
+            return None
+
+    @property
+    def failed_task_labels(self) -> tuple[str, ...]:
+        """Labels of tasks that failed during this scheduler instance."""
+        return tuple(self._failed_task_labels)
     
     def run(self):
         """

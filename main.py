@@ -38,6 +38,7 @@ from typing import Any, List, Optional, Tuple
 from data_provider.base import canonical_stock_code
 from src.core.pipeline import StockAnalysisPipeline
 from src.core.market_review import run_market_review
+from src.contracts.analysis_execution import AnalysisExecutionResult
 from src.webui_frontend import prepare_webui_frontend_assets, verify_webui_frontend_artifact
 from src.config import get_config, Config
 from src.logging_config import setup_logging
@@ -45,6 +46,11 @@ from src.runtime.settings import SettingSource
 
 
 logger = logging.getLogger(__name__)
+
+
+def _analysis_exit_code(result: AnalysisExecutionResult) -> int:
+    """Map the shared analysis outcome to the non-server process contract."""
+    return 1 if result.is_failed else 0
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -254,7 +260,7 @@ def run_full_analysis(
     config: Config,
     args: argparse.Namespace,
     stock_codes: Optional[List[str]] = None
-):
+) -> AnalysisExecutionResult:
     """
     执行完整的分析流程（个股 + 大盘复盘）
 
@@ -274,7 +280,7 @@ def run_full_analysis(
             logger.info(
                 "今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。"
             )
-            return
+            return AnalysisExecutionResult.skipped("markets_closed")
         if set(filtered_codes) != set(effective_codes):
             skipped = set(effective_codes) - set(filtered_codes)
             logger.info("今日休市股票已跳过: %s", skipped)
@@ -306,12 +312,13 @@ def run_full_analysis(
         )
 
         # 1. 运行个股分析
-        results = pipeline.run(
+        pipeline_result = pipeline.run(
             stock_codes=stock_codes,
             dry_run=args.dry_run,
             send_notification=not args.no_notify,
             merge_notification=merge_notification
         )
+        results = list(pipeline_result.results)
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
         analysis_delay = getattr(config, 'analysis_delay', 0)
@@ -372,8 +379,6 @@ def run_full_analysis(
                     f"评分 {r.sentiment_score} | {r.trend_prediction}"
                 )
 
-        logger.info("\n任务执行完成")
-
         # === 新增：生成飞书云文档 ===
         try:
             from src.feishu_doc import FeishuDocManager
@@ -433,8 +438,46 @@ def run_full_analysis(
         except Exception as e:
             logger.warning(f"自动回测失败（已忽略）: {e}")
 
+        stock_requested = bool(stock_codes)
+        market_requested = (
+            config.market_review_enabled
+            and not args.no_market_review
+            and effective_region != ''
+        )
+        failure_reasons = []
+        if stock_requested and pipeline_result.is_failed:
+            failure_reasons.append(pipeline_result.reason or "stock_analysis_failed")
+        if market_requested and not market_report:
+            failure_reasons.append("market_review_report_missing")
+
+        if failure_reasons:
+            result = AnalysisExecutionResult.failed(
+                ",".join(failure_reasons),
+                results=results,
+                report_path=pipeline_result.report_path,
+                market_report=market_report or None,
+                failed_count=pipeline_result.failed_count,
+            )
+            logger.error("分析执行失败: reason=%s", result.reason)
+            return result
+
+        if not stock_requested and not market_requested:
+            result = AnalysisExecutionResult.skipped("no_analysis_targets")
+            logger.info("分析执行跳过: reason=%s", result.reason)
+            return result
+
+        result = AnalysisExecutionResult.success(
+            results=results,
+            report_path=pipeline_result.report_path,
+            market_report=market_report or None,
+            failed_count=pipeline_result.failed_count,
+        )
+        logger.info("\n任务执行完成")
+        return result
+
     except Exception as e:
         logger.exception(f"分析流程执行失败: {e}")
+        return AnalysisExecutionResult.failed("analysis_exception")
 
 
 class ApiServerState(str, Enum):
@@ -776,14 +819,23 @@ def main() -> int:
             else:
                 logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
 
-            run_market_review(
+            market_report = run_market_review(
                 notifier=notifier,
                 analyzer=analyzer,
                 search_service=search_service,
                 send_notification=not args.no_notify,
                 override_region=effective_region,
             )
-            return _finish_main(api_handle, 0)
+            if market_report:
+                analysis_result = AnalysisExecutionResult.success(
+                    market_report=market_report,
+                )
+            else:
+                analysis_result = AnalysisExecutionResult.failed(
+                    "market_review_report_missing",
+                )
+                logger.error("大盘复盘执行失败: 未产生可持久化报告")
+            return _finish_main(api_handle, _analysis_exit_code(analysis_result))
 
         # 模式2: 单次运行 Scanner
         if args.scanner:
@@ -824,7 +876,7 @@ def main() -> int:
                 logger.info("分析任务启动时立即执行: %s", analysis_run_immediately)
 
                 def scheduled_analysis_task():
-                    run_full_analysis(config, args, stock_codes)
+                    return run_full_analysis(config, args, stock_codes)
 
                 scheduler.add_daily_task(
                     task=scheduled_analysis_task,
@@ -910,15 +962,30 @@ def main() -> int:
                     )
 
             scheduler.run()
-            return _finish_main(api_handle, 0)
+            scheduler_failed = bool(getattr(scheduler, "failed_task_labels", ()))
+            if scheduler_failed:
+                logger.error(
+                    "调度器停止时存在失败任务: %s",
+                    ",".join(scheduler.failed_task_labels),
+                )
+            return _finish_main(api_handle, 1 if scheduler_failed else 0)
 
         # 模式4: 正常单次运行
+        analysis_result = None
         if config.run_immediately:
-            run_full_analysis(config, args, stock_codes)
+            analysis_result = run_full_analysis(config, args, stock_codes)
         else:
             logger.info("配置为不立即运行分析 (RUN_IMMEDIATELY=false)")
 
-        logger.info("\n程序执行完成")
+        if analysis_result is not None and analysis_result.is_failed:
+            logger.error(
+                "分析执行失败，服务生命周期与分析结果独立: reason=%s",
+                analysis_result.reason or "unknown",
+            )
+        elif analysis_result is not None and analysis_result.is_skipped:
+            logger.info("分析执行跳过: reason=%s", analysis_result.reason or "not_applicable")
+        else:
+            logger.info("\n程序执行完成")
 
         # 如果启用了服务且是非定时任务模式，保持程序运行
         keep_running = start_serve and not (analysis_schedule_enabled or scanner_schedule_enabled)
@@ -930,7 +997,10 @@ def main() -> int:
             except KeyboardInterrupt:
                 pass
 
-        return _finish_main(api_handle, 0)
+        return _finish_main(
+            api_handle,
+            _analysis_exit_code(analysis_result) if analysis_result is not None else 0,
+        )
 
     except KeyboardInterrupt:
         logger.info("\n用户中断，程序退出")
