@@ -151,16 +151,17 @@ must be rejected by the production consumer.
 
 After this consumer is on the public default branch:
 
-1. Configure `release-approval` with genuine independent required reviewers.
+1. Configure `release-approval` as a main-only environment without required
+   reviewers or `prevent_self_review`.
 2. Add `OPERATOR_EVIDENCE_READ_TOKEN` as an environment secret using a
    single-repository, `Actions: read` credential for the private producer.
 3. Produce a real production artifact from the pinned private producer commit
    for the exact annotated-tag candidate; do not use the synthetic smoke run.
 4. Record the explicit successful producer run ID and exact production artifact
-   ID, then dispatch the public release workflow for the annotated tag with
-   those two IDs.
+   ID, then have the repository owner explicitly dispatch the public release
+   workflow from `main` for the annotated tag with those two IDs.
 5. Verify the consumer job's first attempt, the bounded gate artifact, all
-   twelve release gates, independent environment approval, final candidate and
+   twelve release gates, explicit maintainer authorization, final candidate and
    tree identity, and remote promotion identity before any release decision.
 
 No real production handoff is qualified yet. The public candidate contract
@@ -169,7 +170,7 @@ absence or redaction posture; nested values remain subject to recursive strict
 sanitization. Safe labels remain distinct from endpoint URLs. This reconciled
 local sanitizer/validator contract still requires a fresh candidate-bound real
 producer artifact, credentialed consumer handoff, all release gates, and
-independent approval before real release qualification.
+explicit maintainer authorization before real release qualification.
 
 ## Report Rendering
 

@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "b453184daffcdf2390ae5f64571c9316729baa773000982ef6087b6fa1e429fa",
+    "manualSha256": "5ea4327d9791003c3987d81be765589d9bb1679e8ac755fce114c474311c4916",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -435,25 +435,25 @@
       "title": "Historical OHLCV Seed Operator Runbook"
     },
     {
-      "bytes": 8323,
+      "bytes": 8424,
       "editable": true,
       "id": "operator-evidence",
       "kind": "canonical",
-      "lineCount": 183,
+      "lineCount": 184,
       "path": "docs/operations/operator-evidence.md",
-      "sha256": "d6e6007406893a003981ec604b4f402cee3145f2b0a5d2fd220af30dcb1e3b74",
+      "sha256": "c10ab94974b17f649ad7b67d3c3f7a3f53a98a5adc9e1cad32b9d6ebc3bc34f9",
       "status": "active",
       "summary": "Sanitized offline operator-evidence runbook",
       "title": "Operator Evidence"
     },
     {
-      "bytes": 10812,
+      "bytes": 11428,
       "editable": true,
       "id": "release-readiness",
       "kind": "canonical",
-      "lineCount": 167,
+      "lineCount": 178,
       "path": "docs/operations/release.md",
-      "sha256": "1012f18fc67527887eaff89fb397b2715eabacbd283e69add7009a75dabd8d95",
+      "sha256": "6edffee4d683ac65e2a80a81b0a174dc36a868a44b54400706c6ffd54c75cea2",
       "status": "active",
       "summary": "Production-readiness and release qualification authority",
       "title": "Release And Production Readiness"

@@ -24,7 +24,29 @@ permissions:
   contents: read
 
 jobs:
+  release-authorization:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify explicit solo-maintainer release authorization
+        env:
+          RELEASE_ACTOR: ${{ github.actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          RELEASE_REF: ${{ github.ref }}
+          REQUIRED_RELEASE_REF: refs/heads/main
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_ACTOR}" != "${REPOSITORY_OWNER}" ]]; then
+            echo "[NO-GO] release dispatch actor is not the repository owner" >&2
+            exit 1
+          fi
+          if [[ "${RELEASE_REF}" != "${REQUIRED_RELEASE_REF}" ]]; then
+            echo "[NO-GO] release dispatch must target main" >&2
+            exit 1
+          fi
+
   identity:
+    needs: release-authorization
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.identity.outputs.sha }}
@@ -249,8 +271,8 @@ jobs:
             --runner-temp "${RUNNER_TEMP}"
 
   qualification:
-    if: always()
-    needs: [identity, build-candidate, operator-evidence-consumer]
+    if: always() && needs.release-authorization.result == 'success'
+    needs: [release-authorization, identity, build-candidate, operator-evidence-consumer]
     runs-on: ubuntu-latest
     environment: release-approval
     permissions:

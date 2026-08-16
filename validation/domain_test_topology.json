@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8218,
-      "sha256": "07415cbf971abd65562e3b82fc6a7accd028af2d50a981429af6f09c40d357c2"
+      "count": 8223,
+      "sha256": "62847366c0b79fba35accd6a47569014ccff829b31d670862bc580d09d45d894"
     },
     "tests": [
       {
@@ -33074,6 +33074,26 @@
         "baseline": false
       },
       {
+        "id": "tests/test_qualified_release_integration.py::test_release_authorization_accepts_only_owner_dispatch_from_main[WOLFY9527-WOLFY9527-refs/heads/main-0]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_authorization_accepts_only_owner_dispatch_from_main[WOLFY9527-WOLFY9527-refs/heads/release-1]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_authorization_accepts_only_owner_dispatch_from_main[other-maintainer-WOLFY9527-refs/heads/main-1]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_authorization_precedes_candidate_and_qualification_jobs",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_qualified_release_integration.py::test_release_runtime_evidence_requires_source_cwd_environment_and_asset_identity",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -33875,6 +33895,11 @@
       },
       {
         "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[pythonLockContentHash]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_green_operator_evidence_gate_alone_cannot_authorize_promotion",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

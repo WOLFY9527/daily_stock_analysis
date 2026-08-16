@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -497,6 +498,59 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
             assert runs_on in ALLOWED_GITHUB_HOSTED_RUNNERS, (
                 f"{workflow_path.name}:{job_name} must not expose a public-repository self-hosted runner"
             )
+
+
+@pytest.mark.parametrize(
+    ("actor", "owner", "ref", "expected_returncode"),
+    [
+        ("WOLFY9527", "WOLFY9527", "refs/heads/main", 0),
+        ("other-maintainer", "WOLFY9527", "refs/heads/main", 1),
+        ("WOLFY9527", "WOLFY9527", "refs/heads/release", 1),
+    ],
+)
+def test_release_authorization_accepts_only_owner_dispatch_from_main(
+    actor: str, owner: str, ref: str, expected_returncode: int
+) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    authorization = workflow["jobs"]["release-authorization"]
+    assert authorization["permissions"] == {}
+    step = authorization["steps"][0]
+    assert step["env"] == {
+        "RELEASE_ACTOR": "${{ github.actor }}",
+        "REPOSITORY_OWNER": "${{ github.repository_owner }}",
+        "RELEASE_REF": "${{ github.ref }}",
+        "REQUIRED_RELEASE_REF": "refs/heads/main",
+    }
+
+    test_script = "\n".join(
+        (
+            f"export RELEASE_ACTOR={shlex.quote(actor)}",
+            f"export REPOSITORY_OWNER={shlex.quote(owner)}",
+            f"export RELEASE_REF={shlex.quote(ref)}",
+            "export REQUIRED_RELEASE_REF=refs/heads/main",
+            step["run"],
+        )
+    )
+    result = subprocess.run(
+        ["bash", "-e", "-u", "-o", "pipefail", "-c", test_script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_returncode
+
+
+def test_release_authorization_precedes_candidate_and_qualification_jobs() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    assert jobs["identity"]["needs"] == "release-authorization"
+    assert jobs["qualification"]["needs"] == [
+        "release-authorization",
+        "identity",
+        "build-candidate",
+        "operator-evidence-consumer",
+    ]
+    assert "needs.release-authorization.result == 'success'" in jobs["qualification"]["if"]
 
 
 def test_playwright_browser_install_survives_managed_run_cleanup(tmp_path: Path) -> None:

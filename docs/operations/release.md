@@ -68,8 +68,8 @@ authenticated consumer job and successfully imported canonical gate record can
 replace that file before the authoritative twelve-gate aggregate. Missing
 credential, missing or synthetic artifact, provenance or candidate mismatch,
 or candidate-validator rejection therefore remains NO-GO. This consumer gate
-does not replace the independent `release-approval` reviewer boundary, and a
-producer success cannot make the other release gates pass.
+does not replace the explicit solo-maintainer release authorization boundary,
+and a producer success cannot make the other release gates pass.
 
 Promotion consumes the qualified manifest and copies the existing registry
 digest. It does not rebuild or resolve dependencies. Electron Desktop remains
@@ -139,15 +139,26 @@ target-environment artifacts, known residual risks, rollback identity, and
 remote digest verification. Task acceptance, artifact creation, or individual
 green checks do not complete release qualification.
 
-The `release-approval` GitHub environment must exist with required reviewers
-before release qualification can claim a separate manual approval boundary.
-Naming the environment in the workflow does not create reviewer protection.
-Missing environment protection remains an external NO-GO condition.
+The accountable maintainer authorizes a release by explicitly dispatching the
+workflow from `main` as the repository owner. The authorization check runs
+before candidate identity and qualification; an unauthorized actor or a
+non-main dispatch is NO-GO. Automated qualification is not release
+authorization, and a green producer or consumer gate never authorizes
+promotion by itself.
+
+The `release-approval` GitHub environment remains a main-only,
+release-sensitive execution boundary and the environment-secret boundary for
+`OPERATOR_EVIDENCE_READ_TOKEN`. It does not require GitHub Environment required
+reviewers or `prevent_self_review`; a missing second human is not a NO-GO
+condition, and `can_admins_bypass=true` is not a blocker when no reviewer rule
+exists. The environment's main-only policy and secret scope remain external
+configuration requirements; naming the environment alone does not create that
+boundary.
 
 That environment also supplies the private producer read credential described
 in [`docs/operations/operator-evidence.md`](operator-evidence.md). Credential
-availability authenticates transport only; it is not reviewer approval,
-operator-evidence acceptance, or release approval.
+availability authenticates transport only; it is not operator-evidence
+acceptance or release authorization.
 
 ### Highest-Risk Blockers
 

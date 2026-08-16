@@ -445,6 +445,37 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         assert "Traceback" not in record.stderr
 
 
+def test_green_operator_evidence_gate_alone_cannot_authorize_promotion(tmp_path: Path) -> None:
+    manifest, _artifact_dir, candidate = _build_candidate(tmp_path)
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    operator_evidence = {
+        "schemaVersion": "wolfystock_release_gate_evidence_v2",
+        "gateId": "operator-evidence",
+        "status": "PASS",
+        "candidateSha": candidate["commitSha"],
+        "candidateDigest": candidate["candidateDigest"],
+        "environmentFingerprint": candidate["environment"]["fingerprint"],
+        "pythonLockContentHash": candidate["pythonLock"]["contentHash"],
+        "imageIndexDigest": candidate["images"]["indexDigest"],
+        "imagePlatformDigests": {
+            platform: details["digest"]
+            for platform, details in candidate["images"]["platforms"].items()
+        },
+        "details": _gate_details("operator-evidence", candidate),
+    }
+    (evidence_dir / "operator-evidence.json").write_text(json.dumps(operator_evidence), encoding="utf-8")
+
+    qualification = tmp_path / "qualification.json"
+    result = _qualify(manifest, evidence_dir, qualification)
+
+    assert result.returncode == 1
+    summary = json.loads(qualification.read_text(encoding="utf-8"))
+    assert summary["finalStatus"] == "NO-GO"
+    assert summary["releaseApproved"] is False
+    assert {gate["status"] for gate in summary["gates"] if gate["gateId"] != "operator-evidence"} == {"MISSING"}
+
+
 @pytest.mark.parametrize("gate_id", REQUIRED_GATES)
 def test_each_required_gate_failure_blocks_qualification(tmp_path: Path, gate_id: str) -> None:
     manifest, _artifact_dir, candidate = _build_candidate(tmp_path)

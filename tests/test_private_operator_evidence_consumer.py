@@ -481,7 +481,12 @@ def test_release_workflow_uses_least_privilege_bounded_fail_closed_handoff() -> 
     assert job["permissions"] == {"actions": "read", "contents": "read"}
     assert job["environment"] == "release-approval"
     assert job["needs"] == ["identity", "build-candidate"]
-    assert jobs["qualification"]["needs"] == ["identity", "build-candidate", "operator-evidence-consumer"]
+    assert jobs["qualification"]["needs"] == [
+        "release-authorization",
+        "identity",
+        "build-candidate",
+        "operator-evidence-consumer",
+    ]
     assert jobs["promotion-ready"]["needs"] == ["identity", "build-candidate", "qualification"]
 
     steps = job["steps"]
