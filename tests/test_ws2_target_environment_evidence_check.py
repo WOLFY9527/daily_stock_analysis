@@ -130,7 +130,7 @@ def _artifact(**overrides: object) -> dict[str, Any]:
             "leaseExpiryRecovery": "A second worker reclaimed the task after lease expiry.",
             "staleWorkerWriteRejection": "The stale worker could not write terminal state after reclaim.",
             "ownerIsolation": "Cross-owner status and polling reads returned hidden not-found responses.",
-            "sanitizedFailureOutput": "Failure output contained only safe reason codes and no traceback text.",
+            "sanitizedFailureOutput": "Failure output contained only safe reason codes.",
             "sseLimitation": "Process-local SSE limitation remained recorded; durable polling was the baseline.",
             "reviewNotes": "Sanitized staging/API A-B evidence accepted for manual review only.",
         },

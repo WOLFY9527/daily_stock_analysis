@@ -15,6 +15,8 @@ from scripts.provider_operator_evidence_check import validate_provider_operator_
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "evidence_artifact_sanitize.py"
 REDACTED = "<redacted>"
+SANITIZED_COMPLETE = REPO_ROOT / "tests" / "fixtures" / "operator_evidence" / "sanitized_complete"
+UNSAFE_REJECTED = REPO_ROOT / "tests" / "fixtures" / "operator_evidence" / "unsafe_rejected"
 
 
 def _write_json(tmp_path: Path, payload: object) -> Path:
@@ -51,28 +53,53 @@ def _tmp_residue(directory: Path) -> list[Path]:
     return sorted(directory.glob(".*.tmp"))
 
 
+def _artifact_spec_filenames() -> frozenset[str]:
+    scripts_path = str(REPO_ROOT / "scripts")
+    sys.path.insert(0, scripts_path)
+    try:
+        from operator_evidence_bundle_check import ARTIFACT_SPECS
+    finally:
+        sys.path.remove(scripts_path)
+    return frozenset(spec.filename for spec in ARTIFACT_SPECS)
+
+
 def test_secret_markers_are_redacted_and_not_emitted(tmp_path: Path) -> None:
     raw_secret = "api_key=operator-secret-value-should-not-leak"
+    private_key = (
+        "-----BEGIN "
+        "PRIVATE KEY-----\nfixture-private-key-value\n-----END "
+        "PRIVATE KEY-----"
+    )
 
-    result, output = _sanitize(tmp_path, {"providerName": "tradier", "notes": raw_secret})
+    result, output = _sanitize(
+        tmp_path,
+        {"providerName": "tradier", "notes": raw_secret, "keyMaterial": private_key},
+    )
 
     assert result.returncode == 0
     sanitized = json.loads(output.read_text(encoding="utf-8"))
     assert sanitized["notes"] == REDACTED
+    assert sanitized["keyMaterial"] == REDACTED
     assert raw_secret not in _combined(result, output)
+    assert private_key not in _combined(result, output)
     summary = json.loads(result.stdout)
+    assert summary["summary"]["countsByCategory"]["private_key"] == 1
     assert summary["summary"]["countsByCategory"]["secret_marker"] == 1
 
 
 def test_raw_request_and_response_body_markers_are_redacted(tmp_path: Path) -> None:
     raw_request = "raw-request-body-value-should-not-leak"
     raw_response = "raw-response-body-value-should-not-leak"
+    provider_payload = "provider-payload-value-should-not-leak"
+    debug_trace = "debug-trace-value-should-not-leak"
 
     result, output = _sanitize(
         tmp_path,
         {
             "raw_request_body": {"body": raw_request},
             "response": f"raw response payload {raw_response}",
+            "providerPayload": {"body": provider_payload},
+            "debugTrace": debug_trace,
         },
     )
 
@@ -80,37 +107,52 @@ def test_raw_request_and_response_body_markers_are_redacted(tmp_path: Path) -> N
     sanitized = json.loads(output.read_text(encoding="utf-8"))
     assert sanitized["raw_request_body"]["body"] == REDACTED
     assert sanitized["response"] == REDACTED
+    assert sanitized["providerPayload"]["body"] == REDACTED
+    assert sanitized["debugTrace"] == REDACTED
     combined = _combined(result, output)
     assert raw_request not in combined
     assert raw_response not in combined
+    assert provider_payload not in combined
+    assert debug_trace not in combined
     assert "raw_request_body" not in result.stdout
 
 
 def test_path_traversal_and_credential_urls_are_redacted(tmp_path: Path) -> None:
     traversal = "../operator-secrets.json"
+    absolute_path = "/" + "Users/private-operator/evidence.json"
     credential_url = "https://user:pass@example.invalid/internal"
 
-    result, output = _sanitize(tmp_path, {"fileLabel": traversal, "callback": credential_url})
+    result, output = _sanitize(
+        tmp_path,
+        {"fileLabel": traversal, "localPath": absolute_path, "callback": credential_url},
+    )
 
     assert result.returncode == 0
     sanitized = json.loads(output.read_text(encoding="utf-8"))
     assert sanitized["fileLabel"] == REDACTED
+    assert sanitized["localPath"] == REDACTED
     assert sanitized["callback"] == REDACTED
     combined = _combined(result, output)
     assert traversal not in combined
+    assert absolute_path not in combined
     assert credential_url not in combined
 
 
 def test_approval_wording_is_redacted_without_emitting_raw_phrase(tmp_path: Path) -> None:
     wording = "public " + "launch " + "GO" + " for this artifact"
 
-    result, output = _sanitize(tmp_path, {"operatorConclusion": wording})
+    result, output = _sanitize(
+        tmp_path,
+        {"operatorConclusion": wording, "releaseApproved": True},
+    )
 
     assert result.returncode == 0
-    assert json.loads(output.read_text(encoding="utf-8"))["operatorConclusion"] == REDACTED
+    sanitized = json.loads(output.read_text(encoding="utf-8"))
+    assert sanitized["operatorConclusion"] == REDACTED
+    assert sanitized["releaseApproved"] == REDACTED
     combined = _combined(result, output).lower()
     assert wording.lower() not in combined
-    assert json.loads(result.stdout)["summary"]["countsByCategory"]["approval_wording"] == 1
+    assert json.loads(result.stdout)["summary"]["countsByCategory"]["approval_wording"] == 2
 
 
 def test_scan_mode_exits_non_zero_with_fail_on_findings_without_leaks(tmp_path: Path) -> None:
@@ -148,6 +190,114 @@ def test_sanitized_output_can_reach_review_state_through_provider_validator(tmp_
     validator_summary = validate_provider_operator_evidence(json.loads(output.read_text(encoding="utf-8")))
     assert validator_summary["status"] == "pass"
     assert validator_summary["artifact"]["outcome"] == "needs-review"
+
+
+def test_structural_absence_and_redaction_assertions_are_value_sensitive() -> None:
+    safe_payload = {
+        "credentialBearingUrlsIncluded": False,
+        "credentialsIncluded": False,
+        "debugPayloadsIncluded": False,
+        "productionSecretsRead": False,
+        "providerPayloadIncluded": False,
+        "rawArtifactBodiesIncluded": False,
+        "rawLogsIncluded": False,
+        "rawRequestDataIncluded": False,
+        "stackTraceIncluded": False,
+        "credentialPresenceOnly": True,
+        "credentialValuesRedacted": True,
+    }
+
+    assert sanitizer_script._collect_findings(safe_payload) == []
+    assert sanitizer_script._sanitize_value(safe_payload) == safe_payload
+
+    unsafe_payload = {
+        key: not value
+        for key, value in safe_payload.items()
+    }
+    findings = sanitizer_script._collect_findings(unsafe_payload)
+
+    assert len(findings) == len(unsafe_payload)
+    assert {finding.category for finding in findings} == {
+        "credential_url",
+        "raw_body_or_log",
+        "secret_marker",
+    }
+    assert set(sanitizer_script._sanitize_value(unsafe_payload).values()) == {REDACTED}
+
+
+def test_structural_presence_metadata_still_scans_nested_sensitive_values() -> None:
+    safe_payload = {
+        "credentialPresence": "redacted",
+        "secretPresenceSummary": "redacted only",
+        "providerCredentialPresenceStates": {
+            "llmProvider": "configured",
+            "marketDataProvider": "missing",
+            "optionsLiveProvider": "redacted only",
+        },
+    }
+
+    assert sanitizer_script._collect_findings(safe_payload) == []
+    assert sanitizer_script._sanitize_value(safe_payload) == safe_payload
+
+    unsafe_value = "token=fixture-structural-secret-must-not-leak"
+    unsafe_payload = {
+        "providerCredentialPresenceStates": {
+            "llmProvider": unsafe_value,
+        }
+    }
+    findings = sanitizer_script._collect_findings(unsafe_payload)
+
+    assert {finding.category for finding in findings} == {"secret_marker"}
+    sanitized = sanitizer_script._sanitize_value(unsafe_payload)
+    assert sanitized["providerCredentialPresenceStates"]["llmProvider"] == REDACTED
+    assert unsafe_value not in json.dumps(sanitized)
+
+
+def test_endpoint_label_preserves_safe_label_and_rejects_actual_endpoint() -> None:
+    safe_payload = {"baseUrlLabel": "staging-ingress-primary"}
+    unsafe_payload = {"baseUrlLabel": "https://staging.example.invalid"}
+
+    assert sanitizer_script._collect_findings(safe_payload) == []
+    findings = sanitizer_script._collect_findings(unsafe_payload)
+
+    assert {finding.category for finding in findings} == {"endpoint_url"}
+    assert sanitizer_script._sanitize_value(unsafe_payload)["baseUrlLabel"] == REDACTED
+
+
+def test_runtime_artifact_specs_are_strict_sanitizer_compatible() -> None:
+    expected_names = _artifact_spec_filenames()
+
+    assert {path.name for path in SANITIZED_COMPLETE.glob("*.json")} == expected_names
+    for name in sorted(expected_names):
+        result = _run(
+            "scan",
+            "--input",
+            SANITIZED_COMPLETE / name,
+            "--fail-on-findings",
+        )
+        assert result.returncode == 0, f"{name}: {result.stdout}{result.stderr}"
+        assert json.loads(result.stdout)["summary"]["totalFindings"] == 0
+
+
+def test_unsafe_fixture_pack_preserves_strict_sanitizer_rejection() -> None:
+    expected_names = _artifact_spec_filenames()
+    rejected: dict[str, set[str]] = {}
+
+    assert {path.name for path in UNSAFE_REJECTED.glob("*.json")} == expected_names
+    for name in sorted(expected_names):
+        result = _run(
+            "scan",
+            "--input",
+            UNSAFE_REJECTED / name,
+            "--fail-on-findings",
+        )
+        report = json.loads(result.stdout)
+        if result.returncode != 0:
+            rejected[name] = set(report["summary"]["countsByCategory"])
+
+    assert rejected
+    assert "raw_body_or_log" in set().union(*rejected.values())
+    assert "secret_marker" in set().union(*rejected.values())
 
 
 def test_broker_order_artifact_ids_payloads_urls_and_tokens_are_redacted(tmp_path: Path) -> None:

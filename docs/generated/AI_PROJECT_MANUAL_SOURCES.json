@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "4103f323cdd51efa31fc15df3dfd404caef3bdf0927d63f2ff6e7174fa73c224",
+    "manualSha256": "b453184daffcdf2390ae5f64571c9316729baa773000982ef6087b6fa1e429fa",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -435,13 +435,13 @@
       "title": "Historical OHLCV Seed Operator Runbook"
     },
     {
-      "bytes": 8120,
+      "bytes": 8323,
       "editable": true,
       "id": "operator-evidence",
       "kind": "canonical",
-      "lineCount": 181,
+      "lineCount": 183,
       "path": "docs/operations/operator-evidence.md",
-      "sha256": "cefa273ccffc6846a2c342c181bab5136297035071af6a80bd38fbb4e038352b",
+      "sha256": "d6e6007406893a003981ec604b4f402cee3145f2b0a5d2fd220af30dcb1e3b74",
       "status": "active",
       "summary": "Sanitized offline operator-evidence runbook",
       "title": "Operator Evidence"

@@ -163,11 +163,13 @@ After this consumer is on the public default branch:
    twelve release gates, independent environment approval, final candidate and
    tree identity, and remote promotion identity before any release decision.
 
-No real production handoff is qualified yet. Current public evidence templates
-also expose a strict sanitizer-versus-validator conflict for several canonical
-fields, so T708 must repair or otherwise qualify that producer/candidate
-contract and complete a real credentialed handoff before real release
-qualification.
+No real production handoff is qualified yet. The public candidate contract
+permits exact structural safety metadata only when its value proves the stated
+absence or redaction posture; nested values remain subject to recursive strict
+sanitization. Safe labels remain distinct from endpoint URLs. This reconciled
+local sanitizer/validator contract still requires a fresh candidate-bound real
+producer artifact, credentialed consumer handoff, all release gates, and
+independent approval before real release qualification.
 
 ## Report Rendering
 

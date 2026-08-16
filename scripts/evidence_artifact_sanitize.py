@@ -57,16 +57,32 @@ SECRET_KEY_MARKERS = (
     "token",
     "webhook",
 )
-SAFE_STRUCTURAL_KEYS = {
-    "credentialbearingurlsincluded",
+SAFE_FALSE_STRUCTURAL_RULES = {
+    "credentialbearingurlsincluded": ("credential_url", "credential_url_value"),
+    "credentialsincluded": ("secret_marker", "secret_key_marker"),
+    "debugpayloadsincluded": ("raw_body_or_log", "raw_or_debug_key"),
+    "productionsecretsread": ("secret_marker", "secret_key_marker"),
+    "providerpayloadincluded": ("raw_body_or_log", "raw_or_debug_key"),
+    "rawartifactbodiesincluded": ("raw_body_or_log", "raw_or_debug_key"),
+    "rawlogsincluded": ("raw_body_or_log", "raw_or_debug_key"),
+    "rawrequestdataincluded": ("raw_body_or_log", "raw_or_debug_key"),
+    "stacktraceincluded": ("raw_body_or_log", "raw_or_debug_key"),
+}
+SAFE_TRUE_STRUCTURAL_RULES = {
+    "credentialpresenceonly": ("secret_marker", "secret_key_marker"),
+    "credentialvaluesredacted": ("secret_marker", "secret_key_marker"),
+}
+SAFE_RECURSIVE_STRUCTURAL_KEYS = {
+    "baseurllabel",
     "credentialpresence",
-    "credentialpresenceonly",
-    "credentialvaluesredacted",
-    "productionsecretsread",
-    "rawartifactbodiesincluded",
-    "rawlogsincluded",
+    "providercredentialpresencestates",
     "secretpresencesummary",
 }
+SAFE_STRUCTURAL_KEYS = (
+    set(SAFE_FALSE_STRUCTURAL_RULES)
+    | set(SAFE_TRUE_STRUCTURAL_RULES)
+    | SAFE_RECURSIVE_STRUCTURAL_KEYS
+)
 RAW_KEY_MARKERS = (
     "broker_order_payload",
     "brokerorderpayload",
@@ -275,6 +291,13 @@ def _key_matches(key: Any) -> list[UnsafeMatch]:
 
 
 def _entry_matches(key: Any, child: Any) -> list[UnsafeMatch]:
+    compacted = compact_key(key)
+    false_rule = SAFE_FALSE_STRUCTURAL_RULES.get(compacted)
+    if false_rule and child is not False:
+        return [UnsafeMatch(*false_rule)]
+    true_rule = SAFE_TRUE_STRUCTURAL_RULES.get(compacted)
+    if true_rule and child is not True:
+        return [UnsafeMatch(*true_rule)]
     if child is True and compact_key(key) in APPROVAL_BOOLEAN_KEYS:
         return [UnsafeMatch("approval_wording", "approval_boolean_forbidden")]
     return []

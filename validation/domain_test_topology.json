@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8213,
-      "sha256": "90228aaffdbc55a7d7d94161b94c7850ad950ee3da9198aeae26fbb0efea586a"
+      "count": 8218,
+      "sha256": "07415cbf971abd65562e3b82fc6a7accd028af2d50a981429af6f09c40d357c2"
     },
     "tests": [
       {
@@ -15889,6 +15889,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_evidence_artifact_sanitize.py::test_endpoint_label_preserves_safe_label_and_rejects_actual_endpoint",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_evidence_artifact_sanitize.py::test_explicit_output_preserves_source_and_existing_schema",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -15949,6 +15954,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_evidence_artifact_sanitize.py::test_runtime_artifact_specs_are_strict_sanitizer_compatible",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_evidence_artifact_sanitize.py::test_sanitized_output_can_reach_review_state_through_provider_validator",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -15962,6 +15972,21 @@
         "id": "tests/test_evidence_artifact_sanitize.py::test_secret_markers_are_redacted_and_not_emitted",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_evidence_artifact_sanitize.py::test_structural_absence_and_redaction_assertions_are_value_sensitive",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_evidence_artifact_sanitize.py::test_structural_presence_metadata_still_scans_nested_sensitive_values",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_evidence_artifact_sanitize.py::test_unsafe_fixture_pack_preserves_strict_sanitizer_rejection",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_evidence_artifact_sanitize.py::test_write_failure_is_distinct_and_leaves_existing_destination",

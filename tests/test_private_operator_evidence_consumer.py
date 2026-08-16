@@ -421,16 +421,15 @@ def test_validate_handoff_preserves_strict_sanitizer_and_candidate_validator_own
     (work_root / "handoff.zip").write_bytes(archive)
     (work_root / "transport.json").write_text(json.dumps(_transport(archive)), encoding="utf-8")
 
-    with pytest.raises(consumer.ConsumerViolation, match="candidate_sanitizer_rejected"):
-        consumer.validate_handoff(
-            candidate_root=REPO_ROOT,
-            candidate_sha=CANDIDATE_SHA,
-            candidate_tree=CANDIDATE_TREE,
-            run_id=RUN_ID,
-            artifact_id=ARTIFACT_ID,
-            work_root=work_root,
-            runner_temp=tmp_path,
-        )
+    consumer.validate_handoff(
+        candidate_root=REPO_ROOT,
+        candidate_sha=CANDIDATE_SHA,
+        candidate_tree=CANDIDATE_TREE,
+        run_id=RUN_ID,
+        artifact_id=ARTIFACT_ID,
+        work_root=work_root,
+        runner_temp=tmp_path,
+    )
 
     commands: list[list[str]] = []
     delegated_validation = tmp_path / "delegated-validation"
