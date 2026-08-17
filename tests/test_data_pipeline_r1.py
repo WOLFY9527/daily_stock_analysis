@@ -340,5 +340,11 @@ def test_analysis_provider_plan_uses_canonical_symbol_identity():
     constrained_hk = build_analysis_provider_plan("00700", market="hk", categories=[])
     assert (constrained_hk.symbol, constrained_hk.market) == ("HK00700", "hk")
 
+    sh_index = build_analysis_provider_plan("000001.SH", categories=[])
+    sz_stock = build_analysis_provider_plan("000001.SZ", categories=[])
+    assert sh_index.identity_key != sz_stock.identity_key
+    assert (sh_index.venue, sh_index.asset_type) == ("XSHG", "index")
+    assert (sz_stock.venue, sz_stock.asset_type) == ("XSHE", "stock")
+
     with pytest.raises(ValueError, match="unsupported"):
         build_analysis_provider_plan("BAD$", categories=[])

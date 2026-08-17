@@ -9,13 +9,15 @@ from typing import Literal
 
 
 SymbolMarket = Literal["cn", "hk", "us"]
+SymbolAssetType = Literal["stock", "index"]
 
 SUPPORTED_SYMBOL_MARKETS = frozenset({"cn", "hk", "us"})
 
-_CN_PREFIX_RE = re.compile(r"^(?:SH|SZ|SS|BJ)(\d{6})$")
-_CN_SUFFIX_RE = re.compile(r"^(\d{6})\.(?:SH|SZ|SS|BJ)$")
+_CN_PREFIX_RE = re.compile(r"^(SH|SZ|SS|BJ)(\d{6})$")
+_CN_SUFFIX_RE = re.compile(r"^(\d{6})\.(SH|SZ|SS|BJ)$")
 _HK_PREFIX_RE = re.compile(r"^HK(\d{1,5})$")
 _HK_SUFFIX_RE = re.compile(r"^(\d{1,5})\.HK$")
+_HK_INDEX_RE = re.compile(r"^(HSI|HSTECH)(?:\.HK)?$")
 _US_STOCK_PATTERN = re.compile(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$")
 _SYMBOL_TEXT_TOKEN_RE = re.compile(r"[A-Za-z0-9.^]+")
 _US_INDEX_CODES = frozenset(
@@ -37,6 +39,32 @@ _US_INDEX_CODES = frozenset(
         "^RUT",
     }
 )
+_HK_INDEX_CODES = frozenset({"HSI", "HSTECH"})
+_CN_INDEX_VENUES = {
+    "000001": "XSHG",
+    "000016": "XSHG",
+    "000300": "XSHG",
+    "000688": "XSHG",
+    "000905": "XSHG",
+    "000852": "XSHG",
+    "399001": "XSHE",
+    "399006": "XSHE",
+    "899050": "XBSE",
+}
+_CN_INDEX_ONLY_CODES = frozenset(
+    {
+        "000016",
+        "000300",
+        "000688",
+        "000852",
+        "000905",
+        "399001",
+        "399006",
+        "899050",
+    }
+)
+_CN_VENUE_BY_TOKEN = {"SH": "XSHG", "SS": "XSHG", "SZ": "XSHE", "BJ": "XBSE"}
+UNRESOLVED_SYMBOL_VENUE = "UNRESOLVED"
 
 
 @dataclass(frozen=True)
@@ -47,16 +75,42 @@ class CanonicalSymbol:
     symbol: str
     market: SymbolMarket | None
     ambiguous: bool = False
+    venue: str | None = None
+    asset_type: SymbolAssetType | None = None
+
+    @property
+    def transport_symbol(self) -> str:
+        """Return a stable string spelling that retains explicit CN venue identity."""
+        if self.market == "cn" and self.venue and (
+            _CN_PREFIX_RE.fullmatch(self.raw_symbol.upper())
+            or _CN_SUFFIX_RE.fullmatch(self.raw_symbol.upper())
+        ):
+            suffix = {
+                "XSHG": "SH",
+                "XSHE": "SZ",
+                "XBSE": "BJ",
+            }.get(self.venue)
+            if suffix:
+                return f"{self.symbol}.{suffix}"
+        return self.symbol
+
+    @property
+    def identity_key(self) -> tuple[str, str, str, str] | None:
+        """Return the complete canonical identity key, when parsing resolved one."""
+        if self.ambiguous or not self.market or not self.venue or not self.asset_type:
+            return None
+        return (self.market, self.venue, self.symbol, self.asset_type)
 
 
 def is_us_index_code(code: str | None) -> bool:
     """Return True when a symbol matches the supported US index vocabulary."""
-    return (code or "").strip().upper() in _US_INDEX_CODES
+    normalized = _canonical_us_symbol((code or "").strip().upper())
+    return normalized in _US_INDEX_CODES
 
 
 def is_us_stock_code(code: str | None) -> bool:
     """Return True when a symbol matches the supported US stock vocabulary."""
-    normalized = (code or "").strip().upper()
+    normalized = _canonical_us_symbol((code or "").strip().upper())
     return not is_us_index_code(normalized) and bool(_US_STOCK_PATTERN.fullmatch(normalized))
 
 
@@ -70,6 +124,8 @@ def parse_canonical_symbol(
     value: str | None,
     *,
     market: SymbolMarket | None = None,
+    venue: str | None = None,
+    asset_type: SymbolAssetType | None = None,
 ) -> CanonicalSymbol | None:
     """Parse one supported CN, HK, or US symbol without guessing a market.
 
@@ -85,27 +141,84 @@ def parse_canonical_symbol(
         return None
 
     upper = raw.upper()
+    market_hint = normalize_symbol_market(market)
 
     hk_match = _HK_PREFIX_RE.fullmatch(upper) or _HK_SUFFIX_RE.fullmatch(upper)
     if hk_match:
-        return CanonicalSymbol(raw, f"HK{hk_match.group(1).zfill(5)}", "hk")
+        return _constrain_identity(
+            CanonicalSymbol(raw, f"HK{hk_match.group(1).zfill(5)}", "hk", venue="XHKG", asset_type="stock"),
+            venue=venue,
+            asset_type=asset_type,
+        )
 
-    cn_match = _CN_PREFIX_RE.fullmatch(upper) or _CN_SUFFIX_RE.fullmatch(upper)
+    hk_index_match = _HK_INDEX_RE.fullmatch(upper)
+    if hk_index_match:
+        return _constrain_identity(
+            CanonicalSymbol(raw, hk_index_match.group(1), "hk", venue="XHKG", asset_type="index"),
+            venue=venue,
+            asset_type=asset_type,
+        )
+
+    cn_match = _CN_PREFIX_RE.fullmatch(upper)
+    cn_suffix_match = _CN_SUFFIX_RE.fullmatch(upper)
     if cn_match:
-        return CanonicalSymbol(raw, cn_match.group(1), "cn")
+        exchange_token, code = cn_match.groups()
+        return _constrain_identity(
+            _parse_explicit_cn(raw, code=code, exchange_token=exchange_token),
+            venue=venue,
+            asset_type=asset_type,
+        )
+    if cn_suffix_match:
+        code, exchange_token = cn_suffix_match.groups()
+        return _constrain_identity(
+            _parse_explicit_cn(raw, code=code, exchange_token=exchange_token),
+            venue=venue,
+            asset_type=asset_type,
+        )
 
     if upper.isdigit() and len(upper) == 6:
-        return CanonicalSymbol(raw, upper, "cn")
+        index_venue = _CN_INDEX_VENUES.get(upper)
+        stock_venue = _cn_stock_venue(upper)
+        if index_venue is not None:
+            if venue is None and asset_type is None:
+                return CanonicalSymbol(raw, upper, "cn", ambiguous=True)
+            if venue == index_venue and asset_type in {None, "index"}:
+                return CanonicalSymbol(raw, upper, "cn", venue=venue, asset_type="index")
+            if upper not in _CN_INDEX_ONLY_CODES and venue == stock_venue and asset_type in {None, "stock"}:
+                return CanonicalSymbol(raw, upper, "cn", venue=venue, asset_type="stock")
+            return None
+        return _constrain_identity(
+            CanonicalSymbol(raw, upper, "cn", venue=stock_venue, asset_type="stock"),
+            venue=venue,
+            asset_type=asset_type,
+        )
 
     if upper.isdigit() and 1 <= len(upper) <= 5:
-        if market == "hk":
-            return CanonicalSymbol(raw, f"HK{upper.zfill(5)}", "hk")
+        if market_hint == "hk":
+            return _constrain_identity(
+                CanonicalSymbol(raw, f"HK{upper.zfill(5)}", "hk", venue="XHKG", asset_type="stock"),
+                venue=venue,
+                asset_type=asset_type,
+            )
         if len(upper) == 5:
+            if venue is not None or asset_type is not None:
+                return None
             return CanonicalSymbol(raw, upper, None, ambiguous=True)
         return None
 
-    if is_us_index_code(upper) or is_us_stock_code(upper):
-        return CanonicalSymbol(raw, upper, "us")
+    us_symbol = _canonical_us_symbol(upper)
+    if is_us_index_code(us_symbol):
+        return _constrain_identity(
+            CanonicalSymbol(raw, us_symbol, "us", venue=UNRESOLVED_SYMBOL_VENUE, asset_type="index"),
+            venue=venue,
+            asset_type=asset_type,
+        )
+    if is_us_stock_code(us_symbol):
+        return _constrain_identity(
+            CanonicalSymbol(raw, us_symbol, "us", venue=UNRESOLVED_SYMBOL_VENUE, asset_type="stock"),
+            venue=venue,
+            asset_type=asset_type,
+        )
 
     return None
 
@@ -131,7 +244,21 @@ def extract_canonical_symbol_identities_from_text(
         if (
             identity is None
             or identity.ambiguous
-            or any(existing.symbol == identity.symbol for existing in identities)
+            or any(
+                (
+                    existing.symbol,
+                    existing.market,
+                    existing.venue,
+                    existing.asset_type,
+                )
+                == (
+                    identity.symbol,
+                    identity.market,
+                    identity.venue,
+                    identity.asset_type,
+                )
+                for existing in identities
+            )
         ):
             continue
         identities.append(identity)
@@ -154,6 +281,8 @@ def canonical_symbol_storage_values(
     value: str | None,
     *,
     market: str | None = None,
+    venue: str | None = None,
+    asset_type: SymbolAssetType | None = None,
 ) -> tuple[str, ...]:
     """Return bounded persisted spellings for one market-known canonical identity.
 
@@ -164,7 +293,12 @@ def canonical_symbol_storage_values(
     market_hint = normalize_symbol_market(market)
     if market is not None and market_hint is None:
         return ()
-    identity = parse_canonical_symbol(value, market=market_hint)
+    identity = parse_canonical_symbol(
+        value,
+        market=market_hint,
+        venue=venue,
+        asset_type=asset_type,
+    )
     if (
         identity is None
         or identity.ambiguous
@@ -174,16 +308,17 @@ def canonical_symbol_storage_values(
 
     values = [identity.symbol]
     if identity.market == "cn":
+        exchange_tokens = _cn_exchange_tokens(identity.venue)
         values.extend(
             [
                 f"{prefix}{identity.symbol}"
-                for prefix in ("SH", "SZ", "SS", "BJ")
+                for prefix in exchange_tokens
             ]
         )
         values.extend(
             [
                 f"{identity.symbol}.{suffix}"
-                for suffix in ("SH", "SZ", "SS", "BJ")
+                for suffix in exchange_tokens
             ]
         )
     elif identity.market == "hk":
@@ -221,3 +356,55 @@ def canonical_stock_code(code: str | None) -> str:
     raw = str(code or "").strip()
     identity = parse_canonical_symbol(raw)
     return identity.symbol if identity else raw.upper()
+
+
+def _parse_explicit_cn(raw: str, *, code: str, exchange_token: str) -> CanonicalSymbol | None:
+    venue = _CN_VENUE_BY_TOKEN[exchange_token]
+    index_venue = _CN_INDEX_VENUES.get(code)
+    if index_venue == venue:
+        return CanonicalSymbol(raw, code, "cn", venue=venue, asset_type="index")
+    if code in _CN_INDEX_ONLY_CODES:
+        return None
+    if venue != _cn_stock_venue(code):
+        return None
+    return CanonicalSymbol(raw, code, "cn", venue=venue, asset_type="stock")
+
+
+def _constrain_identity(
+    identity: CanonicalSymbol | None,
+    *,
+    venue: str | None,
+    asset_type: SymbolAssetType | None,
+) -> CanonicalSymbol | None:
+    if identity is None:
+        return None
+    if venue is not None and identity.venue != venue:
+        return None
+    if asset_type is not None and identity.asset_type != asset_type:
+        return None
+    return identity
+
+
+def _canonical_us_symbol(value: str) -> str:
+    """Remove only the provider's explicit ``.US`` suffix from US symbols."""
+    if value.endswith(".US"):
+        return value[:-3]
+    return value
+
+
+def _cn_stock_venue(code: str) -> str:
+    if code.startswith(("92", "43", "81", "82", "83", "87", "88")) and not code.startswith("900"):
+        return "XBSE"
+    if code.startswith(("000", "001", "002", "003", "300", "301")):
+        return "XSHE"
+    return "XSHG"
+
+
+def _cn_exchange_tokens(venue: str | None) -> tuple[str, ...]:
+    if venue == "XSHG":
+        return ("SH", "SS")
+    if venue == "XSHE":
+        return ("SZ",)
+    if venue == "XBSE":
+        return ("BJ",)
+    return ()

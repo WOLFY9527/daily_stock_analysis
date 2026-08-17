@@ -12,7 +12,8 @@ from src.services.historical_ohlcv_readiness import HistoricalOhlcvBar
 from src.services.quote_snapshot_readiness import QuoteSnapshot
 
 
-QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION = "quote_ohlcv_snapshot_lineage_v1"
+QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION = "quote_ohlcv_snapshot_lineage_v2"
+LEGACY_QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION = "quote_ohlcv_snapshot_lineage_v1"
 
 
 class SnapshotLineageError(ValueError):
@@ -90,6 +91,8 @@ class QuoteOhlcvSnapshotRepositoryProtocol(Protocol):
         symbol: str,
         market: str,
         snapshot_kind: str,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> QuoteOhlcvSnapshotRecord | None:
         ...
 
@@ -113,12 +116,21 @@ class QuoteOhlcvSnapshotSpine:
         symbol: str,
         market: str,
         snapshot_kind: str,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> QuoteOhlcvSnapshotRecord | None:
-        identity = _instrument_identity(symbol=symbol, market=market)
+        identity = _instrument_identity(
+            symbol=symbol,
+            market=market,
+            venue=venue,
+            asset_type=asset_type,
+        )
         return self.repository.latest_for_symbol(
             symbol=identity["canonicalSymbol"],
             market=identity["market"],
             snapshot_kind=_safe_code(snapshot_kind),
+            venue=identity["venue"],
+            asset_type=identity["assetType"],
         )
 
 
@@ -234,6 +246,45 @@ def snapshot_from_storage_payload(payload: Mapping[str, Any]) -> QuoteOhlcvSnaps
     )
 
 
+def migrate_snapshot_storage_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Upgrade legacy payload spelling without changing its persisted row identity."""
+    migrated = dict(payload)
+    identity = dict(payload.get("instrumentIdentity") or {})
+    contract_version = _text(payload.get("contractVersion"))
+    if contract_version == QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION:
+        return migrated
+    if contract_version != LEGACY_QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION:
+        raise SnapshotLineageError("unsupported quote/OHLCV snapshot contract version")
+
+    legacy_market = _text(payload.get("market")) or _text(identity.get("market"))
+    legacy_venue = _text(identity.get("venue")) or None
+    # v1 US rows used the calendar representative as venue. Translate only
+    # that known legacy spelling; contradictory current identities remain rejected.
+    if legacy_market.upper() == "US" and legacy_venue == "XNYS":
+        legacy_venue = None
+
+    try:
+        expected = resolve_historical_symbol_identity(
+            symbol=_text(payload.get("symbol")) or _text(identity.get("canonicalSymbol")),
+            market=legacy_market,
+            venue=legacy_venue,
+            asset_type=_text(identity.get("assetType")) or None,
+        )
+    except ValueError as exc:
+        raise SnapshotLineageError("quote/OHLCV legacy snapshot identity cannot be migrated") from exc
+
+    migrated["contractVersion"] = QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION
+    migrated["symbol"] = expected["canonical_symbol"]
+    migrated["market"] = expected["market"]
+    migrated["instrumentIdentity"] = {
+        "canonicalSymbol": expected["canonical_symbol"],
+        "market": expected["market"],
+        "venue": expected["venue"],
+        "assetType": expected["asset_type"],
+    }
+    return migrated
+
+
 def validate_snapshot_lineage(snapshot: QuoteOhlcvSnapshotRecord) -> None:
     missing = []
     for field_name in (
@@ -259,10 +310,20 @@ def validate_snapshot_lineage(snapshot: QuoteOhlcvSnapshotRecord) -> None:
     if missing:
         raise SnapshotLineageError("quote/OHLCV snapshot missing provenance: " + ", ".join(missing))
     identity = dict(snapshot.instrument_identity or {})
+    try:
+        expected = resolve_historical_symbol_identity(
+            symbol=snapshot.symbol,
+            market=snapshot.market,
+            venue=_text(identity.get("venue")) or None,
+            asset_type=_text(identity.get("assetType")) or None,
+        )
+    except ValueError as exc:
+        raise SnapshotLineageError("quote/OHLCV snapshot malformed instrument identity") from exc
     if (
-        _text(identity.get("canonicalSymbol")) != snapshot.symbol
-        or _text(identity.get("market")) != snapshot.market
-        or not _text(identity.get("venue"))
+        _text(identity.get("canonicalSymbol")) != expected["canonical_symbol"]
+        or _text(identity.get("market")) != expected["market"]
+        or _text(identity.get("venue")) != expected["venue"]
+        or _text(identity.get("assetType")) != expected["asset_type"]
     ):
         raise SnapshotLineageError("quote/OHLCV snapshot malformed instrument identity")
 
@@ -273,6 +334,7 @@ def _with_snapshot_id(record: QuoteOhlcvSnapshotRecord) -> QuoteOhlcvSnapshotRec
         {
             "contractVersion": record.contract_version,
             "snapshotKind": record.snapshot_kind,
+            "instrumentIdentity": dict(record.instrument_identity),
             "symbol": record.symbol,
             "market": record.market,
             "quoteAsOf": _iso_datetime(record.quote_as_of),
@@ -335,15 +397,24 @@ def _validate_snapshot_fields_before_id(record: QuoteOhlcvSnapshotRecord) -> Non
     validate_snapshot_lineage(probe)
 
 
-def _instrument_identity(*, symbol: str, market: str) -> dict[str, str]:
-    identity = resolve_historical_symbol_identity(symbol=symbol, market=market)
-    canonical_symbol = identity["canonical_symbol"]
-    if identity["market"] == "HK" and canonical_symbol.startswith("HK") and canonical_symbol[2:].isdigit():
-        canonical_symbol = canonical_symbol[2:]
+def _instrument_identity(
+    *,
+    symbol: str,
+    market: str,
+    venue: str | None = None,
+    asset_type: str | None = None,
+) -> dict[str, str]:
+    identity = resolve_historical_symbol_identity(
+        symbol=symbol,
+        market=market,
+        venue=venue,
+        asset_type=asset_type,
+    )
     return {
-        "canonicalSymbol": canonical_symbol,
+        "canonicalSymbol": identity["canonical_symbol"],
         "market": identity["market"],
         "venue": identity["venue"],
+        "assetType": identity["asset_type"],
     }
 
 

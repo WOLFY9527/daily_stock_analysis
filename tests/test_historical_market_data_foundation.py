@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import date, datetime, timezone
 
 import pytest
@@ -79,7 +80,7 @@ def test_vertical_fixture_ingests_canonicalizes_persists_and_reads_provenance(tm
     assert [bar.session_date.isoformat() for bar in bars] == ["2026-01-05", "2026-01-06", "2026-01-07"]
     assert bars[0].canonical_symbol == "AAPL"
     assert bars[0].market == "US"
-    assert bars[0].venue == "XNYS"
+    assert bars[0].venue == "UNRESOLVED"
     assert bars[0].timezone == "America/New_York"
     assert bars[0].interval == "1d"
     assert bars[0].adjustment_status == "adjusted"
@@ -139,9 +140,83 @@ def test_symbol_and_time_normalization_use_repository_market_identity() -> None:
     hk_identity = resolve_historical_symbol_identity(symbol="00700", market="HK")
     assert hk_identity["canonical_symbol"] == "HK00700"
     assert hk_identity["market"] == "HK"
+    assert hk_identity["venue"] == "XHKG"
+    assert hk_identity["asset_type"] == "stock"
 
     with pytest.raises(ValueError, match="unsupported or ambiguous"):
         resolve_historical_symbol_identity(symbol="00700")
+
+
+def test_historical_identity_rejects_contradictory_cn_venue_and_bare_cn_index() -> None:
+    sh_identity = resolve_historical_symbol_identity(symbol="600519.SH", market="CN")
+    assert sh_identity["venue"] == "XSHG"
+    assert sh_identity["asset_type"] == "stock"
+
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        resolve_historical_symbol_identity(symbol="600519.BJ", market="CN")
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        resolve_historical_symbol_identity(symbol="000300", market="CN")
+
+    index_identity = resolve_historical_symbol_identity(symbol="sh000300", market="CN")
+    assert index_identity["canonical_symbol"] == "000300"
+    assert index_identity["venue"] == "XSHG"
+    assert index_identity["asset_type"] == "index"
+
+    with pytest.raises(ValueError, match="market constraint is unsupported"):
+        resolve_historical_symbol_identity(symbol="AAPL", market="bogus")
+    with pytest.raises(ValueError, match="asset type constraint is unsupported"):
+        resolve_historical_symbol_identity(symbol="600519.SH", market="CN", asset_type="equity")
+
+
+def test_us_historical_identity_keeps_listing_venue_unresolved_and_transport_distinct() -> None:
+    aapl = resolve_historical_symbol_identity(symbol="AAPL", market="US")
+    aapl_us = resolve_historical_symbol_identity(symbol="AAPL.US", market="US")
+    brk_b = resolve_historical_symbol_identity(symbol="BRK.B", market="US")
+    nvda = resolve_historical_symbol_identity(symbol="NVDA", market="US")
+    spx = resolve_historical_symbol_identity(symbol="SPX", market="US")
+    ndx = resolve_historical_symbol_identity(symbol="NDX", market="US")
+
+    assert aapl["canonical_symbol"] == aapl_us["canonical_symbol"] == "AAPL"
+    assert aapl["transport_symbol"] == aapl_us["transport_symbol"] == "AAPL"
+    assert brk_b["canonical_symbol"] == "BRK.B"
+    assert {identity["venue"] for identity in (aapl, aapl_us, brk_b, nvda, spx, ndx)} == {"UNRESOLVED"}
+    assert {identity["asset_type"] for identity in (spx, ndx)} == {"index"}
+
+
+def test_historical_natural_key_keeps_same_code_index_and_stock_distinct(tmp_path) -> None:
+    foundation = _foundation(tmp_path)
+    common = {
+        "provider": "unit_fixture",
+        "market": "CN",
+        "interval": "1d",
+        "observedAt": "2026-01-08T08:00:00Z",
+        "rows": [
+            {"Date": "2026-01-08", "Open": 10, "High": 11, "Low": 9, "Close": 10, "Volume": 1}
+        ],
+    }
+
+    index_result = foundation.ingest_provider_payload({**common, "symbol": "sh000001"})
+    stock_result = foundation.ingest_provider_payload({**common, "symbol": "000001.SZ"})
+
+    assert index_result.persisted.inserted == 1
+    assert stock_result.persisted.inserted == 1
+    assert index_result.bars[0].ingestion_id != stock_result.bars[0].ingestion_id
+    index_rows = foundation.query_bars(
+        symbol="sh000001",
+        market="CN",
+        interval="1d",
+        start=date(2026, 1, 8),
+        end=date(2026, 1, 8),
+    )
+    stock_rows = foundation.query_bars(
+        symbol="000001.SZ",
+        market="CN",
+        interval="1d",
+        start=date(2026, 1, 8),
+        end=date(2026, 1, 8),
+    )
+    assert [(row.venue, row.asset_type) for row in index_rows] == [("XSHG", "index")]
+    assert [(row.venue, row.asset_type) for row in stock_rows] == [("XSHE", "stock")]
 
 
 @pytest.mark.parametrize(
@@ -263,10 +338,93 @@ def test_migration_upgrade_creates_required_tables_and_indexes(tmp_path) -> None
 
     report = repo.migration_report()
 
-    assert report["schemaVersion"] == "historical_market_data_foundation_v1"
+    assert report["schemaVersion"] == "historical_market_data_foundation_v2"
     assert report["tables"]["historical_bars"] == "present"
     assert report["indexes"]["uix_historical_bars_natural_key"] == "present"
     assert report["rollback"] == {
         "supported": True,
         "strategy": "drop historical_bar_quality_runs then historical_bars before production backfill",
     }
+
+
+def test_legacy_identity_schema_requires_authorized_migration_without_rewrite(tmp_path) -> None:
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE historical_bars (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            market TEXT NOT NULL,
+            venue TEXT NOT NULL,
+            canonical_symbol TEXT NOT NULL,
+            provider_symbol TEXT NOT NULL,
+            interval TEXT NOT NULL,
+            session_date TEXT NOT NULL,
+            timestamp TEXT,
+            timezone TEXT NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            adjustment_status TEXT NOT NULL,
+            adjustment_metadata TEXT NOT NULL DEFAULT '{}',
+            currency TEXT,
+            provider TEXT NOT NULL,
+            source TEXT NOT NULL,
+            observed_at TEXT,
+            as_of TEXT,
+            ingestion_id TEXT NOT NULL,
+            lineage_id TEXT NOT NULL,
+            normalization_version TEXT NOT NULL,
+            quality_state TEXT NOT NULL,
+            quality_reason_codes TEXT NOT NULL DEFAULT '[]',
+            raw_identity TEXT NOT NULL,
+            value_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (market, canonical_symbol, interval, session_date, provider, adjustment_status)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO historical_bars (
+            market, venue, canonical_symbol, provider_symbol, interval, session_date,
+            timezone, open, high, low, close, volume, adjustment_status,
+            provider, source, ingestion_id, lineage_id, normalization_version,
+            quality_state, raw_identity, value_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "US",
+            "UNRESOLVED",
+            "AAPL",
+            "AAPL",
+            "1d",
+            "2026-01-05",
+            "America/New_York",
+            10.0,
+            11.0,
+            9.0,
+            10.0,
+            1.0,
+            "unadjusted",
+            "legacy_fixture",
+            "legacy_fixture",
+            "legacy-ingest",
+            "legacy-lineage",
+            "historical_market_data_foundation_v1",
+            "usable",
+            "legacy-row",
+            "legacy-fingerprint",
+        ),
+    )
+    conn.commit()
+
+    with pytest.raises(RuntimeError, match="requires an authorized migration"):
+        HistoricalMarketDataRepository(conn)
+
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(historical_bars)")}
+    assert "asset_type" not in columns
+    assert conn.execute("SELECT COUNT(*) FROM historical_bars").fetchone()[0] == 1

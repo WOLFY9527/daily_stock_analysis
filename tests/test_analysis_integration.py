@@ -22,6 +22,7 @@ from api.deps import get_config_dep
 from src.services.task_queue import AnalysisTaskQueue
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 import src.auth as auth
+from api.v1.endpoints.analysis import _resolve_and_normalize_input
 
 
 @pytest.fixture
@@ -121,9 +122,20 @@ class TestAnalysisIntegration:
         assert len(kwargs["stock_codes"]) == 1
         assert kwargs["stock_codes"] == ["600519"]
 
+    def test_trigger_analysis_batch_keeps_distinct_explicit_cn_identities(self, client, mock_task_queue):
+        mock_task_queue.submit_tasks_batch.return_value = ([], [])
+
+        client.post(
+            "/api/v1/analysis/analyze",
+            json={"stock_codes": ["000001.SH", "000001.SZ"], "async_mode": True},
+        )
+
+        kwargs = mock_task_queue.submit_tasks_batch.call_args.kwargs
+        assert kwargs["stock_codes"] == ["000001.SH", "000001.SZ"]
+
     def test_trigger_analysis_dos_protection(self, client):
         """Test that excessive stock codes are rejected."""
-        too_many_codes = [f"{i:06d}" for i in range(101)]
+        too_many_codes = [f"{i:06d}.SZ" for i in range(1000, 1101)]
         response = client.post(
             "/api/v1/analysis/analyze",
             json={
@@ -142,7 +154,7 @@ class TestAnalysisIntegration:
         client.post(
             "/api/v1/analysis/analyze",
             json={
-                "stock_codes": ["600519", "000001"],
+                "stock_codes": ["600519", "000001.SZ"],
                 "stock_name": "贵州茅台",
                 "original_query": "茅台",
                 "async_mode": True
@@ -155,3 +167,10 @@ class TestAnalysisIntegration:
         assert kwargs["stock_name"] is None
         assert kwargs["original_query"] is None
         assert kwargs["selection_source"] is None
+
+    @pytest.mark.parametrize(
+        ("raw_symbol", "expected"),
+        [("000001.SH", "000001.SH"), ("000001.SZ", "000001.SZ"), ("SH000001", "000001.SH")],
+    )
+    def test_analysis_input_preserves_explicit_cn_identity(self, raw_symbol, expected):
+        assert _resolve_and_normalize_input(raw_symbol) == expected

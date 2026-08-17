@@ -31,6 +31,7 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.execution_log_service import ExecutionLogService
 from src.services.research_budget_profiles import normalize_research_mode
 from src.utils.analysis_metadata import SELECTION_SOURCES
+from src.utils.symbol_normalization import parse_canonical_symbol
 from src.utils.symbol_validation import require_consumer_symbol_identity
 
 logger = logging.getLogger(__name__)
@@ -265,9 +266,12 @@ def _dedupe_stock_code_key(stock_code: str, owner_id: Optional[str] = None) -> s
     The task queue should treat equivalent market code shapes as the same
     underlying stock, e.g. ``600519`` and ``600519.SH``.
     """
-    normalized_stock_code = _canonical_task_stock_code(stock_code)
+    identity = parse_canonical_symbol(stock_code)
+    if identity is None or identity.ambiguous or identity.identity_key is None:
+        _canonical_task_stock_code(stock_code)
+        raise ValueError("股票代码无法解析为唯一仪器身份")
     normalized_owner_id = str(owner_id or "").strip() or "__global__"
-    return f"{normalized_owner_id}:{normalized_stock_code}"
+    return f"{normalized_owner_id}:{':'.join(identity.identity_key)}"
 
 
 class TaskStatus(str, Enum):

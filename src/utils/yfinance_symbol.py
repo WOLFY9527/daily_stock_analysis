@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
-from src.utils.symbol_classification import is_bse_code
 from src.utils.symbol_normalization import parse_canonical_symbol
 
 
-_US_INDEX_YF_MAPPING: dict[str, tuple[str, str]] = {
+US_INDEX_MAPPING: dict[str, tuple[str, str]] = {
     "SPX": ("^GSPC", "标普500指数"),
     "^GSPC": ("^GSPC", "标普500指数"),
     "GSPC": ("^GSPC", "标普500指数"),
@@ -29,7 +28,10 @@ _US_INDEX_YF_MAPPING: dict[str, tuple[str, str]] = {
 def get_us_index_yf_symbol(code: str | None) -> tuple[str | None, str | None]:
     """Return the Yahoo Finance symbol and label for supported US index aliases."""
     normalized = (code or "").strip().upper()
-    return _US_INDEX_YF_MAPPING.get(normalized, (None, None))
+    identity = parse_canonical_symbol(normalized)
+    if identity is not None and identity.market == "us" and identity.asset_type == "index":
+        normalized = identity.symbol
+    return US_INDEX_MAPPING.get(normalized, (None, None))
 
 
 def to_yfinance_symbol(stock_code: str) -> str:
@@ -51,21 +53,11 @@ def to_yfinance_symbol(stock_code: str) -> str:
         hk_code = identity.symbol[2:].lstrip("0") or "0"
         return f"{hk_code.zfill(4)}.HK"
 
-    if code.endswith((".SS", ".SH")):
-        return f"{identity.symbol}.SS"
-    if code.endswith(".SZ"):
-        return f"{identity.symbol}.SZ"
-    if code.endswith(".BJ"):
-        return f"{identity.symbol}.BJ"
-
-    if identity.symbol.startswith(("51", "52", "56", "58")):
-        return f"{identity.symbol}.SS"
-    if identity.symbol.startswith(("15", "16", "18")):
-        return f"{identity.symbol}.SZ"
-
-    if is_bse_code(identity.symbol):
-        return f"{identity.symbol}.BJ"
-
-    if identity.symbol.startswith(("600", "601", "603", "688")):
-        return f"{identity.symbol}.SS"
-    return f"{identity.symbol}.SZ"
+    venue_suffix = {
+        "XSHG": "SS",
+        "XSHE": "SZ",
+        "XBSE": "BJ",
+    }.get(identity.venue)
+    if venue_suffix is None:
+        raise ValueError("unsupported or unresolved CN venue")
+    return f"{identity.symbol}.{venue_suffix}"

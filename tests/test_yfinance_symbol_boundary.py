@@ -27,9 +27,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
     ("raw", "expected"),
     [
         ("600519", "600519.SS"),
-        ("000001", "000001.SZ"),
+        ("000001.SZ", "000001.SZ"),
+        ("sh000001", "000001.SS"),
+        ("000300.SH", "000300.SS"),
         ("hk00700", "0700.HK"),
         ("AAPL", "AAPL"),
+        ("AAPL.US", "AAPL"),
+        ("BRK.B", "BRK.B"),
         ("SPX", "^GSPC"),
         ("512400", "512400.SS"),
         ("920748", "920748.BJ"),
@@ -39,6 +43,11 @@ def test_to_yfinance_symbol_preserves_existing_market_parity(raw: str, expected:
     assert to_yfinance_symbol(raw) == expected
     with pytest.raises(ValueError, match="unsupported or ambiguous"):
         to_yfinance_symbol("00700")
+
+
+def test_to_yfinance_symbol_rejects_bare_cn_identity_without_unique_context() -> None:
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        to_yfinance_symbol("000001")
 
 
 @pytest.mark.parametrize(
@@ -70,6 +79,8 @@ def test_yfinance_fetcher_convert_stock_code_delegates_to_pure_utility(monkeypat
 
     assert fetcher._convert_stock_code("hk00700") == "TEST.SYMBOL"
     assert calls == ["hk00700"]
+    assert to_yfinance_symbol("SPX.US") == "^GSPC"
+    assert to_yfinance_symbol("NDX.US") == "^NDX"
 
 
 def test_stock_service_intraday_uses_pure_symbol_utility_without_changing_download_params(

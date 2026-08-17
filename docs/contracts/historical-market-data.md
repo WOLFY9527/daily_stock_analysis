@@ -26,6 +26,9 @@ timezone, OHLCV values, adjustment metadata, currency, provider/source,
 observation/as-of metadata, ingestion id, lineage id, normalization version,
 and quality state.
 
+For US ticker-only symbols, `venue = UNRESOLVED` is canonical identity state;
+`MARKET_EXCHANGE["us"] = XNYS` remains a trading-calendar lookup only.
+
 Provider-specific field names such as `Adj Close`, `Date`, `开盘`, or `成交量`
 must stay inside `normalize_provider_historical_bars`. Product read consumers
 must not depend on those raw field names.
@@ -50,7 +53,7 @@ fabricate historical market data.
 owns the idempotent persistence boundary for this foundation. Its natural key is:
 
 ```text
-market + canonical_symbol + interval + session_date + provider + adjustment_status
+market + venue + canonical_symbol + asset_type + interval + session_date + provider + adjustment_status
 ```
 
 Repeated ingestion of the same logical observation is counted as a duplicate.

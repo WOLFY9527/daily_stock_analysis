@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "5ea4327d9791003c3987d81be765589d9bb1679e8ac755fce114c474311c4916",
+    "manualSha256": "4a351e4e6bafb7890364d5b36b869f604d7598616ad6e81ac21d235a76d00cae",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -351,25 +351,25 @@
       "title": "T576 Frontend Production Simplification Audit"
     },
     {
-      "bytes": 10691,
+      "bytes": 11110,
       "editable": true,
       "id": "data-trust",
       "kind": "canonical",
-      "lineCount": 219,
+      "lineCount": 224,
       "path": "docs/contracts/data-trust.md",
-      "sha256": "0d9cfcb782ec0c5c900ed25a38d0cf9e0f1100151f54956b287d33603261043c",
+      "sha256": "2d741a3d1ac4579c64792472bbc6feeb93302a4a543d7a0f20a05830bf8ff2f7",
       "status": "active",
       "summary": "Cross-domain truth, source, readiness, no-advice, and protected semantics",
       "title": "Data Trust And Protected Semantics"
     },
     {
-      "bytes": 3687,
+      "bytes": 3858,
       "editable": true,
       "id": "historical-market-data",
       "kind": "canonical",
-      "lineCount": 88,
+      "lineCount": 91,
       "path": "docs/contracts/historical-market-data.md",
-      "sha256": "be8438c651f59802f3065970d5f29ad016647b390e3d70990dedbf5dd5cd2789",
+      "sha256": "a5740a214181c1f109049aa6e9fcfad892aecc10c483486b758d149fc03cf1ee",
       "status": "active",
       "summary": "Historical OHLCV foundation contract",
       "title": "Historical Market Data Foundation v1"

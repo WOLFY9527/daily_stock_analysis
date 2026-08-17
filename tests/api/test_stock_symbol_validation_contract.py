@@ -142,6 +142,11 @@ def test_stock_validate_endpoint_reports_unknown_when_lookup_cannot_confirm(monk
     _assert_consumer_safe(payload)
 
 
+def test_route_symbol_preserves_explicit_cn_venue_identity() -> None:
+    assert stocks_endpoint._require_canonical_stock_symbol("000001.SH") == "000001.SH"
+    assert stocks_endpoint._require_canonical_stock_symbol("000001.SZ") == "000001.SZ"
+
+
 def test_stock_validate_endpoint_sanitizes_lookup_dependency_failure(monkeypatch) -> None:
     service = _FakeStockService(
         RuntimeError(

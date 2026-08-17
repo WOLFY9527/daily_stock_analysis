@@ -66,7 +66,9 @@ class StockTechnicalIndicatorsService:
 
     def get_technical_indicators(self, stock_code: str) -> dict[str, Any]:
         requested_symbol = str(stock_code or "").strip()
-        symbol = resolve_historical_symbol_identity(symbol=requested_symbol)["canonical_symbol"]
+        identity = resolve_historical_symbol_identity(symbol=requested_symbol)
+        symbol = identity["canonical_symbol"]
+        transport_symbol = identity["transport_symbol"]
         if not symbol:
             return self._empty_payload(
                 symbol,
@@ -78,7 +80,7 @@ class StockTechnicalIndicatorsService:
 
         # The existing StockService remains the sole history/provider authority.
         history = self.history_service.get_history_data(
-            stock_code=symbol,
+            stock_code=transport_symbol,
             period=TECHNICAL_INDICATOR_TIMEFRAME,
             days=TECHNICAL_HISTORY_LOOKBACK_DAYS,
         )
@@ -159,7 +161,7 @@ class StockTechnicalIndicatorsService:
                 adjustment_status=metadata["adjustmentStatus"],
             )
 
-        bars, invalid_reason = self._validated_bars(symbol, rows, history)
+        bars, invalid_reason = self._validated_bars(identity, rows, history)
         if invalid_reason is not None:
             return self._empty_payload(
                 symbol,
@@ -276,7 +278,7 @@ class StockTechnicalIndicatorsService:
 
     @staticmethod
     def _validated_bars(
-        symbol: str,
+        identity: Mapping[str, str],
         rows: Sequence[Any],
         history: Mapping[str, Any],
     ) -> tuple[list[Any], str | None]:
@@ -292,8 +294,10 @@ class StockTechnicalIndicatorsService:
             {
                 "provider": confidence.get("provider") or source,
                 "source": source,
-                "symbol": symbol,
-                "market": "US" if symbol.isalpha() else None,
+                "symbol": identity["transport_symbol"],
+                "market": identity["market"],
+                "venue": identity["venue"],
+                "assetType": identity["asset_type"],
                 "interval": "1d",
                 "asOf": as_of,
                 "observedAt": observed_at,

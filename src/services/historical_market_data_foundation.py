@@ -7,12 +7,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 
-from src.core.trading_calendar import MARKET_EXCHANGE, MARKET_TIMEZONE
-from src.utils.symbol_classification import is_bse_code
+from src.core.trading_calendar import MARKET_TIMEZONE
 from src.utils.symbol_normalization import parse_canonical_symbol
 
 
-HISTORICAL_MARKET_DATA_NORMALIZATION_VERSION = "historical_market_data_foundation_v1"
+HISTORICAL_MARKET_DATA_NORMALIZATION_VERSION = "historical_market_data_foundation_v2"
 HISTORICAL_MARKET_DATA_CONTRACT_VERSION = "historical_market_data_read_contract_v1"
 
 
@@ -21,6 +20,7 @@ class CanonicalHistoricalBar:
     market: str
     venue: str
     canonical_symbol: str
+    asset_type: str
     provider_symbol: str
     interval: str
     session_date: date
@@ -45,10 +45,12 @@ class CanonicalHistoricalBar:
     quality_reason_codes: tuple[str, ...] = ()
     raw_identity: str = ""
 
-    def natural_key(self) -> tuple[str, str, str, date, str, str]:
+    def natural_key(self) -> tuple[str, str, str, str, str, date, str, str]:
         return (
             self.market,
+            self.venue,
             self.canonical_symbol,
+            self.asset_type,
             self.interval,
             self.session_date,
             self.provider,
@@ -73,6 +75,7 @@ class CanonicalHistoricalBar:
             market=self.market,
             venue=self.venue,
             canonical_symbol=self.canonical_symbol,
+            asset_type=self.asset_type,
             provider_symbol=self.provider_symbol,
             interval=self.interval,
             session_date=self.session_date,
@@ -104,6 +107,7 @@ class CanonicalHistoricalBar:
             "market": self.market,
             "venue": self.venue,
             "canonicalSymbol": self.canonical_symbol,
+            "assetType": self.asset_type,
             "interval": self.interval,
             "sessionDate": self.session_date.isoformat(),
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
@@ -147,9 +151,18 @@ class HistoricalBarQualityOutcome:
 
         if not bars:
             add("empty_bar_set", "reject")
-        seen: dict[tuple[str, str, str, date, str, str], CanonicalHistoricalBar] = {}
+        seen: dict[tuple[str, str, str, str, str, date, str, str], CanonicalHistoricalBar] = {}
         previous_date: date | None = None
-        identity_fields = ("market", "canonical_symbol", "interval", "session_date", "timezone", "provider")
+        identity_fields = (
+            "market",
+            "venue",
+            "canonical_symbol",
+            "asset_type",
+            "interval",
+            "session_date",
+            "timezone",
+            "provider",
+        )
         for bar in bars:
             if any(not getattr(bar, field_name) for field_name in identity_fields):
                 add("missing_required_identity", "reject")
@@ -218,10 +231,20 @@ class HistoricalMarketDataRepositoryProtocol(Protocol):
         interval: str,
         start: date,
         end: date,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> list[CanonicalHistoricalBar]:
         ...
 
-    def latest_bar(self, *, symbol: str, market: str, interval: str) -> CanonicalHistoricalBar | None:
+    def latest_bar(
+        self,
+        *,
+        symbol: str,
+        market: str,
+        interval: str,
+        venue: str | None = None,
+        asset_type: str | None = None,
+    ) -> CanonicalHistoricalBar | None:
         ...
 
 
@@ -266,6 +289,8 @@ class HistoricalMarketDataFoundation:
             interval=_normalize_interval(interval),
             start=start,
             end=end,
+            venue=identity["venue"],
+            asset_type=identity["asset_type"],
         )
 
     def latest_bar(self, *, symbol: str, market: str, interval: str) -> CanonicalHistoricalBar | None:
@@ -274,6 +299,8 @@ class HistoricalMarketDataFoundation:
             symbol=identity["canonical_symbol"],
             market=identity["market"],
             interval=_normalize_interval(interval),
+            venue=identity["venue"],
+            asset_type=identity["asset_type"],
         )
 
     def coverage_range(self, *, symbol: str, market: str, interval: str) -> dict[str, Any]:
@@ -286,6 +313,8 @@ class HistoricalMarketDataFoundation:
             interval=latest.interval,
             start=date(1900, 1, 1),
             end=date(2999, 12, 31),
+            venue=latest.venue,
+            asset_type=latest.asset_type,
         )
         if not rows:
             return {"start": None, "end": None, "barCount": 0}
@@ -328,6 +357,8 @@ class HistoricalMarketDataFoundation:
                 "contractVersion": HISTORICAL_MARKET_DATA_CONTRACT_VERSION,
                 "market": identity["market"],
                 "canonicalSymbol": identity["canonical_symbol"],
+                "venue": identity["venue"],
+                "assetType": identity["asset_type"],
                 "qualityState": "rejected",
                 "sourceObservationRange": {"start": None, "end": None},
             }
@@ -337,6 +368,7 @@ class HistoricalMarketDataFoundation:
             "market": latest.market,
             "venue": latest.venue,
             "canonicalSymbol": latest.canonical_symbol,
+            "assetType": latest.asset_type,
             "interval": latest.interval,
             "provider": latest.provider,
             "source": latest.source,
@@ -360,6 +392,8 @@ class HistoricalMarketDataFoundation:
             interval=_normalize_interval(interval),
             start=date(1900, 1, 1),
             end=date(2999, 12, 31),
+            venue=identity["venue"],
+            asset_type=identity["asset_type"],
         )
 
 
@@ -370,7 +404,12 @@ def normalize_provider_historical_bars(
 ) -> list[CanonicalHistoricalBar]:
     provider = _safe_text(payload.get("provider") or payload.get("source") or "unknown").lower()
     symbol = _safe_text(payload.get("symbol") or payload.get("stock_code") or payload.get("code"))
-    identity = resolve_historical_symbol_identity(symbol=symbol, market=_safe_text(payload.get("market")))
+    identity = resolve_historical_symbol_identity(
+        symbol=symbol,
+        market=_safe_text(payload.get("market")),
+        venue=_safe_text(payload.get("venue")) or None,
+        asset_type=_safe_text(payload.get("assetType") or payload.get("asset_type")) or None,
+    )
     interval = _normalize_interval(_safe_text(payload.get("interval") or payload.get("timeframe") or payload.get("period")))
     observed_at = _parse_datetime(payload.get("observedAt") or payload.get("observed_at") or payload.get("timestamp"))
     as_of = _parse_datetime(payload.get("asOf") or payload.get("as_of")) or observed_at
@@ -384,7 +423,9 @@ def normalize_provider_historical_bars(
         {
             "provider": provider,
             "market": identity["market"],
+            "venue": identity["venue"],
             "symbol": identity["canonical_symbol"],
+            "assetType": identity["asset_type"],
             "interval": interval,
             "observedAt": observed_at.isoformat() if observed_at else None,
             "rows": rows,
@@ -412,11 +453,28 @@ def normalize_provider_historical_bars(
     return sorted(bars, key=lambda item: (item.session_date, item.timestamp or datetime.min.replace(tzinfo=timezone.utc)))
 
 
-def resolve_historical_symbol_identity(*, symbol: str, market: str | None = None) -> dict[str, str]:
+def resolve_historical_symbol_identity(
+    *,
+    symbol: str,
+    market: str | None = None,
+    venue: str | None = None,
+    asset_type: str | None = None,
+) -> dict[str, str]:
     provider_symbol = _safe_text(symbol).upper()
+    requested_market_text = _safe_text(market)
     requested_market = _normalize_market(market)
+    if requested_market_text and requested_market == "UNKNOWN":
+        raise ValueError("historical market constraint is unsupported")
+    requested_asset_type = _safe_text(asset_type).lower()
+    if requested_asset_type and requested_asset_type not in {"stock", "index"}:
+        raise ValueError("historical asset type constraint is unsupported")
     market_hint = {"CN": "cn", "HK": "hk", "US": "us"}.get(requested_market)
-    identity = parse_canonical_symbol(provider_symbol, market=market_hint)
+    identity = parse_canonical_symbol(
+        provider_symbol,
+        market=market_hint,
+        venue=venue,
+        asset_type=requested_asset_type or None,
+    )
     if identity is None or identity.ambiguous or identity.market is None:
         raise ValueError("historical symbol is unsupported or ambiguous")
     if market_hint is not None and identity.market != market_hint:
@@ -424,11 +482,14 @@ def resolve_historical_symbol_identity(*, symbol: str, market: str | None = None
 
     normalized = identity.symbol
     canonical_market = identity.market.upper()
-    venue = _venue_for_market_symbol(canonical_market, normalized)
+    if not identity.venue or not identity.asset_type:
+        raise ValueError("historical symbol is unsupported or ambiguous")
     return {
         "market": canonical_market,
-        "venue": venue,
+        "venue": identity.venue,
         "canonical_symbol": normalized,
+        "transport_symbol": identity.transport_symbol,
+        "asset_type": identity.asset_type,
         "provider_symbol": provider_symbol,
         "timezone": _timezone_for_market(canonical_market),
     }
@@ -463,7 +524,9 @@ def _normalize_row(
         {
             "provider": provider,
             "market": identity["market"],
+            "venue": identity["venue"],
             "symbol": identity["canonical_symbol"],
+            "assetType": identity["asset_type"],
             "interval": interval,
             "sessionDate": session_date.isoformat(),
             "rawIdentity": raw_identity,
@@ -474,6 +537,7 @@ def _normalize_row(
         market=identity["market"],
         venue=identity["venue"],
         canonical_symbol=identity["canonical_symbol"],
+        asset_type=identity["asset_type"],
         provider_symbol=identity["provider_symbol"],
         interval=interval,
         session_date=session_date,
@@ -601,20 +665,6 @@ def _normalize_interval(value: str | None) -> str:
 
 def _timezone_for_market(market: str) -> str:
     return MARKET_TIMEZONE.get(market.lower(), "UTC")
-
-
-def _venue_for_market_symbol(market: str, symbol: str) -> str:
-    if market == "US":
-        return MARKET_EXCHANGE.get("us", "XNYS")
-    if market == "HK":
-        return MARKET_EXCHANGE.get("hk", "XHKG")
-    if market == "CN":
-        if is_bse_code(symbol):
-            return "XBSE"
-        if symbol.startswith(("000", "001", "002", "003", "300", "301")):
-            return "XSHE"
-        return MARKET_EXCHANGE.get("cn", "XSHG")
-    return "UNKNOWN"
 
 
 def _safe_text(value: Any) -> str:

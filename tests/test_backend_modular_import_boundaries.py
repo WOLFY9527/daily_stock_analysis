@@ -792,7 +792,7 @@ def test_provider_symbol_helpers_delegate_to_pure_utils() -> None:
         ),
         "data_provider/us_index_mapping.py": _imports_for_file(
             DATA_PROVIDER_ROOT / "us_index_mapping.py",
-            ("src.utils.symbol_classification",),
+            ("src.utils.symbol_normalization", "src.utils.yfinance_symbol"),
         ),
     }
 
@@ -801,7 +801,10 @@ def test_provider_symbol_helpers_delegate_to_pure_utils() -> None:
             "src.utils.symbol_normalization",
             "src.utils.symbol_classification",
         },
-        "data_provider/us_index_mapping.py": {"src.utils.symbol_classification"},
+        "data_provider/us_index_mapping.py": {
+            "src.utils.symbol_normalization",
+            "src.utils.yfinance_symbol",
+        },
     }
 
 

@@ -37,7 +37,7 @@ except ModuleNotFoundError:
 from src.config import Config
 from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, StockDaily
 from src.analyzer import AnalysisResult
-from src.services.history_service import HistoryService
+from src.services.history_service import HistoryService, _payload_symbol_mismatches_record
 import src.auth as auth
 
 class AnalysisHistoryTestCase(unittest.TestCase):
@@ -68,6 +68,41 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             trend_prediction="看多",
             operation_advice="持有",
             analysis_summary="基本面稳健，短期震荡",
+        )
+
+    def test_history_payload_mismatch_preserves_cn_venue_and_asset_type(self) -> None:
+        self.assertTrue(
+            _payload_symbol_mismatches_record({"code": "000001.SZ"}, {}, {}, "000001.SH")
+        )
+        self.assertTrue(
+            _payload_symbol_mismatches_record({"code": "000001.SH"}, {}, {}, "000001.SZ")
+        )
+        self.assertTrue(
+            _payload_symbol_mismatches_record(
+                {"symbol": "000300", "market": "CN", "venue": "XSHE", "assetType": "stock"},
+                {},
+                {},
+                "sh000300",
+            )
+        )
+        self.assertTrue(
+            _payload_symbol_mismatches_record(
+                {
+                    "symbol": "600519",
+                    "instrumentIdentity": {
+                        "canonicalSymbol": "600519",
+                        "market": "CN",
+                        "venue": "XSHE",
+                        "assetType": "stock",
+                    },
+                },
+                {},
+                {},
+                "600519.SH",
+            )
+        )
+        self.assertFalse(
+            _payload_symbol_mismatches_record({"code": "000001.SH"}, {}, {}, "000001.SH")
         )
 
     def _assert_no_forbidden_keys(self, value, forbidden_keys: tuple[str, ...]) -> None:

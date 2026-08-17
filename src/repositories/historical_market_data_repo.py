@@ -17,7 +17,7 @@ from src.services.historical_market_data_foundation import (
 from src.sqlite_foreign_keys import connect_sqlite, enforce_sqlite_foreign_keys
 
 
-SCHEMA_VERSION = "historical_market_data_foundation_v1"
+SCHEMA_VERSION = "historical_market_data_foundation_v2"
 
 
 class HistoricalMarketDataRepository:
@@ -35,43 +35,11 @@ class HistoricalMarketDataRepository:
 
     def apply_schema(self) -> None:
         with self.conn:
-            self.conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS historical_bars (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    market TEXT NOT NULL,
-                    venue TEXT NOT NULL,
-                    canonical_symbol TEXT NOT NULL,
-                    provider_symbol TEXT NOT NULL,
-                    interval TEXT NOT NULL,
-                    session_date TEXT NOT NULL,
-                    timestamp TEXT,
-                    timezone TEXT NOT NULL,
-                    open REAL NOT NULL,
-                    high REAL NOT NULL,
-                    low REAL NOT NULL,
-                    close REAL NOT NULL,
-                    volume REAL NOT NULL,
-                    adjustment_status TEXT NOT NULL,
-                    adjustment_metadata TEXT NOT NULL DEFAULT '{}',
-                    currency TEXT,
-                    provider TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    observed_at TEXT,
-                    as_of TEXT,
-                    ingestion_id TEXT NOT NULL,
-                    lineage_id TEXT NOT NULL,
-                    normalization_version TEXT NOT NULL,
-                    quality_state TEXT NOT NULL,
-                    quality_reason_codes TEXT NOT NULL DEFAULT '[]',
-                    raw_identity TEXT NOT NULL,
-                    value_fingerprint TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE (market, canonical_symbol, interval, session_date, provider, adjustment_status)
+            if self._identity_schema_requires_migration():
+                raise RuntimeError(
+                    "historical market-data identity schema requires an authorized migration"
                 )
-                """
-            )
+            self._create_historical_bars_table()
             self.conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS historical_bar_quality_runs (
@@ -87,15 +55,73 @@ class HistoricalMarketDataRepository:
             self.conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS uix_historical_bars_natural_key
-                ON historical_bars (market, canonical_symbol, interval, session_date, provider, adjustment_status)
+                ON historical_bars (market, venue, canonical_symbol, asset_type, interval, session_date, provider, adjustment_status)
                 """
             )
             self.conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS ix_historical_bars_lookup
-                ON historical_bars (market, canonical_symbol, interval, session_date)
+                ON historical_bars (market, venue, canonical_symbol, asset_type, interval, session_date)
                 """
             )
+
+    def _create_historical_bars_table(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS historical_bars (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                market TEXT NOT NULL,
+                venue TEXT NOT NULL,
+                canonical_symbol TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                provider_symbol TEXT NOT NULL,
+                interval TEXT NOT NULL,
+                session_date TEXT NOT NULL,
+                timestamp TEXT,
+                timezone TEXT NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                volume REAL NOT NULL,
+                adjustment_status TEXT NOT NULL,
+                adjustment_metadata TEXT NOT NULL DEFAULT '{}',
+                currency TEXT,
+                provider TEXT NOT NULL,
+                source TEXT NOT NULL,
+                observed_at TEXT,
+                as_of TEXT,
+                ingestion_id TEXT NOT NULL,
+                lineage_id TEXT NOT NULL,
+                normalization_version TEXT NOT NULL,
+                quality_state TEXT NOT NULL,
+                quality_reason_codes TEXT NOT NULL DEFAULT '[]',
+                raw_identity TEXT NOT NULL,
+                value_fingerprint TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (market, venue, canonical_symbol, asset_type, interval, session_date, provider, adjustment_status)
+            )
+            """
+        )
+
+    def _identity_schema_requires_migration(self) -> bool:
+        if not self._table_exists("historical_bars"):
+            return False
+        columns = {str(row[1]) for row in self.conn.execute("PRAGMA table_info(historical_bars)")}
+        if "asset_type" not in columns:
+            return True
+        sql = self.conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'historical_bars'"
+        ).fetchone()[0]
+        normalized_sql = " ".join(str(sql or "").upper().split())
+        return "UNIQUE (MARKET, VENUE, CANONICAL_SYMBOL, ASSET_TYPE" not in normalized_sql
+
+    def _table_exists(self, table_name: str) -> bool:
+        return self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone() is not None
 
     def migration_report(self) -> dict[str, Any]:
         tables = set(self._table_names())
@@ -171,30 +197,53 @@ class HistoricalMarketDataRepository:
         interval: str,
         start: date,
         end: date,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> list[CanonicalHistoricalBar]:
+        clauses = [
+            "market = ?",
+            "canonical_symbol = ?",
+            "interval = ?",
+            "session_date >= ?",
+            "session_date <= ?",
+        ]
+        parameters: list[Any] = [market, symbol, interval, start.isoformat(), end.isoformat()]
+        if venue is not None:
+            clauses.append("venue = ?")
+            parameters.append(venue)
+        if asset_type is not None:
+            clauses.append("asset_type = ?")
+            parameters.append(asset_type)
         rows = self.conn.execute(
-            """
-            SELECT * FROM historical_bars
-            WHERE market = ?
-              AND canonical_symbol = ?
-              AND interval = ?
-              AND session_date >= ?
-              AND session_date <= ?
-            ORDER BY session_date ASC, timestamp ASC, id ASC
-            """,
-            (market, symbol, interval, start.isoformat(), end.isoformat()),
+            "SELECT * FROM historical_bars WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY session_date ASC, timestamp ASC, id ASC",
+            parameters,
         ).fetchall()
         return [_bar_from_row(row) for row in rows]
 
-    def latest_bar(self, *, symbol: str, market: str, interval: str) -> CanonicalHistoricalBar | None:
+    def latest_bar(
+        self,
+        *,
+        symbol: str,
+        market: str,
+        interval: str,
+        venue: str | None = None,
+        asset_type: str | None = None,
+    ) -> CanonicalHistoricalBar | None:
+        clauses = ["market = ?", "canonical_symbol = ?", "interval = ?"]
+        parameters: list[Any] = [market, symbol, interval]
+        if venue is not None:
+            clauses.append("venue = ?")
+            parameters.append(venue)
+        if asset_type is not None:
+            clauses.append("asset_type = ?")
+            parameters.append(asset_type)
         row = self.conn.execute(
-            """
-            SELECT * FROM historical_bars
-            WHERE market = ? AND canonical_symbol = ? AND interval = ?
-            ORDER BY session_date DESC, timestamp DESC, id DESC
-            LIMIT 1
-            """,
-            (market, symbol, interval),
+            "SELECT * FROM historical_bars WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY session_date DESC, timestamp DESC, id DESC LIMIT 1",
+            parameters,
         ).fetchone()
         return _bar_from_row(row) if row is not None else None
 
@@ -203,18 +252,22 @@ class HistoricalMarketDataRepository:
             """
             SELECT * FROM historical_bars
             WHERE market = ?
+              AND venue = ?
               AND canonical_symbol = ?
               AND interval = ?
               AND session_date = ?
+              AND asset_type = ?
               AND provider = ?
               AND adjustment_status = ?
             LIMIT 1
             """,
             (
                 bar.market,
+                bar.venue,
                 bar.canonical_symbol,
                 bar.interval,
                 bar.session_date.isoformat(),
+                bar.asset_type,
                 bar.provider,
                 bar.adjustment_status,
             ),
@@ -231,13 +284,13 @@ class HistoricalMarketDataRepository:
 
 _INSERT_SQL = """
 INSERT INTO historical_bars (
-    market, venue, canonical_symbol, provider_symbol, interval, session_date,
+    market, venue, canonical_symbol, asset_type, provider_symbol, interval, session_date,
     timestamp, timezone, open, high, low, close, volume, adjustment_status,
     adjustment_metadata, currency, provider, source, observed_at, as_of,
     ingestion_id, lineage_id, normalization_version, quality_state,
     quality_reason_codes, raw_identity, value_fingerprint
 ) VALUES (
-    :market, :venue, :canonical_symbol, :provider_symbol, :interval, :session_date,
+    :market, :venue, :canonical_symbol, :asset_type, :provider_symbol, :interval, :session_date,
     :timestamp, :timezone, :open, :high, :low, :close, :volume, :adjustment_status,
     :adjustment_metadata, :currency, :provider, :source, :observed_at, :as_of,
     :ingestion_id, :lineage_id, :normalization_version, :quality_state,
@@ -251,6 +304,7 @@ def _bar_params(bar: CanonicalHistoricalBar) -> dict[str, Any]:
         "market": bar.market,
         "venue": bar.venue,
         "canonical_symbol": bar.canonical_symbol,
+        "asset_type": bar.asset_type,
         "provider_symbol": bar.provider_symbol,
         "interval": bar.interval,
         "session_date": bar.session_date.isoformat(),
@@ -285,6 +339,7 @@ def _bar_from_row(row: Mapping[str, Any]) -> CanonicalHistoricalBar:
         market=str(row["market"]),
         venue=str(row["venue"]),
         canonical_symbol=str(row["canonical_symbol"]),
+        asset_type=str(row["asset_type"]),
         provider_symbol=str(row["provider_symbol"]),
         interval=str(row["interval"]),
         session_date=date.fromisoformat(str(row["session_date"])),

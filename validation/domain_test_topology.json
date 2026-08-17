@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8236,
-      "sha256": "3eecae38366de0512237fe964f7bae7768415d30e9b312082ea889b255a6b7db"
+      "count": 8265,
+      "sha256": "3413bfc15893acfc907b386b302385cceb513bd129d84df35beac1c923550866"
     },
     "tests": [
       {
@@ -5864,6 +5864,11 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_stock_symbol_validation_contract.py::test_route_symbol_preserves_explicit_cn_venue_identity",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_stock_symbol_validation_contract.py::test_stock_parse_import_json_success_path_remains_unchanged",
         "domain": "market",
         "baseline": true
@@ -9179,6 +9184,16 @@
         "baseline": false
       },
       {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_explicit_cn_identity_survives_history_dispatch[000001.SH-000001.SH]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_explicit_cn_identity_survives_history_dispatch[000001.SZ-000001.SZ]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/services/test_stock_technical_indicators_service.py::test_insufficient_history_never_emits_values_or_trend_classification",
         "domain": "market",
         "baseline": false
@@ -11199,6 +11214,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_analysis_history.py::AnalysisHistoryTestCase::test_history_payload_mismatch_preserves_cn_venue_and_asset_type",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_analysis_history.py::AnalysisHistoryTestCase::test_merge_dashboard_from_context_replaces_placeholder_zero_values",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -11224,9 +11244,29 @@
         "baseline": true
       },
       {
+        "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[000001.SH-000001.SH]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[000001.SZ-000001.SZ]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[SH000001-000001.SH]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_batch_deduplication",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_batch_keeps_distinct_explicit_cn_identities",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_dos_protection",
@@ -17409,6 +17449,21 @@
         "baseline": true
       },
       {
+        "id": "tests/test_historical_market_data_foundation.py::test_historical_identity_rejects_contradictory_cn_venue_and_bare_cn_index",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_historical_natural_key_keeps_same_code_index_and_stock_distinct",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_legacy_identity_schema_requires_authorized_migration_without_rewrite",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_historical_market_data_foundation.py::test_migration_upgrade_creates_required_tables_and_indexes",
         "domain": "market",
         "baseline": true
@@ -17447,6 +17502,11 @@
         "id": "tests/test_historical_market_data_foundation.py::test_symbol_and_time_normalization_use_repository_market_identity",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_us_historical_identity_keeps_listing_venue_unresolved_and_transport_distinct",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_historical_market_data_foundation.py::test_vertical_fixture_ingests_canonicalizes_persists_and_reads_provenance",
@@ -33724,14 +33784,29 @@
         "baseline": true
       },
       {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_hk_canonical_identity_is_not_stripped_in_snapshot_lineage",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_latest_for_symbol_orders_by_retrieval_time",
         "domain": "market",
         "baseline": true
       },
       {
-        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[AAPL-US-AAPL-US-XNYS]",
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_latest_snapshot_rejects_contradictory_identity_and_keeps_cn_index_storage_aliases",
         "domain": "market",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_legacy_v1_hk_snapshot_is_read_migrated_without_changing_row_identity",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[AAPL-US-AAPL-US-UNRESOLVED]",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[SH600519-CN-600519-CN-XSHG]",
@@ -33739,9 +33814,14 @@
         "baseline": true
       },
       {
-        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[hk00700-HK-00700-HK-XHKG]",
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[hk00700-HK-HK00700-HK-XHKG]",
         "domain": "market",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[sh000300-CN-000300-CN-XSHG]",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_passive_reads_do_not_create_files_when_storage_is_unavailable",
@@ -33817,6 +33897,16 @@
         "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_snapshot_contract_fails_closed_when_required_provenance_is_missing[missing_kwargs4]",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_snapshot_migration_rejects_unknown_contract_versions[]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_quote_ohlcv_snapshot_lineage.py::test_snapshot_migration_rejects_unknown_contract_versions[quote_ohlcv_snapshot_lineage_v3]",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_quote_snapshot_readiness.py::test_available_real_shaped_snapshots_report_available_without_raw_payload",
@@ -39079,6 +39169,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_symbol_normalization_boundary.py::test_canonical_identity_preserves_cn_venue_and_asset_type",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_symbol_normalization_boundary.py::test_canonical_stock_code_matches_provider_runtime_semantics[ 600519 -600519]",
         "domain": "market",
         "baseline": true
@@ -39107,6 +39202,16 @@
         "id": "tests/test_symbol_normalization_boundary.py::test_canonical_stock_code_matches_provider_runtime_semantics[hk00700-HK00700]",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_symbol_normalization_boundary.py::test_cn_index_requires_explicit_identity_when_bare_code_is_ambiguous",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_symbol_normalization_boundary.py::test_explicit_cn_identity_has_venue_bearing_transport_spelling",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_symbol_normalization_boundary.py::test_normalize_stock_code_matches_provider_runtime_semantics[ SH600519 -600519]",
@@ -39172,6 +39277,16 @@
         "id": "tests/test_symbol_normalization_boundary.py::test_provider_normalization_exports_delegate_to_pure_utils",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_symbol_normalization_boundary.py::test_us_index_and_equity_identities_remain_distinct",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_symbol_normalization_boundary.py::test_us_provider_suffix_is_not_a_listing_venue_or_generic_dot_rewrite",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_system_config_api.py::SystemConfigApiTestCase::test_factory_reset_endpoint_returns_service_payload",
@@ -39562,6 +39677,11 @@
         "id": "tests/test_task_queue_db_dedupe.py::DbBackedAnalysisTaskDedupeTestCase::test_completed_and_failed_durable_tasks_allow_new_run",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_task_queue_db_dedupe.py::DbBackedAnalysisTaskDedupeTestCase::test_dedupe_key_uses_complete_canonical_identity",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_task_queue_db_dedupe.py::DbBackedAnalysisTaskDedupeTestCase::test_owner_and_guest_global_scope_isolation",
@@ -41159,9 +41279,14 @@
         "baseline": true
       },
       {
-        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[000001-000001.SZ]",
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[000001.SZ-000001.SZ]",
         "domain": "provider_external_network",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[000300.SH-000300.SS]",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[512400-512400.SS]",
@@ -41184,6 +41309,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[AAPL.US-AAPL]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[BRK.B-BRK.B]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[SPX-^GSPC]",
         "domain": "provider_external_network",
         "baseline": true
@@ -41192,6 +41327,16 @@
         "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[hk00700-0700.HK]",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[sh000001-000001.SS]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_rejects_bare_cn_identity_without_unique_context",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_yfinance_symbol_boundary.py::test_yfinance_fetcher_convert_stock_code_delegates_to_pure_utility",
@@ -41511,6 +41656,8 @@
       "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_contract]",
+      "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[AAPL-US-AAPL-US-XNYS]",
+      "tests/test_quote_ohlcv_snapshot_lineage.py::test_ohlcv_snapshot_contract_normalizes_cross_market_identity[hk00700-HK-00700-HK-XHKG]",
       "tests/test_research_checklist_composer.py::test_composer_accepts_string_gaps_and_deduplicates_stable_ids",
       "tests/test_research_checklist_composer.py::test_composer_does_not_mutate_inputs",
       "tests/test_research_checklist_composer.py::test_composer_excludes_advice_and_raw_diagnostic_terms_from_output",
@@ -41536,7 +41683,8 @@
       "tests/test_user_alert_dry_run_summary.py::test_summary_counts_are_deterministic_and_sanitized",
       "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_missing_diagnostics_preserves_scanner_run_without_provenance",
       "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_dependency_manifests_do_not_add_external_worker_stack",
-      "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set"
+      "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set",
+      "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[000001-000001.SZ]"
     ],
     "networkTests": [],
     "knownBaselineFailures": [

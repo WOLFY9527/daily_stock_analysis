@@ -109,13 +109,31 @@ def _first_nested_mapping(value: Any, path: tuple[str, ...]) -> Dict[str, Any]:
     return current if isinstance(current, dict) else {}
 
 
-def _collect_payload_stock_codes(
+def _payload_structured_identity_candidates(
     raw_result: Any,
     persisted_report: Any,
     persisted_meta: Dict[str, Any],
-    *,
-    market: str | None = None,
-) -> List[str]:
+) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    containers = [raw_result, persisted_report, persisted_meta]
+    if isinstance(persisted_report, dict):
+        containers.append(_first_nested_mapping(persisted_report, ("details", "standard_report")))
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        instrument_identity = container.get("instrumentIdentity")
+        if isinstance(instrument_identity, dict):
+            candidates.append(instrument_identity)
+        if any(key in container for key in ("market", "venue", "assetType", "asset_type")):
+            candidates.append(container)
+    return candidates
+
+
+def _payload_stock_code_candidates(
+    raw_result: Any,
+    persisted_report: Any,
+    persisted_meta: Dict[str, Any],
+) -> List[Any]:
     candidates: List[Any] = [
         persisted_meta.get("stock_code"),
         persisted_meta.get("symbol"),
@@ -136,9 +154,20 @@ def _collect_payload_stock_codes(
             _first_nested_mapping(standard_report, ("summary_panel",)).get("ticker"),
             _first_nested_mapping(standard_report, ("summaryPanel",)).get("ticker"),
         ])
+    for identity in _payload_structured_identity_candidates(raw_result, persisted_report, persisted_meta):
+        candidates.append(identity.get("canonicalSymbol") or identity.get("canonical_symbol") or identity.get("symbol"))
+    return candidates
 
+
+def _collect_payload_stock_codes(
+    raw_result: Any,
+    persisted_report: Any,
+    persisted_meta: Dict[str, Any],
+    *,
+    market: str | None = None,
+) -> List[str]:
     result: List[str] = []
-    for candidate in candidates:
+    for candidate in _payload_stock_code_candidates(raw_result, persisted_report, persisted_meta):
         normalized = _normalize_history_stock_code(candidate, market=market)
         if normalized and normalized not in result:
             result.append(normalized)
@@ -201,15 +230,68 @@ def _payload_symbol_mismatches_record(
     )
     if not normalized_record_code:
         return False
-    return any(
-        candidate != normalized_record_code
-        for candidate in _collect_payload_stock_codes(
-            raw_result,
-            persisted_report,
-            persisted_meta,
-            market=record_market,
+    record_identity_key = record_identity.identity_key if record_identity is not None else None
+    for structured_identity in _payload_structured_identity_candidates(
+        raw_result,
+        persisted_report,
+        persisted_meta,
+    ):
+        structured_symbol = str(
+            structured_identity.get("canonicalSymbol")
+            or structured_identity.get("canonical_symbol")
+            or structured_identity.get("symbol")
+            or structured_identity.get("code")
+            or ""
+        ).strip()
+        if not structured_symbol:
+            continue
+        structured_market = str(structured_identity.get("market") or "").strip()
+        market_hint = normalize_symbol_market(structured_market) if structured_market else normalize_symbol_market(record_market)
+        if structured_market and market_hint is None:
+            return True
+        structured_asset_type = str(
+            structured_identity.get("assetType")
+            or structured_identity.get("asset_type")
+            or ""
+        ).strip().lower()
+        if structured_asset_type and structured_asset_type not in {"stock", "index"}:
+            return True
+        candidate_identity = parse_canonical_symbol(
+            structured_symbol,
+            market=market_hint,
+            venue=str(structured_identity.get("venue") or "").strip() or None,
+            asset_type=structured_asset_type or None,
         )
-    )
+        if (
+            candidate_identity is None
+            or candidate_identity.ambiguous
+            or candidate_identity.identity_key is None
+        ):
+            return True
+        if record_identity_key is not None:
+            if candidate_identity.identity_key != record_identity_key:
+                return True
+        elif candidate_identity.symbol != normalized_record_code:
+            return True
+    for candidate in _payload_stock_code_candidates(raw_result, persisted_report, persisted_meta):
+        raw_candidate = str(candidate or "").strip()
+        if not raw_candidate:
+            continue
+        candidate_identity = parse_canonical_symbol(
+            raw_candidate,
+            market=normalize_symbol_market(record_market),
+        )
+        if candidate_identity is not None and not candidate_identity.ambiguous and candidate_identity.identity_key is not None:
+            if record_identity_key is not None:
+                if candidate_identity.identity_key != record_identity_key:
+                    return True
+                continue
+            if candidate_identity.symbol != normalized_record_code:
+                return True
+            continue
+        if _normalize_history_stock_code(raw_candidate, market=record_market) != normalized_record_code:
+            return True
+    return False
 
 
 def _first_present(*values: Any) -> Any:

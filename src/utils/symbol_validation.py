@@ -89,7 +89,7 @@ def validate_consumer_symbol_precheck(
 
     return _result(
         raw,
-        identity.symbol,
+        identity.transport_symbol,
         identity.market,
         "unknown",
         "Symbol format is supported, but verification is not confirmed yet.",

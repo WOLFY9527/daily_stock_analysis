@@ -79,7 +79,13 @@ class CategoryProviderPlan:
 class AnalysisProviderPlan:
     symbol: str
     market: str
+    venue: str
+    asset_type: str
     categories: dict[DataCategory, CategoryProviderPlan]
+
+    @property
+    def identity_key(self) -> tuple[str, str, str, str]:
+        return (self.market, self.venue, self.symbol, self.asset_type)
 
 
 @dataclass
@@ -143,7 +149,7 @@ FAST_DECISION_TIMEOUT_SECONDS = {
 FAST_DECISION_PLAN_DEADLINE_SECONDS = 3.0
 
 
-def _canonical_plan_identity(symbol: str, market: Optional[str]) -> tuple[str, str]:
+def _canonical_plan_identity(symbol: str, market: Optional[str]) -> tuple[str, str, str, str]:
     market_hint = normalize_symbol_market(market)
     if market is not None and str(market).strip() and market_hint is None:
         raise ValueError("unsupported market")
@@ -155,7 +161,9 @@ def _canonical_plan_identity(symbol: str, market: Optional[str]) -> tuple[str, s
         raise ValueError("ambiguous symbol market")
     if market_hint is not None and identity.market != market_hint:
         raise ValueError("symbol market does not match the supplied market")
-    return identity.symbol, identity.market
+    if not identity.venue or not identity.asset_type:
+        raise ValueError("unsupported or unresolved symbol identity")
+    return identity.symbol, identity.market, identity.venue, identity.asset_type
 
 
 def _normalize_market(symbol: str, market: Optional[str]) -> str:
@@ -231,12 +239,14 @@ def build_analysis_provider_plan(
     market: Optional[str] = None,
     categories: Optional[Iterable[DataCategory | str]] = None,
 ) -> AnalysisProviderPlan:
-    canonical_symbol, resolved_market = _canonical_plan_identity(symbol, market)
+    canonical_symbol, resolved_market, resolved_venue, resolved_asset_type = _canonical_plan_identity(symbol, market)
     defaults = _category_defaults(resolved_market)
     selected = [DataCategory(item) for item in (categories or defaults.keys())]
     return AnalysisProviderPlan(
         symbol=canonical_symbol,
         market=resolved_market,
+        venue=resolved_venue,
+        asset_type=resolved_asset_type,
         categories={category: defaults[category] for category in selected if category in defaults},
     )
 
@@ -259,7 +269,13 @@ def build_fast_decision_provider_plan(
         )
         for category, category_plan in plan.categories.items()
     }
-    return AnalysisProviderPlan(symbol=plan.symbol, market=plan.market, categories=categories_with_fast_budget)
+    return AnalysisProviderPlan(
+        symbol=plan.symbol,
+        market=plan.market,
+        venue=plan.venue,
+        asset_type=plan.asset_type,
+        categories=categories_with_fast_budget,
+    )
 
 
 _FUNDAMENTAL_BUDGET_CATEGORIES = {
@@ -395,7 +411,13 @@ def apply_research_budget_profile(
         },
         "usageLedgerHints": usage_events,
     }
-    return AnalysisProviderPlan(symbol=plan.symbol, market=plan.market, categories=budgeted_categories), metadata
+    return AnalysisProviderPlan(
+        symbol=plan.symbol,
+        market=plan.market,
+        venue=plan.venue,
+        asset_type=plan.asset_type,
+        categories=budgeted_categories,
+    ), metadata
 
 
 class AnalysisProviderExecutor:
@@ -440,6 +462,7 @@ class AnalysisProviderExecutor:
                     deadline_at=None if category in required else deadline_at,
                     research_mode=research_mode,
                     market=plan.market,
+                    identity_key=plan.identity_key,
                     analysis_context="analysis_provider_executor",
                 ): category
                 for category, category_plan in plan.categories.items()
@@ -498,6 +521,7 @@ class AnalysisProviderExecutor:
         deadline_at: Optional[float] = None,
         research_mode: Optional[str] = None,
         market: Optional[str] = None,
+        identity_key: Optional[tuple[str, str, str, str]] = None,
         analysis_context: Optional[str] = None,
     ) -> ProviderCategoryResult:
         sufficient = sufficient or self._has_sufficient_data
@@ -556,6 +580,7 @@ class AnalysisProviderExecutor:
                     params=params or {},
                     call=providers[provider],
                     timeout_seconds=provider_timeout,
+                    identity_key=identity_key,
                 )
                 duration_ms = int((time.monotonic() - started) * 1000)
                 if not sufficient(data):
@@ -815,8 +840,9 @@ class AnalysisProviderExecutor:
         params: Mapping[str, Any],
         call: Callable[[], Any],
         timeout_seconds: Optional[float] = None,
+        identity_key: Optional[tuple[str, str, str, str]] = None,
     ) -> tuple[Any, bool]:
-        key = self._cache_key(provider, category_plan.category, symbol, params)
+        key = self._cache_key(provider, category_plan.category, symbol, params, identity_key=identity_key)
         cache_key_hash = hash_label_value(key)
         now = time.time()
         cache_hit_data: Optional[Any] = None
@@ -1034,9 +1060,19 @@ class AnalysisProviderExecutor:
         return True
 
     @staticmethod
-    def _cache_key(provider: str, category: DataCategory, symbol: str, params: Mapping[str, Any]) -> str:
+    def _cache_key(
+        provider: str,
+        category: DataCategory,
+        symbol: str,
+        params: Mapping[str, Any],
+        *,
+        identity_key: Optional[tuple[str, str, str, str]] = None,
+    ) -> str:
         normalized_params = "&".join(f"{key}={params[key]}" for key in sorted(params))
-        return f"{provider}:{category.value}:{str(symbol or '').strip().upper()}:{normalized_params}"
+        identity_suffix = ""
+        if identity_key is not None:
+            identity_suffix = ":" + ":".join(str(value).strip().upper() for value in identity_key)
+        return f"{provider}:{category.value}:{str(symbol or '').strip().upper()}{identity_suffix}:{normalized_params}"
 
     def hot_path_health_snapshot(self) -> dict[str, Any]:
         now = time.time()

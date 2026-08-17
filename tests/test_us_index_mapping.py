@@ -22,7 +22,7 @@ class TestIsUsIndexCode(unittest.TestCase):
 
     def test_known_indices(self):
         """Known US index codes should return True"""
-        indices = ['SPX', 'DJI', 'DJIA', 'IXIC', 'NASDAQ', 'NDX', 'VIX', 'RUT']
+        indices = ['SPX', 'SPX.US', 'DJI', 'DJIA', 'IXIC', 'NASDAQ', 'NDX', 'NDX.US', 'VIX', 'RUT']
         for code in indices:
             with self.subTest(code=code):
                 self.assertTrue(is_us_index_code(code), f"{code} should be recognized as US index")
@@ -144,6 +144,7 @@ class TestGetUsIndexYfSymbol(unittest.TestCase):
         symbol, name = get_us_index_yf_symbol('SPX')
         self.assertEqual(symbol, '^GSPC')
         self.assertEqual(name, '标普500指数')
+        self.assertEqual(get_us_index_yf_symbol('SPX.US'), ('^GSPC', '标普500指数'))
 
     def test_dji_mapping(self):
         """DJI should map to ^DJI"""
@@ -156,6 +157,7 @@ class TestGetUsIndexYfSymbol(unittest.TestCase):
         symbol, name = get_us_index_yf_symbol('NASDAQ')
         self.assertEqual(symbol, '^IXIC')
         self.assertEqual(name, '纳斯达克综合指数')
+        self.assertEqual(get_us_index_yf_symbol('NDX.US'), ('^NDX', '纳斯达克100指数'))
 
     def test_vix_mapping(self):
         """VIX should map to ^VIX"""

@@ -55,7 +55,7 @@ class DbBackedAnalysisTaskDedupeTestCase(unittest.TestCase):
 
         self.assertEqual(accepted_again, [])
         self.assertEqual(len(duplicates_again), 1)
-        self.assertEqual(duplicates_again[0].stock_code, "600519")
+        self.assertEqual(duplicates_again[0].stock_code, "600519.SH")
         self.assertEqual(duplicates_again[0].existing_task_id, accepted[0].task_id)
 
     def test_stale_active_durable_row_blocks_retry_until_terminalized(self) -> None:
@@ -172,6 +172,16 @@ class DbBackedAnalysisTaskDedupeTestCase(unittest.TestCase):
         self.assertEqual(accepted, [])
         self.assertEqual(len(duplicates), 1)
         self.assertEqual(duplicates[0].existing_task_id, "task-local")
+
+    def test_dedupe_key_uses_complete_canonical_identity(self) -> None:
+        self.assertEqual(
+            _dedupe_stock_code_key("600519", "user-a"),
+            _dedupe_stock_code_key("600519.SH", "user-a"),
+        )
+        self.assertNotEqual(
+            _dedupe_stock_code_key("000001.SH", "user-a"),
+            _dedupe_stock_code_key("000001.SZ", "user-a"),
+        )
 
 
 if __name__ == "__main__":

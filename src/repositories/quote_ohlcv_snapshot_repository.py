@@ -11,13 +11,16 @@ from src.services.quote_ohlcv_snapshot_lineage import (
     QuoteOhlcvSnapshotPersistenceResult,
     QuoteOhlcvSnapshotRecord,
     SnapshotLineageError,
+    migrate_snapshot_storage_payload,
     snapshot_from_storage_payload,
     validate_snapshot_lineage,
 )
+from src.services.historical_market_data_foundation import resolve_historical_symbol_identity
+from src.utils.symbol_normalization import canonical_symbol_storage_values
 from src.storage import DatabaseManager, QuoteOhlcvSnapshotRow
 
 
-SCHEMA_VERSION = "quote_ohlcv_snapshot_lineage_v1"
+SCHEMA_VERSION = "quote_ohlcv_snapshot_lineage_v2_read_migrated"
 
 
 class QuoteOhlcvSnapshotRepository:
@@ -79,31 +82,64 @@ class QuoteOhlcvSnapshotRepository:
         symbol: str,
         market: str,
         snapshot_kind: str,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> QuoteOhlcvSnapshotRecord | None:
+        identity = resolve_historical_symbol_identity(
+            symbol=symbol,
+            market=market,
+            venue=venue,
+            asset_type=asset_type,
+        )
+        expected_symbol = identity["canonical_symbol"]
+        expected_market = identity["market"]
+        expected_venue = venue or identity["venue"]
+        expected_asset_type = asset_type or identity["asset_type"]
+        storage_symbols = tuple(
+            dict.fromkeys(
+                canonical_symbol_storage_values(
+                    symbol,
+                    market=expected_market,
+                    venue=expected_venue,
+                    asset_type=expected_asset_type,
+                )
+                + (expected_symbol,)
+            )
+        )
         with self.db.get_session() as session:
-            row = (
+            rows = (
                 session.execute(
                     select(QuoteOhlcvSnapshotRow)
                     .where(
-                        QuoteOhlcvSnapshotRow.symbol == symbol,
-                        QuoteOhlcvSnapshotRow.market == market,
+                        QuoteOhlcvSnapshotRow.symbol.in_(storage_symbols),
+                        QuoteOhlcvSnapshotRow.market == expected_market,
                         QuoteOhlcvSnapshotRow.snapshot_kind == snapshot_kind,
                     )
                     .order_by(
                         desc(QuoteOhlcvSnapshotRow.retrieval_time),
                         desc(QuoteOhlcvSnapshotRow.created_at),
                     )
-                    .limit(1)
                 )
                 .scalars()
-                .first()
+                .all()
             )
-            return _record_from_row(row) if row is not None else None
+            for row in rows:
+                record = _record_from_row(row)
+                record_identity = record.instrument_identity
+                if (
+                    str(record_identity.get("canonicalSymbol")) == expected_symbol
+                    and str(record_identity.get("market")) == expected_market
+                    and str(record_identity.get("venue")) == expected_venue
+                    and str(record_identity.get("assetType")) == expected_asset_type
+                ):
+                    return record
+            return None
 
     def migration_report(self) -> dict[str, Any]:
         return {
             "schemaVersion": SCHEMA_VERSION,
             "contractVersion": QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION,
+            "legacyReadMigration": "quote_ohlcv_snapshot_lineage_v1_to_v2",
             "storageOwner": "DatabaseManager",
             "schemaLifecycle": "SQLAlchemy Base.metadata.create_all",
             "table": QuoteOhlcvSnapshotRow.__tablename__,
@@ -111,12 +147,13 @@ class QuoteOhlcvSnapshotRepository:
 
 
 def _record_from_row(row: QuoteOhlcvSnapshotRow) -> QuoteOhlcvSnapshotRecord:
-    payload = _json_mapping(row.payload_json)
+    raw_payload = _json_mapping(row.payload_json)
+    raw_fingerprint = _payload_fingerprint(_canonical_payload_json(raw_payload))
+    if str(row.payload_fingerprint) != raw_fingerprint:
+        raise SnapshotLineageError(f"quote/OHLCV snapshot payload fingerprint mismatch: {row.snapshot_id}")
+    payload = migrate_snapshot_storage_payload(raw_payload)
     record = snapshot_from_storage_payload(payload)
     validate_snapshot_lineage(record)
-    expected_fingerprint = _payload_fingerprint(_canonical_payload_json(record.storage_payload()))
-    if str(row.payload_fingerprint) != expected_fingerprint:
-        raise SnapshotLineageError(f"quote/OHLCV snapshot payload fingerprint mismatch: {row.snapshot_id}")
     if record.snapshot_id != row.snapshot_id:
         raise SnapshotLineageError(f"quote/OHLCV snapshot identity mismatch: {row.snapshot_id}")
     return record

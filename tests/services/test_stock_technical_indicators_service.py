@@ -103,6 +103,16 @@ def test_sufficient_adjusted_history_preserves_lineage_and_finite_values() -> No
     assert any(value != 0.0 for value in values)
 
 
+@pytest.mark.parametrize(
+    ("requested_symbol", "expected_transport"),
+    [("000001.SH", "000001.SH"), ("000001.SZ", "000001.SZ")],
+)
+def test_explicit_cn_identity_survives_history_dispatch(requested_symbol, expected_transport) -> None:
+    history = _HistoryService(_history(_bars(max(INDICATOR_MINIMUM_BARS.values()) + 1)))
+    StockTechnicalIndicatorsService(history_service=history).get_technical_indicators(requested_symbol)
+    assert history.calls[0]["stock_code"] == expected_transport
+
+
 def test_partial_history_exposes_only_qualified_indicators() -> None:
     payload, _ = _calculate(_bars(20))
 

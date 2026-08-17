@@ -55,15 +55,20 @@ API or consumer presentation contracts.
 ### Canonical Symbol Identity
 
 `src.utils.symbol_normalization.parse_canonical_symbol` is the single authority
-for supported CN, HK, and US symbol identity. It returns one canonical symbol
-and market pair before a symbol crosses provider, analysis, import, resolver,
-API, route, or consumer boundaries. Provider adapters may translate that
-canonical identity into a provider-specific spelling only at their own
+for supported CN, HK, and US instrument identity. It returns canonical symbol,
+market, venue, and asset type when those dimensions are knowable, and marks
+bare unresolved identities as ambiguous instead of guessing. That structured
+identity is established before a symbol crosses provider, analysis, import,
+resolver, API, route, or consumer boundaries. Provider adapters may translate
+that canonical identity into a provider-specific spelling only at their own
 boundary; they do not redefine user-facing identity.
 
 Explicit CN exchange forms, `0700.HK`, `HK00700`, and supported US symbols
 must retain their canonical market identity and display spelling through every
-consumer. Ambiguous or malformed input remains rejected. Consumers must not
+consumer. US ticker-only identities use the explicit `UNRESOLVED` venue state;
+the trading-calendar representative `XNYS` is not listing-venue identity.
+The `.US` provider suffix resolves to the same canonical symbol, while dot
+symbols such as `BRK.B` remain intact. Ambiguous or malformed input remains rejected. Consumers must not
 introduce local aliases, regex parsers, inferred-market defaults, or a raw
 symbol fallback after canonical resolution fails. Web consumers use the server
 validation response's canonical symbol and market rather than deriving one

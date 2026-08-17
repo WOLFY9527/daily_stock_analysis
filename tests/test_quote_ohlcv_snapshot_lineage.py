@@ -17,6 +17,7 @@ from src.services.quote_ohlcv_snapshot_lineage import (
     SnapshotLineageError,
     build_ohlcv_snapshot_from_bar,
     build_quote_snapshot_from_readiness,
+    migrate_snapshot_storage_payload,
 )
 from src.services.quote_snapshot_readiness import QuoteSnapshot
 from src.sqlite_foreign_keys import create_engine_with_sqlite_foreign_keys
@@ -80,6 +81,7 @@ def test_quote_snapshot_contract_persists_explicit_lineage_without_provider_orde
     assert payload["symbol"] == "AAPL"
     assert payload["market"] == "US"
     assert payload["instrumentIdentity"]["canonicalSymbol"] == "AAPL"
+    assert payload["instrumentIdentity"]["venue"] == "UNRESOLVED"
     assert payload["quoteAsOf"] == "2026-07-06T20:00:00+00:00"
     assert payload["retrievalTime"] == "2026-07-06T20:01:00+00:00"
     assert payload["sourceId"] == "local_quote_snapshot_cache"
@@ -175,9 +177,10 @@ def test_restart_persistence_reads_database_manager_owned_snapshot(tmp_path) -> 
 @pytest.mark.parametrize(
     ("symbol", "market", "expected_symbol", "expected_market", "expected_venue"),
     [
-        ("AAPL", "US", "AAPL", "US", "XNYS"),
+        ("AAPL", "US", "AAPL", "US", "UNRESOLVED"),
         ("SH600519", "CN", "600519", "CN", "XSHG"),
-        ("hk00700", "HK", "00700", "HK", "XHKG"),
+        ("sh000300", "CN", "000300", "CN", "XSHG"),
+        ("hk00700", "HK", "HK00700", "HK", "XHKG"),
     ],
 )
 def test_ohlcv_snapshot_contract_normalizes_cross_market_identity(
@@ -223,13 +226,208 @@ def test_ohlcv_snapshot_contract_normalizes_cross_market_identity(
         "canonicalSymbol": expected_symbol,
         "market": expected_market,
         "venue": expected_venue,
+        "assetType": "index" if expected_symbol == "000300" else "stock",
     }
+
+
+def test_hk_canonical_identity_is_not_stripped_in_snapshot_lineage(tmp_path) -> None:
+    spine = QuoteOhlcvSnapshotSpine(_repo(tmp_path))
+    snapshot = build_ohlcv_snapshot_from_bar(
+        symbol="HK00700",
+        market="HK",
+        bar=HistoricalOhlcvBar(
+            date=date(2026, 7, 6),
+            open=10.0,
+            high=11.0,
+            low=9.5,
+            close=10.5,
+            volume=1000.0,
+            adjusted_close=10.4,
+        ),
+        retrieval_time=_dt("2026-07-06T21:00:00Z"),
+        source_id="local_ohlcv",
+        authority_state="advisory_only",
+        display_state="limited",
+        freshness_state="fresh",
+        coverage_state="available",
+        lineage_ref="local-ohlcv:HK:HK00700:2026-07-06",
+    )
+
+    persisted = spine.persist_snapshot(snapshot)
+    loaded = spine.get_snapshot(persisted.snapshot_id)
+    assert loaded is not None
+    assert loaded.instrument_identity == {
+        "canonicalSymbol": "HK00700",
+        "market": "HK",
+        "venue": "XHKG",
+        "assetType": "stock",
+    }
+    payload = loaded.as_read_model()
     assert payload["barTradeDateTime"] == "2026-07-06"
     assert payload["retrievalTime"] == "2026-07-06T21:00:00+00:00"
     assert payload["sourceId"] == "local_ohlcv"
     assert payload["sourceType"] == "cache_snapshot"
     assert payload["ohlcvBasis"] == "adjusted"
     assert payload["missingFieldSummary"] == []
+
+
+def test_legacy_v1_hk_snapshot_is_read_migrated_without_changing_row_identity(tmp_path) -> None:
+    db = _db(tmp_path)
+    repo = QuoteOhlcvSnapshotRepository(db)
+    current = build_ohlcv_snapshot_from_bar(
+        symbol="HK00700",
+        market="HK",
+        bar=HistoricalOhlcvBar(
+            date=date(2026, 7, 6),
+            open=10.0,
+            high=11.0,
+            low=9.5,
+            close=10.5,
+            volume=1000.0,
+            adjusted_close=10.4,
+        ),
+        retrieval_time=_dt("2026-07-06T21:00:00Z"),
+        source_id="local_ohlcv",
+        authority_state="advisory_only",
+        display_state="limited",
+        freshness_state="fresh",
+        coverage_state="available",
+        lineage_ref="legacy:HK:00700:2026-07-06",
+    )
+    legacy_id = "legacy-qohlcv-hk-00700"
+    payload = current.storage_payload()
+    payload["contractVersion"] = "quote_ohlcv_snapshot_lineage_v1"
+    payload["snapshotId"] = legacy_id
+    payload["symbol"] = "00700"
+    payload["instrumentIdentity"] = {"canonicalSymbol": "00700", "market": "HK", "venue": "XHKG"}
+    payload_json = json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    fingerprint = __import__("hashlib").sha256(payload_json.encode("utf-8")).hexdigest()
+    with db.session_scope() as session:
+        session.add(
+            QuoteOhlcvSnapshotRow(
+                snapshot_id=legacy_id,
+                snapshot_kind="ohlcv",
+                symbol="00700",
+                market="HK",
+                quote_as_of=None,
+                bar_trade_date_time=payload["barTradeDateTime"],
+                retrieval_time=payload["retrievalTime"],
+                source_id=payload["sourceId"],
+                source_type=payload["sourceType"],
+                authority_state=payload["authorityState"],
+                display_state=payload["displayState"],
+                freshness_state=payload["freshnessState"],
+                coverage_state=payload["coverageState"],
+                ohlcv_basis=payload["ohlcvBasis"],
+                lineage_ref=payload["lineageRef"],
+                payload_json=payload_json,
+                payload_fingerprint=fingerprint,
+            )
+        )
+
+    loaded = repo.get_snapshot(legacy_id)
+    assert loaded is not None
+    assert loaded.snapshot_id == legacy_id
+    assert loaded.contract_version == QUOTE_OHLCV_SNAPSHOT_CONTRACT_VERSION
+    assert loaded.instrument_identity == {
+        "canonicalSymbol": "HK00700",
+        "market": "HK",
+        "venue": "XHKG",
+        "assetType": "stock",
+    }
+    assert repo.latest_for_symbol(symbol="HK00700", market="HK", snapshot_kind="ohlcv") is not None
+
+    legacy_us = dict(payload)
+    legacy_us["contractVersion"] = "quote_ohlcv_snapshot_lineage_v1"
+    legacy_us["symbol"] = "AAPL"
+    legacy_us["market"] = "US"
+    legacy_us["instrumentIdentity"] = {"canonicalSymbol": "AAPL", "market": "US", "venue": "XNYS", "assetType": "stock"}
+    migrated_us = migrate_snapshot_storage_payload(legacy_us)
+    assert migrated_us["instrumentIdentity"] == {
+        "canonicalSymbol": "AAPL",
+        "market": "US",
+        "venue": "UNRESOLVED",
+        "assetType": "stock",
+    }
+
+
+@pytest.mark.parametrize("contract_version", ["", "quote_ohlcv_snapshot_lineage_v3"])
+def test_snapshot_migration_rejects_unknown_contract_versions(contract_version) -> None:
+    payload = {
+        "contractVersion": contract_version,
+        "symbol": "HK00700",
+        "market": "HK",
+        "instrumentIdentity": {
+            "canonicalSymbol": "HK00700",
+            "market": "HK",
+            "venue": "XHKG",
+            "assetType": "stock",
+        },
+    }
+
+    with pytest.raises(SnapshotLineageError, match="unsupported quote/OHLCV snapshot contract version"):
+        migrate_snapshot_storage_payload(payload)
+
+
+def test_latest_snapshot_rejects_contradictory_identity_and_keeps_cn_index_storage_aliases(tmp_path) -> None:
+    db = _db(tmp_path)
+    repo = QuoteOhlcvSnapshotRepository(db)
+    snapshot = build_ohlcv_snapshot_from_bar(
+        symbol="sh000300",
+        market="CN",
+        bar=HistoricalOhlcvBar(
+            date=date(2026, 7, 6),
+            open=10.0,
+            high=11.0,
+            low=9.5,
+            close=10.5,
+            volume=1000.0,
+        ),
+        retrieval_time=_dt("2026-07-06T21:00:00Z"),
+        source_id="local_ohlcv",
+        authority_state="advisory_only",
+        display_state="limited",
+        freshness_state="fresh",
+        coverage_state="available",
+        lineage_ref="local-ohlcv:CN:000300:2026-07-06",
+    )
+    stock_snapshot = build_ohlcv_snapshot_from_bar(
+        symbol="000001.SZ",
+        market="CN",
+        bar=HistoricalOhlcvBar(
+            date=date(2026, 7, 6),
+            open=10.0,
+            high=11.0,
+            low=9.5,
+            close=10.5,
+            volume=1000.0,
+        ),
+        retrieval_time=_dt("2026-07-06T21:00:00Z"),
+        source_id="local_ohlcv",
+        authority_state="advisory_only",
+        display_state="limited",
+        freshness_state="fresh",
+        coverage_state="available",
+        lineage_ref="local-ohlcv:CN:000001:2026-07-06",
+    )
+    assert snapshot.snapshot_id != stock_snapshot.snapshot_id
+    repo.upsert_snapshot(snapshot)
+
+    assert repo.latest_for_symbol(
+        symbol="000300",
+        market="CN",
+        snapshot_kind="ohlcv",
+        venue="XSHG",
+        asset_type="index",
+    ) is not None
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        repo.latest_for_symbol(
+            symbol="000300.SH",
+            market="CN",
+            snapshot_kind="ohlcv",
+            venue="XSHE",
+            asset_type="index",
+        )
 
 
 @pytest.mark.parametrize(

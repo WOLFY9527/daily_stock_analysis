@@ -68,8 +68,8 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/audits/t570-official-macro-provider-order-decision.md](../audits/t570-official-macro-provider-order-decision.md) | temporary_evidence | temporary | yes | Official macro provider-order decision evidence | 0e6766d8d36b |
 | [docs/audits/t575-backend-production-simplification-audit.md](../audits/t575-backend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Backend simplification evidence and T612-T629 roadmap | cd1f8bc827a8 |
 | [docs/audits/t576-frontend-production-simplification-audit.md](../audits/t576-frontend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Frontend simplification evidence and T600-T611 roadmap | 9081512345ee |
-| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 0d9cfcb782ec |
-| [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | be8438c651f5 |
+| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 2d741a3d1ac4 |
+| [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | a5740a214181 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | daafda4c2ccb |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 297cbe3da966 |

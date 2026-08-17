@@ -76,7 +76,7 @@ from src.utils.data_processing import (
     extract_fundamental_detail_fields,
 )
 from src.utils.security import sanitize_message
-from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code, parse_canonical_symbol
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +229,7 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     if identity:
         if identity.ambiguous:
             raise _invalid_analysis_input_error()
-        return identity.symbol
+        return identity.transport_symbol
 
     if _is_obviously_invalid_analysis_input(text):
         raise _invalid_analysis_input_error()
@@ -238,7 +238,7 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     if resolved:
         resolved_identity = parse_canonical_symbol(resolved)
         if resolved_identity and not resolved_identity.ambiguous:
-            return resolved_identity.symbol
+            return resolved_identity.transport_symbol
 
     raise _invalid_analysis_input_error()
 
@@ -365,6 +365,13 @@ def _quota_idempotency_part(value: object, *, default: str = "none") -> str:
     return (sanitized or default)[:128]
 
 
+def _canonical_analysis_identity_key(stock_code: str) -> tuple[str, str, str, str]:
+    identity = parse_canonical_symbol(stock_code)
+    if identity is None or identity.identity_key is None:
+        raise _invalid_analysis_input_error()
+    return identity.identity_key
+
+
 def _analysis_sync_quota_idempotency_key(
     *,
     owner_id: str,
@@ -380,7 +387,7 @@ def _analysis_sync_quota_idempotency_key(
         f"route_key:{_QUOTA_ANALYSIS_SYNC_ROUTE_KEY}",
         "mode:sync",
         f"owner:{_quota_idempotency_part(owner_id)}",
-        f"stock:{_quota_idempotency_part(canonical_stock_code(stock_code))}",
+        f"stock:{_quota_idempotency_part(':'.join(_canonical_analysis_identity_key(stock_code)))}",
         f"report_type:{_quota_idempotency_part(getattr(request, 'report_type', None), default='detailed')}",
         f"force_refresh:{1 if bool(getattr(request, 'force_refresh', False)) else 0}",
         f"research_mode:{_quota_idempotency_part(research_mode_value)}",
@@ -737,7 +744,7 @@ def trigger_analysis(
             }
         )
 
-    # Normalize and de-duplicate inputs while preserving compatibility.
+    # De-duplicate only identical canonical instruments, not their display symbols.
     resolved = [_resolve_and_normalize_input(c) for c in stock_codes]
     
     seen = set()
@@ -745,10 +752,9 @@ def trigger_analysis(
     for code in resolved:
         if not code:
             continue
-        # Use normalize_stock_code to ensure '600519' and '600519.SH' are merged
-        norm = normalize_stock_code(code)
-        if norm not in seen:
-            seen.add(norm)
+        identity_key = _canonical_analysis_identity_key(code)
+        if identity_key not in seen:
+            seen.add(identity_key)
             unique_codes.append(code)
     
     stock_codes = unique_codes
