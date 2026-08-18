@@ -278,6 +278,80 @@ def test_scheduler_observes_failed_analysis_result() -> None:
     assert scheduler.failed_task_labels == ("analysis",)
 
 
+@pytest.mark.parametrize(
+    ("detail", "expected_status", "expected_reason"),
+    [
+        ({"status": "failed"}, AnalysisExecutionStatus.FAILED, "scanner_run_failed"),
+        ({"status": "skipped"}, AnalysisExecutionStatus.SKIPPED, "non_trading_day"),
+        ({"status": "completed"}, AnalysisExecutionStatus.SUCCESS, None),
+        ({"status": "empty"}, AnalysisExecutionStatus.SUCCESS, None),
+    ],
+)
+def test_scheduled_scanner_statuses_map_to_typed_execution_results(
+    detail: dict[str, str],
+    expected_status: AnalysisExecutionStatus,
+    expected_reason: str | None,
+) -> None:
+    result = runtime_main._scheduled_scanner_execution_result(detail)
+
+    assert result.status is expected_status
+    assert result.reason == expected_reason
+
+
+def test_unknown_scheduled_scanner_status_is_not_success() -> None:
+    result = runtime_main._scheduled_scanner_execution_result({"status": "unexpected"})
+
+    assert result.is_failed
+    assert result.reason == "scanner_unknown_terminal_status"
+
+
+@pytest.mark.parametrize(
+    ("refresh_result", "expected_status", "expected_reason", "expected_failed_count"),
+    [
+        ({"ok": False, "failed_count": 2}, AnalysisExecutionStatus.FAILED, "watchlist_score_refresh_failed", 2),
+        ({"ok": True, "failed_count": 0}, AnalysisExecutionStatus.SUCCESS, None, 0),
+        ({"ok": True, "updated_count": 0, "skipped_count": 0}, AnalysisExecutionStatus.SUCCESS, None, 0),
+    ],
+)
+def test_scheduled_watchlist_results_map_to_typed_execution_results(
+    refresh_result: dict[str, object],
+    expected_status: AnalysisExecutionStatus,
+    expected_reason: str | None,
+    expected_failed_count: int,
+) -> None:
+    result = runtime_main._scheduled_watchlist_execution_result(refresh_result)
+
+    assert result.status is expected_status
+    assert result.reason == expected_reason
+    assert result.failed_count == expected_failed_count
+
+
+def test_scheduler_typed_skip_and_success_do_not_record_failure() -> None:
+    from src.scheduler import Scheduler
+
+    scheduler = Scheduler.__new__(Scheduler)
+    scheduler._failed_task_labels = []
+
+    skipped = AnalysisExecutionResult.skipped("weekend")
+    success = AnalysisExecutionResult.success()
+
+    assert scheduler._safe_run_task(lambda: skipped, "watchlist-score-refresh-us") is skipped
+    assert scheduler._safe_run_task(lambda: success, "market-scanner") is success
+    assert scheduler.failed_task_labels == ()
+
+
+def test_scheduler_does_not_interpret_arbitrary_domain_dicts() -> None:
+    from src.scheduler import Scheduler
+
+    scheduler = Scheduler.__new__(Scheduler)
+    scheduler._failed_task_labels = []
+
+    result = scheduler._safe_run_task(lambda: {"ok": False, "status": "failed"}, "market-scanner")
+
+    assert result == {"ok": False, "status": "failed"}
+    assert scheduler.failed_task_labels == ()
+
+
 def test_bot_batch_consumes_typed_analysis_result(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8271,
-      "sha256": "66361614b3587e063870d4383558e19bd8effb5900f21a5ee7c2033127021afb"
+      "count": 8285,
+      "sha256": "096bbca687671114e3f3b11999f5638a0f01d643b943c043aba41339dc411b1b"
     },
     "tests": [
       {
@@ -11079,12 +11079,62 @@
         "baseline": false
       },
       {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail0-failed-scanner_run_failed]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail1-skipped-non_trading_day]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail2-success-None]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail3-success-None]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result0-failed-watchlist_score_refresh_failed-2]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result1-success-None-0]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result2-success-None-0]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduler_does_not_interpret_arbitrary_domain_dicts",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_analysis_execution_contract.py::test_scheduler_observes_failed_analysis_result",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
+        "id": "tests/test_analysis_execution_contract.py::test_scheduler_typed_skip_and_success_do_not_record_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_analysis_execution_contract.py::test_service_stays_alive_but_reports_startup_analysis_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_analysis_execution_contract.py::test_unknown_scheduled_scanner_status_is_not_success",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -21240,6 +21290,26 @@
       },
       {
         "id": "tests/test_main_runtime_startup.py::test_main_returns_one_and_skips_bots_on_api_startup_failure[serve]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_scheduler_exits_one_when_scanner_task_returns_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_scheduler_exits_one_when_watchlist_refresh_fails",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_scheduler_exits_zero_for_scanner_skip",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_scheduler_skips_watchlist_refresh_on_weekend",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

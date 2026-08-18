@@ -53,6 +53,31 @@ def _analysis_exit_code(result: AnalysisExecutionResult) -> int:
     return 1 if result.is_failed else 0
 
 
+_SCANNER_SCHEDULED_SUCCESS_STATUSES = frozenset({"completed", "empty"})
+
+
+def _scheduled_scanner_execution_result(detail: dict[str, Any]) -> AnalysisExecutionResult:
+    """Map the scanner's terminal run status into the scheduler contract."""
+    status = str(detail.get("status") or "").strip().lower()
+    if status == "skipped":
+        return AnalysisExecutionResult.skipped("non_trading_day")
+    if status in _SCANNER_SCHEDULED_SUCCESS_STATUSES:
+        return AnalysisExecutionResult.success()
+    if status == "failed":
+        return AnalysisExecutionResult.failed("scanner_run_failed")
+    return AnalysisExecutionResult.failed("scanner_unknown_terminal_status")
+
+
+def _scheduled_watchlist_execution_result(result: dict[str, Any]) -> AnalysisExecutionResult:
+    """Map the watchlist refresh aggregate into the scheduler contract."""
+    if not result.get("ok"):
+        return AnalysisExecutionResult.failed(
+            "watchlist_score_refresh_failed",
+            failed_count=int(result.get("failed_count") or 0),
+        )
+    return AnalysisExecutionResult.success()
+
+
 def parse_arguments() -> argparse.Namespace:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
@@ -903,6 +928,7 @@ def main() -> int:
                         result.get("watchlist_date"),
                         result.get("shortlist_size"),
                     )
+                    return _scheduled_scanner_execution_result(result)
 
                 scheduler.add_daily_task(
                     task=scheduled_scanner_task,
@@ -924,7 +950,7 @@ def main() -> int:
                                 "WatchlistScoreRefreshSkipped market=%s reason=weekend",
                                 market.upper(),
                             )
-                            return
+                            return AnalysisExecutionResult.skipped("weekend")
                         logger.info("WatchlistScoreRefreshStarted market=%s", market.upper())
                         result = watchlist_refresh.refresh_scores_for_all_users(
                             market=market,
@@ -946,6 +972,7 @@ def main() -> int:
                                 result.get("skipped_count"),
                                 result.get("failed_count"),
                             )
+                        return _scheduled_watchlist_execution_result(result)
 
                     return scheduled_watchlist_score_task
 

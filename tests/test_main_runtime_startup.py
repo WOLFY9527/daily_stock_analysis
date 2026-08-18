@@ -3,11 +3,13 @@ from __future__ import annotations
 import threading
 import time
 import sys
+from datetime import datetime as real_datetime
 from types import SimpleNamespace
 
 import main as runtime_main
 import pytest
 from src.runtime.settings import SettingSource
+from src.scheduler import Scheduler as RealScheduler
 
 
 class _FakeUvicornConfig:
@@ -78,6 +80,30 @@ class _ReturningScheduler:
 
     def run(self) -> None:
         return None
+
+
+class _ExecutingScheduler:
+    def __init__(self, schedule_time: str) -> None:
+        self.schedule_time = schedule_time
+        self._tasks: list[tuple[object, str, bool]] = []
+        self._failed_task_labels: list[str] = []
+
+    def add_daily_task(self, *, task: object, run_immediately: bool, label: str, **_kwargs: object) -> None:
+        self._tasks.append((task, label, run_immediately))
+        if run_immediately:
+            self._run_task(task, label)
+
+    def _run_task(self, task: object, label: str) -> object:
+        return RealScheduler._safe_run_task(self, task, label)  # type: ignore[arg-type]
+
+    def run(self) -> None:
+        for task, label, run_immediately in self._tasks:
+            if not run_immediately:
+                self._run_task(task, label)
+
+    @property
+    def failed_task_labels(self) -> tuple[str, ...]:
+        return tuple(self._failed_task_labels)
 
 
 def _args(**overrides: object) -> SimpleNamespace:
@@ -475,3 +501,134 @@ def test_serve_only_fails_closed_when_api_start_is_suppressed(monkeypatch) -> No
     monkeypatch.setattr(runtime_main.time, "sleep", lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt()))
 
     assert runtime_main.main() == 1
+
+
+def test_main_scheduler_exits_one_when_scanner_task_returns_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(serve=True, scanner_schedule=True)
+    config = _config(
+        scanner_schedule_enabled=True,
+        scanner_profile="cn_preopen_v1",
+        scanner_schedule_time="08:40",
+        scanner_schedule_run_immediately=False,
+        watchlist_score_refresh_enabled=False,
+    )
+    _patch_main(monkeypatch, args=args, config=config)
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: _RecordingHandle())
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: None)
+    monkeypatch.setattr("src.scheduler.Scheduler", _ExecutingScheduler)
+
+    class ScannerOps:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def run_scheduled_scan(self, **_kwargs: object) -> dict[str, str]:
+            return {"status": "failed"}
+
+    monkeypatch.setattr("src.services.market_scanner_ops_service.MarketScannerOperationsService", ScannerOps)
+
+    assert runtime_main.main() == 1
+
+
+def test_main_scheduler_exits_zero_for_scanner_skip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(serve=True, scanner_schedule=True)
+    config = _config(
+        scanner_schedule_enabled=True,
+        scanner_profile="cn_preopen_v1",
+        scanner_schedule_time="08:40",
+        scanner_schedule_run_immediately=False,
+        watchlist_score_refresh_enabled=False,
+    )
+    _patch_main(monkeypatch, args=args, config=config)
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: _RecordingHandle())
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: None)
+    monkeypatch.setattr("src.scheduler.Scheduler", _ExecutingScheduler)
+
+    class ScannerOps:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def run_scheduled_scan(self, **_kwargs: object) -> dict[str, str]:
+            return {"status": "skipped"}
+
+    monkeypatch.setattr("src.services.market_scanner_ops_service.MarketScannerOperationsService", ScannerOps)
+
+    assert runtime_main.main() == 0
+
+
+def test_main_scheduler_exits_one_when_watchlist_refresh_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(serve=True, scanner_schedule=True, force_run=True)
+    config = _config(
+        scanner_schedule_enabled=True,
+        scanner_profile="cn_preopen_v1",
+        scanner_schedule_time="08:40",
+        scanner_schedule_run_immediately=False,
+        watchlist_score_refresh_enabled=True,
+        watchlist_score_refresh_us_time="08:45",
+        watchlist_score_refresh_cn_time="09:00",
+        watchlist_score_refresh_hk_time="09:00",
+        watchlist_score_refresh_max_symbols=250,
+    )
+    _patch_main(monkeypatch, args=args, config=config)
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: _RecordingHandle())
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: None)
+    monkeypatch.setattr("src.scheduler.Scheduler", _ExecutingScheduler)
+
+    class ScannerOps:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def run_scheduled_scan(self, **_kwargs: object) -> dict[str, str]:
+            return {"status": "completed"}
+
+    class WatchlistService:
+        def refresh_scores_for_all_users(self, **_kwargs: object) -> dict[str, object]:
+            return {"ok": False, "failed_count": 1, "updated_count": 0, "skipped_count": 0}
+
+    monkeypatch.setattr("src.services.market_scanner_ops_service.MarketScannerOperationsService", ScannerOps)
+    monkeypatch.setattr("src.services.watchlist_service.WatchlistService", WatchlistService)
+
+    assert runtime_main.main() == 1
+
+
+def test_main_scheduler_skips_watchlist_refresh_on_weekend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(serve=True, scanner_schedule=True)
+    config = _config(
+        scanner_schedule_enabled=True,
+        scanner_profile="cn_preopen_v1",
+        scanner_schedule_time="08:40",
+        scanner_schedule_run_immediately=False,
+        watchlist_score_refresh_enabled=True,
+        watchlist_score_refresh_us_time="08:45",
+        watchlist_score_refresh_cn_time="09:00",
+        watchlist_score_refresh_hk_time="09:00",
+        watchlist_score_refresh_max_symbols=250,
+    )
+    _patch_main(monkeypatch, args=args, config=config)
+    monkeypatch.setattr(runtime_main, "datetime", type("WeekendClock", (), {"now": classmethod(lambda cls: real_datetime(2026, 8, 22))}))
+    monkeypatch.setattr(runtime_main, "start_api_server", lambda **_kwargs: _RecordingHandle())
+    monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda _config: None)
+    monkeypatch.setattr("src.scheduler.Scheduler", _ExecutingScheduler)
+
+    class ScannerOps:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def run_scheduled_scan(self, **_kwargs: object) -> dict[str, str]:
+            return {"status": "completed"}
+
+    class WatchlistService:
+        def refresh_scores_for_all_users(self, **_kwargs: object) -> dict[str, object]:
+            raise AssertionError("weekend refresh must be skipped")
+
+    monkeypatch.setattr("src.services.market_scanner_ops_service.MarketScannerOperationsService", ScannerOps)
+    monkeypatch.setattr("src.services.watchlist_service.WatchlistService", WatchlistService)
+
+    assert runtime_main.main() == 0
