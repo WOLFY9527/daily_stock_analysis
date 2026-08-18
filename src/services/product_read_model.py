@@ -161,15 +161,28 @@ def product_read_model_from_historical_foundation(
         stale_after_days=stale_after_days,
         reference_date=as_of,
     )
+    if _safe_text(freshness.get("freshnessState")).lower() == "unknown":
+        # A readable historical row may lack a source cutoff. Keep that fact
+        # visible without turning missing freshness evidence into a hard data
+        # rejection at this presentation boundary.
+        freshness_state = "unknown"
     quality_state = normalize_product_state(freshness.get("qualityState"))
     if str(freshness.get("qualityState") or "").lower() == "usable":
         quality_state = "available"
+
+    freshness_aggregate_state = freshness_state
+    if freshness_state == "unknown" and coverage_state != "no_evidence" and quality_state not in {
+        "no_evidence",
+        "unavailable",
+        "rejected",
+    }:
+        freshness_aggregate_state = "partial"
 
     aggregate = aggregate_product_readiness(
         surface="historical_market_data",
         children=[
             {"name": "coverage", "state": coverage_state, "critical": True},
-            {"name": "freshness", "state": freshness_state, "critical": True},
+            {"name": "freshness", "state": freshness_aggregate_state, "critical": True},
             {"name": "quality", "state": quality_state, "critical": True},
         ],
     )

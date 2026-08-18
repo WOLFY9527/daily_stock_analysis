@@ -113,7 +113,7 @@ def _source_context(candidate: Mapping[str, Any], kind: str) -> dict[str, Any]:
             "sourceType": resolve_source_type(source, source_type=quote.get("sourceType")) if source else "missing",
             "freshness": _freshness(quote),
             "stale": bool(quote.get("stale")) or _freshness(quote) == "stale",
-            "asOf": _text(quote.get("as_of") or quote.get("asOf")) or observed_at,
+            "asOf": _text(quote.get("as_of") or quote.get("asOf")) or None,
             "observedAt": _text(quote.get("observed_at") or quote.get("observedAt")) or observed_at,
         }
     source = _text(candidate.get("snapshot_source") or diagnostics.get("snapshot_source"))
@@ -122,7 +122,7 @@ def _source_context(candidate: Mapping[str, Any], kind: str) -> dict[str, Any]:
         "sourceType": resolve_source_type(source) if source else "missing",
         "freshness": _text(diagnostics.get("snapshot_freshness")).lower(),
         "stale": _text(diagnostics.get("snapshot_freshness")).lower() == "stale",
-        "asOf": _text(diagnostics.get("snapshot_as_of")) or observed_at,
+        "asOf": _text(diagnostics.get("snapshot_as_of")) or None,
         "observedAt": _text(diagnostics.get("snapshot_observed_at")) or observed_at,
     }
 

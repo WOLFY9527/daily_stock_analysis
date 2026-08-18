@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8265,
-      "sha256": "3413bfc15893acfc907b386b302385cceb513bd129d84df35beac1c923550866"
+      "count": 8271,
+      "sha256": "66361614b3587e063870d4383558e19bd8effb5900f21a5ee7c2033127021afb"
     },
     "tests": [
       {
@@ -17449,12 +17449,22 @@
         "baseline": true
       },
       {
+        "id": "tests/test_historical_market_data_foundation.py::test_explicit_as_of_survives_observation_difference_and_reload",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_historical_market_data_foundation.py::test_historical_identity_rejects_contradictory_cn_venue_and_bare_cn_index",
         "domain": "market",
         "baseline": false
       },
       {
         "id": "tests/test_historical_market_data_foundation.py::test_historical_natural_key_keeps_same_code_index_and_stock_distinct",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_later_reingestion_does_not_advance_persisted_data_as_of",
         "domain": "market",
         "baseline": false
       },
@@ -17467,6 +17477,11 @@
         "id": "tests/test_historical_market_data_foundation.py::test_migration_upgrade_creates_required_tables_and_indexes",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_missing_as_of_does_not_promote_observed_at_to_historical_freshness",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_historical_market_data_foundation.py::test_quality_degrades_but_does_not_fabricate_missing_sessions",
@@ -31429,6 +31444,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_product_read_model.py::test_missing_historical_as_of_stays_readable_but_not_current",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_product_read_model.py::test_product_read_state_aggregation_blocks_ready_parent_when_child_is_missing",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -36424,6 +36444,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_scanner_factor_observations.py::test_missing_quote_as_of_does_not_use_scanner_observation_time",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_scanner_factor_observations.py::test_missing_required_factor_is_unavailable_and_cannot_keep_positive_component_score",
         "domain": "scanner",
         "baseline": false
@@ -38595,6 +38620,11 @@
       },
       {
         "id": "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_get_realtime_quote_preserves_canonical_non_us_unavailable_state",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_symbol_quote_packet_does_not_promote_observation_time_to_as_of",
         "domain": "market",
         "baseline": false
       },

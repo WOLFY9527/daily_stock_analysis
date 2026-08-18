@@ -33,6 +33,12 @@ Provider-specific field names such as `Adj Close`, `Date`, `开盘`, or `成交�
 must stay inside `normalize_provider_historical_bars`. Product read consumers
 must not depend on those raw field names.
 
+`observedAt`/`observed_at` records when WolfyStock or a provider observed the
+payload. It is lineage metadata, not a market-data cutoff. `asOf`/`as_of` is
+accepted only when the source supplies an explicit data cutoff; missing cutoff
+evidence remains missing and is never filled from observation or retrieval
+time. The foundation preserves both fields independently.
+
 ## Quality Outcomes
 
 `HistoricalBarQualityOutcome` produces three product-facing states:
@@ -75,6 +81,11 @@ production data.
 The returned objects and summaries expose canonical identity, coverage,
 freshness, quality, provider/source provenance, as-of metadata, and
 normalization lineage without leaking provider raw payload shapes.
+
+The foundation does not own an interval- or market-specific age threshold, so
+an explicit cutoff alone does not justify a `fresh` claim. Its freshness
+summary reports `unknown` until a policy-bearing consumer supplies the relevant
+freshness context; quality/readability remains independently represented.
 
 ## Product Seams
 

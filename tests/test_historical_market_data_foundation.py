@@ -98,7 +98,7 @@ def test_vertical_fixture_ingests_canonicalizes_persists_and_reads_provenance(tm
     assert coverage == {"start": "2026-01-05", "end": "2026-01-07", "barCount": 3}
 
     freshness = foundation.freshness_summary(symbol="AAPL", market="US", interval="1d")
-    assert freshness["freshnessState"] == "fresh"
+    assert freshness["freshnessState"] == "unknown"
     assert freshness["qualityState"] == "usable"
     assert freshness["asOf"] == "2026-01-07T21:05:00+00:00"
     assert freshness["coveredDateRange"] == {"start": "2026-01-05", "end": "2026-01-07"}
@@ -110,6 +110,89 @@ def test_vertical_fixture_ingests_canonicalizes_persists_and_reads_provenance(tm
     assert provenance["normalizationVersion"] == bars[0].normalization_version
     assert provenance["sourceObservationRange"] == {"start": "2026-01-05", "end": "2026-01-07"}
     assert provenance["qualityState"] == "usable"
+
+
+def test_missing_as_of_does_not_promote_observed_at_to_historical_freshness(tmp_path) -> None:
+    foundation = _foundation(tmp_path)
+
+    result = foundation.ingest_provider_payload(
+        {
+            "provider": "unit_fixture",
+            "market": "US",
+            "symbol": "AAPL",
+            "interval": "1d",
+            "observedAt": "2026-08-17T02:00:00Z",
+            "rows": [
+                {"sessionDate": "2020-01-02", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100}
+            ],
+        }
+    )
+
+    assert result.bars[0].observed_at == datetime(2026, 8, 17, 2, tzinfo=timezone.utc)
+    assert result.bars[0].as_of is None
+    assert result.bars[0].as_read_model()["asOf"] is None
+    assert result.quality.state == "degraded"
+    assert result.quality.product_readable is True
+    summary = foundation.freshness_summary(symbol="AAPL", market="US", interval="1d")
+    assert summary["asOf"] is None
+    assert summary["freshnessState"] == "unknown"
+
+
+def test_explicit_as_of_survives_observation_difference_and_reload(tmp_path) -> None:
+    foundation = _foundation(tmp_path)
+    payload = {
+        "provider": "unit_fixture",
+        "market": "US",
+        "symbol": "AAPL",
+        "interval": "1d",
+        "observedAt": "2026-08-17T02:00:00Z",
+        "asOf": "2020-01-02T21:00:00Z",
+        "rows": [
+            {"sessionDate": "2020-01-02", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100}
+        ],
+    }
+
+    result = foundation.ingest_provider_payload(payload)
+    loaded = foundation.query_bars(
+        symbol="AAPL", market="US", interval="1d", start=date(2020, 1, 2), end=date(2020, 1, 2)
+    )[0]
+
+    expected_as_of = datetime(2020, 1, 2, 21, tzinfo=timezone.utc)
+    expected_observed_at = datetime(2026, 8, 17, 2, tzinfo=timezone.utc)
+    assert result.bars[0].as_of == expected_as_of
+    assert result.bars[0].observed_at == expected_observed_at
+    assert loaded.as_of == expected_as_of
+    assert loaded.observed_at == expected_observed_at
+    assert foundation.freshness_summary(symbol="AAPL", market="US", interval="1d")["asOf"] == "2020-01-02T21:00:00+00:00"
+    provenance = foundation.provenance_summary(symbol="AAPL", market="US", interval="1d")
+    assert provenance["asOf"] == "2020-01-02T21:00:00+00:00"
+    assert provenance["observedAt"] == "2026-08-17T02:00:00+00:00"
+    assert provenance["freshnessState"] == "unknown"
+
+
+def test_later_reingestion_does_not_advance_persisted_data_as_of(tmp_path) -> None:
+    foundation = _foundation(tmp_path)
+    first = {
+        "provider": "unit_fixture",
+        "market": "US",
+        "symbol": "AAPL",
+        "interval": "1d",
+        "observedAt": "2026-08-17T02:00:00Z",
+        "asOf": "2020-01-02T21:00:00Z",
+        "rows": [
+            {"sessionDate": "2020-01-02", "open": 10, "high": 11, "low": 9, "close": 10.5, "volume": 100}
+        ],
+    }
+    later = {**first, "observedAt": "2026-08-18T02:00:00Z", "asOf": None}
+
+    assert foundation.ingest_provider_payload(first).persisted.inserted == 1
+    retry = foundation.ingest_provider_payload(later)
+    loaded = foundation.latest_bar(symbol="AAPL", market="US", interval="1d")
+
+    assert retry.persisted.duplicates == 1
+    assert loaded is not None
+    assert loaded.observed_at == datetime(2026, 8, 17, 2, tzinfo=timezone.utc)
+    assert loaded.as_of == datetime(2020, 1, 2, 21, tzinfo=timezone.utc)
 
 
 def test_symbol_and_time_normalization_use_repository_market_identity() -> None:

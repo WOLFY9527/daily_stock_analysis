@@ -144,6 +144,7 @@ def _cn_candidate() -> dict[str, object]:
                 "latest_trade_date": "2026-05-16",
                 "rows": 130,
             },
+            "snapshot_as_of": "2026-05-16T08:39:00+08:00",
             "score_explainability": {
                 "score_confidence": 1.0,
                 "evidence_coverage": 1.0,
@@ -304,6 +305,22 @@ def test_missing_required_factor_is_unavailable_and_cannot_keep_positive_compone
     gap = next(item for item in without_observation_time["factors"] if item["component"] == "gap_context")
     assert gap["state"] == "unavailable"
     assert gap["missingFields"] == ["source.observedAt"]
+
+
+def test_missing_quote_as_of_does_not_use_scanner_observation_time() -> None:
+    candidate = _us_candidate()
+    candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "polygon_us_grouped_daily",
+    }
+
+    contract = build_scanner_factor_evidence(candidate, market="us")
+    gap = next(item for item in contract["factors"] if item["component"] == "gap_context")
+
+    assert gap["asOf"] is None
+    assert gap["observedAt"] == "2026-05-16T13:40:00Z"
+    assert gap["state"] == "unavailable"
+    assert gap["missingFields"] == ["source.asOf"]
 
 
 def test_factor_warmup_is_explicit_and_sixty_bars_do_not_satisfy_sixty_day_return() -> None:

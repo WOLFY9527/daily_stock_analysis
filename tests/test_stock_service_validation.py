@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 from src.services.stock_service import StockService
 from src.services.stock_service_provider_adapter import StockServiceQuoteSnapshot
+from src.services.symbol_research_packet_service import _quote_packet
 
 
 class StockServiceValidationTestCase(unittest.TestCase):
@@ -142,6 +143,18 @@ class StockServiceValidationTestCase(unittest.TestCase):
                 self.assertEqual(result["quoteReadiness"]["market"], market)
 
         self.assertIsNone(service.get_realtime_quote("not-a-symbol"))
+
+    def test_symbol_quote_packet_does_not_promote_observation_time_to_as_of(self) -> None:
+        packet = _quote_packet(
+            {
+                "current_price": 214.55,
+                "observed_at": "2026-08-17T02:00:00Z",
+                "freshness": "live",
+            }
+        )
+
+        self.assertEqual(packet["state"], "stale")
+        self.assertIsNone(packet["asOf"])
 
 
 if __name__ == "__main__":

@@ -64,12 +64,46 @@ def test_historical_foundation_projects_canonical_coverage_freshness_and_provena
     assert read_model["ready"] is False
     assert read_model["coverage"]["state"] == "insufficient"
     assert read_model["coverage"]["barCount"] == 2
-    assert read_model["freshness"]["state"] == "available"
+    assert read_model["freshness"]["state"] == "unknown"
     assert read_model["quality"]["state"] == "degraded"
     assert read_model["provenance"]["sourceClass"] == "historical_market_data"
+    assert read_model["provenance"]["freshness"] == "unknown"
     assert read_model["provenance"]["quality"] == "degraded"
     assert "provider" not in read_model["provenance"]
     assert "lineageId" not in read_model["provenance"]
+
+
+def test_missing_historical_as_of_stays_readable_but_not_current(tmp_path) -> None:
+    from src.services.product_read_model import product_read_model_from_historical_foundation
+
+    foundation = HistoricalMarketDataFoundation(
+        repository=HistoricalMarketDataRepository.sqlite(tmp_path / "history.db")
+    )
+    foundation.ingest_provider_payload(
+        {
+            "provider": "unit_fixture",
+            "market": "US",
+            "symbol": "AAPL",
+            "interval": "1d",
+            "observedAt": "2026-08-17T02:00:00Z",
+            "rows": [
+                {"Date": "2020-01-02", "Open": 10, "High": 11, "Low": 9, "Close": 10, "Volume": 1}
+            ],
+        }
+    )
+
+    read_model = product_read_model_from_historical_foundation(
+        foundation,
+        symbol="AAPL",
+        market="US",
+        interval="1d",
+        as_of=date(2026, 8, 18),
+    )
+
+    assert read_model["ready"] is False
+    assert read_model["freshness"]["state"] == "unknown"
+    assert read_model["provenance"]["freshness"] == "unknown"
+    assert read_model["state"] in {"degraded", "partial"}
 
 
 def test_structure_confidence_boundary_hides_strong_classification_when_evidence_blocks() -> None:

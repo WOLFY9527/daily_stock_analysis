@@ -300,7 +300,6 @@ def _quote_packet(quote: Mapping[str, Any] | None) -> dict[str, Any]:
     price = _safe_float(_get_nested(payload, "current_price", "currentPrice", "price"))
     change_percent = _safe_float(_get_nested(payload, "change_percent", "changePercent"))
     market_timestamp = _safe_text(_get_nested(payload, "market_timestamp", "marketTimestamp"))
-    observed_at = _safe_text(_get_nested(payload, "observed_at", "observedAt", "update_time", "updateTime"))
     freshness = str(_get_nested(payload, "freshness") or "").strip().lower()
 
     state = "missing"
@@ -312,7 +311,9 @@ def _quote_packet(quote: Mapping[str, Any] | None) -> dict[str, Any]:
             or not market_timestamp
         )
         state = "stale" if degraded else "available"
-        as_of = market_timestamp or observed_at
+        # Observation/update time is lineage only; quote as-of requires the
+        # provider's market timestamp.
+        as_of = market_timestamp or None
 
     return {
         "state": state,

@@ -412,7 +412,9 @@ def normalize_provider_historical_bars(
     )
     interval = _normalize_interval(_safe_text(payload.get("interval") or payload.get("timeframe") or payload.get("period")))
     observed_at = _parse_datetime(payload.get("observedAt") or payload.get("observed_at") or payload.get("timestamp"))
-    as_of = _parse_datetime(payload.get("asOf") or payload.get("as_of")) or observed_at
+    # A provider observation timestamp records when the payload was seen; it does
+    # not establish the market-data cutoff represented by the payload.
+    as_of = _parse_datetime(payload.get("asOf") or payload.get("as_of"))
     rows = payload.get("rows")
     if rows is None:
         rows = payload.get("data")
@@ -685,9 +687,9 @@ def _has_business_day_gap(previous: date, current: date) -> bool:
 
 
 def _freshness_state(bar: CanonicalHistoricalBar) -> str:
-    if bar.as_of is None:
-        return "unknown"
-    return "fresh"
+    # The foundation has no interval/market-specific age policy or reference
+    # time. A source cutoff alone therefore cannot support a current claim.
+    return "unknown"
 
 
 def _rollup_quality(rows: Sequence[CanonicalHistoricalBar]) -> str:
