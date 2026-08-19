@@ -66,8 +66,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      - name: Prepare verified Web package
+        run: |
+          set -euo pipefail
+          ./wolfy bootstrap --ensure
+          ./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "${GITHUB_SHA}"
+          ./wolfy exec --profile test -- python scripts/docker_package.py context --output output/docker-context --expected-sha "${GITHUB_SHA}"
       - name: Build reviewed-lock image
-        run: docker build -t stock-analysis:test -f docker/Dockerfile .
+        run: |
+          docker build \
+            --build-arg WOLFYSTOCK_CANDIDATE_SHA="${GITHUB_SHA}" \
+            --build-arg WOLFYSTOCK_CANDIDATE_TREE="$(git rev-parse HEAD^{tree})" \
+            --build-arg WOLFYSTOCK_ARTIFACT_FINGERPRINT="$(jq -er '.artifact.fingerprint' output/docker-context/.wolfystock-package-identity.json)" \
+            -t stock-analysis:test -f output/docker-context/docker/Dockerfile output/docker-context
       - name: Smoke image imports
         run: |
-          docker run --rm stock-analysis:test python -c "from api.app import app; print(app.title)"
+          docker run --rm \
+            --env WOLFYSTOCK_RELEASE_CANDIDATE_SHA="${GITHUB_SHA}" \
+            --env WOLFYSTOCK_RELEASE_CANDIDATE_TREE="$(git rev-parse HEAD^{tree})" \
+            --env WOLFYSTOCK_WEB_ARTIFACT_FINGERPRINT="$(jq -er '.artifact.fingerprint' output/docker-context/.wolfystock-package-identity.json)" \
+            stock-analysis:test python -c "import os; from src.web_artifact import verify_packaged_artifact; result = verify_packaged_artifact('/app', expected_sha=os.environ['WOLFYSTOCK_RELEASE_CANDIDATE_SHA'], expected_tree=os.environ['WOLFYSTOCK_RELEASE_CANDIDATE_TREE'], expected_fingerprint=os.environ['WOLFYSTOCK_WEB_ARTIFACT_FINGERPRINT']); print(result.ok); raise SystemExit(0 if result.ok else 1)"

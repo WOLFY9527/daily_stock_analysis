@@ -58,7 +58,20 @@ fi
 if [[ "${RUN_CONTAINER_SCAN}" == "true" ]]; then
   print_step "container vulnerability scan"
   if command -v docker >/dev/null 2>&1 && command -v trivy >/dev/null 2>&1; then
-    docker build -t daily-stock-analysis:security-scan -f docker/Dockerfile .
+    ./wolfy bootstrap --ensure
+    candidate_sha="$(git rev-parse HEAD)"
+    candidate_tree="$(git rev-parse HEAD^{tree})"
+    package_context="$(mktemp -d "${TMPDIR:-/tmp}/wolfystock-security-context.XXXXXX")"
+    rmdir "${package_context}"
+    trap 'rm -rf "${package_context}"' EXIT
+    ./wolfy exec --profile test -- python scripts/docker_package.py context \
+      --output "${package_context}" --expected-sha "${candidate_sha}"
+    artifact_fingerprint="$(python -c 'import json, pathlib, sys; print(json.loads((pathlib.Path(sys.argv[1]) / ".wolfystock-package-identity.json").read_text())["artifact"]["fingerprint"])' "${package_context}")"
+    docker build \
+      --build-arg WOLFYSTOCK_CANDIDATE_SHA="${candidate_sha}" \
+      --build-arg WOLFYSTOCK_CANDIDATE_TREE="${candidate_tree}" \
+      --build-arg WOLFYSTOCK_ARTIFACT_FINGERPRINT="${artifact_fingerprint}" \
+      -t daily-stock-analysis:security-scan -f "${package_context}/docker/Dockerfile" "${package_context}"
     trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 daily-stock-analysis:security-scan
   else
     echo "[WARN] docker and trivy are both required for local container scanning; skipped." >&2

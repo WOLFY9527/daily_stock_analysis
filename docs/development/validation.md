@@ -72,6 +72,36 @@ invoking npm, Node, dependency installation, or a frontend build. The build
 action snapshots the resolved Vite environment before and after bundling and
 rejects source or resolved-value drift before publishing an artifact.
 
+The packaged Docker path uses the same verified artifact through one explicit
+context producer. A clean candidate checkout must prepare the context before
+building; Docker does not consume host `static/` state directly:
+
+```bash
+candidate_sha="$(git rev-parse HEAD)"
+candidate_tree="$(git rev-parse HEAD^{tree})"
+./wolfy exec --profile test -- python scripts/docker_package.py context \
+  --output output/docker-context --expected-sha "${candidate_sha}"
+artifact_fingerprint="$(python -c 'import json; print(json.load(open("output/docker-context/.wolfystock-package-identity.json", encoding="utf-8"))["artifact"]["fingerprint"])')"
+docker build \
+  --build-arg WOLFYSTOCK_CANDIDATE_SHA="${candidate_sha}" \
+  --build-arg WOLFYSTOCK_CANDIDATE_TREE="${candidate_tree}" \
+  --build-arg WOLFYSTOCK_ARTIFACT_FINGERPRINT="${artifact_fingerprint}" \
+  --file output/docker-context/docker/Dockerfile output/docker-context
+```
+
+Compose uses the same generated context and embedded package identity; it does
+not require exporting candidate or artifact variables:
+
+```bash
+docker compose -f docker/docker-compose.yml build server
+```
+
+The final image selects `WOLFYSTOCK_WEB_ARTIFACT_MODE=package`; startup verifies
+the embedded package identity, manifest fingerprint, index references, and
+complete asset inventory without Git, Web source, Node/npm, or the `scripts/`
+tree. Missing package evidence or partial external identity assertions fail
+closed at the image and startup boundaries.
+
 ## Runtime UAT
 
 The local UAT harness binds evidence to the expected source identity:

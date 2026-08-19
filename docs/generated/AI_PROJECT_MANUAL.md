@@ -72,12 +72,12 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | c29d2f2d22ec |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | daafda4c2ccb |
-| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 297cbe3da966 |
+| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 62cc4c8f5e48 |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | a8e92511388e |
 | [docs/operations/historical-ohlcv-seed.md](../operations/historical-ohlcv-seed.md) | canonical | active | yes | Local historical OHLCV seed and verification runbook | d4d4706d3d51 |
 | [docs/operations/operator-evidence.md](../operations/operator-evidence.md) | canonical | active | yes | Sanitized offline operator-evidence runbook | c10ab94974b1 |
-| [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | 6edffee4d683 |
+| [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | c8608387fc97 |
 
 Inventory summary: registered=28, discovered=28; canonical=13, generated=2, platform_template=3, temporary_evidence=5, tool_entry=1, tool_mirror=4.
 

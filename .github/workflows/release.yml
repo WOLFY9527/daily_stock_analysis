@@ -126,6 +126,7 @@ jobs:
           git archive --format=tar --prefix="wolfystock-${CANDIDATE_SHA}/" "${CANDIDATE_SHA}" | gzip -n > dist/candidate/source.tar.gz
           ./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "${CANDIDATE_SHA}"
           ./wolfy exec --profile test -- python scripts/web_build_artifact.py verify --expected-sha "${CANDIDATE_SHA}" --json > dist/build-evidence/web-build.json
+          ./wolfy exec --profile test -- python scripts/docker_package.py context --output dist/docker-context --expected-sha "${CANDIDATE_SHA}"
           tar -czf dist/candidate/web-static.tar.gz -C static .
       - name: Build multi-platform image candidate once
         env:
@@ -136,12 +137,15 @@ jobs:
           candidate_tag="candidate-${CANDIDATE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --file docker/Dockerfile \
+            --build-arg WOLFYSTOCK_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+            --build-arg WOLFYSTOCK_CANDIDATE_TREE="$(git rev-parse HEAD^{tree})" \
+            --build-arg WOLFYSTOCK_ARTIFACT_FINGERPRINT="$(jq -er '.artifact.fingerprint' dist/docker-context/.wolfystock-package-identity.json)" \
+            --file dist/docker-context/docker/Dockerfile \
             --tag "${image}:${candidate_tag}" \
             --metadata-file dist/build-evidence/docker-metadata.json \
             --output type=registry \
             --output type=oci,dest=dist/candidate/docker-multiarch.oci.tar \
-            .
+            dist/docker-context
           index_digest="$(jq -er '."containerimage.digest"' dist/build-evidence/docker-metadata.json)"
           ./wolfy exec --profile test -- python scripts/release_candidate.py inspect-image \
             --archive dist/candidate/docker-multiarch.oci.tar \

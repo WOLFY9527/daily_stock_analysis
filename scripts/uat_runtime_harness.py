@@ -1364,9 +1364,35 @@ def _response_content(response: Any) -> bytes:
     return str(getattr(response, "text", "") or "").encode("utf-8")
 
 
-def build_asset_identity(static_root: Path, local_payload: Mapping[str, Any]) -> dict[str, Any]:
+def build_asset_identity(
+    static_root: Path,
+    local_payload: Mapping[str, Any],
+    artifact_payload: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     index_path = static_root / "index.html"
+    marker = artifact_payload if isinstance(artifact_payload, Mapping) else {}
+    marker_index = marker.get("index") if isinstance(marker.get("index"), Mapping) else {}
+    entries = marker_index.get("entry") if isinstance(marker_index.get("entry"), list) else []
     main_asset = str(local_payload.get("frontendMainAssetFilename") or "")
+    if entries and isinstance(entries[0], str) and entries[0].startswith("/assets/"):
+        main_asset = Path(entries[0]).name
+    assets = marker.get("assets") if isinstance(marker.get("assets"), list) else []
+    entry_hash = next(
+        (
+            item.get("sha256")
+            for item in assets
+            if isinstance(item, Mapping) and item.get("path") == f"assets/{main_asset}"
+        ),
+        None,
+    )
+    build_identity = {
+        "contract": "wolfystock_web_build_artifact_v1",
+        "candidate": marker.get("candidate"),
+        "fingerprint": marker.get("fingerprint"),
+        "indexHtmlSha256": marker_index.get("indexSha256"),
+        "mainJsAssetFilename": main_asset or None,
+        "mainJsAssetSha256": entry_hash,
+    }
     return {
         "frontendBuildPath": str(static_root),
         "indexHtmlHash": _sha256_file(index_path),
@@ -1374,7 +1400,7 @@ def build_asset_identity(static_root: Path, local_payload: Mapping[str, Any]) ->
         "mainCssAssetFilenames": _css_assets(static_root),
         "assetHashes": _asset_hashes(static_root, [main_asset, *_css_assets(static_root)]),
         "localBuildProvenance": dict(local_payload),
-        "buildIdentity": local_payload.get("frontendBuildIdentity"),
+        "buildIdentity": build_identity if marker else None,
     }
 
 
@@ -1798,7 +1824,7 @@ def run_harness(
         static_root=static_root,
         backend_info=read_backend_info(repo_root),
         repo_root=repo_root,
-        require_build_identity=True,
+        require_build_identity=False,
     )
     if not local_build.ok:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
@@ -1907,7 +1933,7 @@ def run_harness(
         if not readiness["ok"]:
             identity_errors.append("runtime_readiness_failed")
 
-        asset_identity = build_asset_identity(static_root, local_build.payload)
+        asset_identity = build_asset_identity(static_root, local_build.payload, artifact_result.payload)
         direct_http = verify_direct_asset_identity(client, base_url, asset_identity) if readiness["ok"] else {
             "ok": False,
             "reasonCodes": ["readiness_unavailable"],
@@ -2352,17 +2378,17 @@ def run_preflight(
     )
     checks["buildIdentity"] = _preflight_check(
         bool(
-            expected_build_identity.get("contract") == "wolfystock_frontend_build_identity_v1"
-            and str(expected_build_identity.get("gitSha") or "") == observed_sha
-            and str(expected_build_identity.get("repositoryRoot") or "") == expected_cwd
+            expected_build_identity.get("contract") == "wolfystock_web_build_artifact_v1"
+            and isinstance(expected_build_identity.get("candidate"), Mapping)
+            and str(expected_build_identity["candidate"].get("commit") or "") == observed_sha
+            and re.fullmatch(r"[0-9a-f]{64}", str(expected_build_identity.get("fingerprint") or ""))
             and str(expected_build_identity.get("indexHtmlSha256") or "") == expected_index_hash
             and str(expected_build_identity.get("mainJsAssetFilename") or "") == expected_asset_name
             and str(expected_build_identity.get("mainJsAssetSha256") or "") == expected_main_hash
         ),
         expected={
-            "contract": "wolfystock_frontend_build_identity_v1",
-            "gitSha": observed_sha,
-            "repositoryRoot": expected_cwd,
+            "contract": "wolfystock_web_build_artifact_v1",
+            "candidateCommit": observed_sha,
         },
         observed=expected_build_identity or None,
     )

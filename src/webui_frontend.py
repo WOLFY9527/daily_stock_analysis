@@ -126,6 +126,7 @@ def _manual_build_command(frontend_dir: Path) -> str:
         return f'cd "{frontend_dir}" && npm ci && npm run build'
     return f'cd "{frontend_dir}" && npm install && npm run build'
 
+
 def prepare_webui_frontend_assets() -> bool:
     """
     Prepare frontend assets for WebUI startup.
@@ -197,11 +198,27 @@ def prepare_webui_frontend_assets() -> bool:
 
 
 def verify_webui_frontend_artifact():
-    """Verify the canonical serve-only artifact without installing or building dependencies."""
-    from scripts.web_build_artifact import ARTIFACT_FILENAME, verify_runtime_artifact
+    """Verify the explicitly selected source-checkout or packaged artifact."""
+    from src.web_artifact import ARTIFACT_FILENAME, ArtifactResult, verify_packaged_artifact
 
     repo_root = Path(__file__).resolve().parent.parent
-    return verify_runtime_artifact(
-        repo_root,
-        repo_root / "static" / ARTIFACT_FILENAME,
-    )
+    mode = os.environ.get("WOLFYSTOCK_WEB_ARTIFACT_MODE", "source").strip().lower()
+    expected_sha = os.environ.get("WOLFYSTOCK_RELEASE_CANDIDATE_SHA") or None
+    expected_tree = os.environ.get("WOLFYSTOCK_RELEASE_CANDIDATE_TREE") or None
+    expected_fingerprint = os.environ.get("WOLFYSTOCK_WEB_ARTIFACT_FINGERPRINT") or None
+    if mode == "package":
+        expectations = (expected_sha, expected_tree, expected_fingerprint)
+        if any(expectations) and not all(expectations):
+            return ArtifactResult(False, {}, ["packaged_web_artifact_expectations_missing"])
+        return verify_packaged_artifact(
+            repo_root,
+            expected_sha=expected_sha,
+            expected_tree=expected_tree,
+            expected_fingerprint=expected_fingerprint,
+        )
+    if mode != "source":
+        return ArtifactResult(False, {}, ["web_artifact_mode_invalid"])
+
+    from scripts.web_build_artifact import verify_runtime_artifact
+
+    return verify_runtime_artifact(repo_root, repo_root / "static" / ARTIFACT_FILENAME, expected_sha=expected_sha)

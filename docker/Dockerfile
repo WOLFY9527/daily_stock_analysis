@@ -1,17 +1,8 @@
 # ===================================
 # A股自选股智能分析系统 - Docker 镜像
 # ===================================
-# 多阶段构建：前端打包 + 后端运行
-
-FROM node:20-slim AS web-builder
-
-WORKDIR /app/apps/dsa-web
-
-COPY apps/dsa-web/package.json apps/dsa-web/package-lock.json ./
-RUN npm ci
-
-COPY apps/dsa-web/ ./
-RUN npm run build
+# The Web package is prepared by scripts/docker_package.py after source-bound
+# qualification. This image consumes that exact immutable package once.
 
 # Pin to bookworm: wkhtmltopdf was removed from Debian testing (2025)
 FROM python:3.11-slim-bookworm AS runtime-base
@@ -54,6 +45,10 @@ RUN python -m scripts.environment.docker_python \
 
 FROM runtime-base
 
+ARG WOLFYSTOCK_CANDIDATE_SHA
+ARG WOLFYSTOCK_CANDIDATE_TREE
+ARG WOLFYSTOCK_ARTIFACT_FINGERPRINT
+
 WORKDIR /app
 
 COPY --from=python-dependencies /opt/wolfystock-python /opt/wolfystock-python
@@ -67,7 +62,11 @@ COPY bot/ ./bot/
 COPY patch/ ./patch/
 COPY src/ ./src/
 COPY strategies/ ./strategies/
-COPY --from=web-builder /app/static ./static/
+COPY static/ ./static/
+COPY .wolfystock-package-identity.json ./
+
+RUN WOLFYSTOCK_EXPECTED_SHA="${WOLFYSTOCK_CANDIDATE_SHA}" WOLFYSTOCK_EXPECTED_TREE="${WOLFYSTOCK_CANDIDATE_TREE}" \
+       WOLFYSTOCK_EXPECTED_FINGERPRINT="${WOLFYSTOCK_ARTIFACT_FINGERPRINT}" python -c "import os; from src.web_artifact import verify_packaged_artifact; values = (os.environ.get('WOLFYSTOCK_EXPECTED_SHA') or None, os.environ.get('WOLFYSTOCK_EXPECTED_TREE') or None, os.environ.get('WOLFYSTOCK_EXPECTED_FINGERPRINT') or None); raise SystemExit('partial package identity assertions' if any(values) and not all(values) else (0 if verify_packaged_artifact('/app', expected_sha=values[0], expected_tree=values[1], expected_fingerprint=values[2]).ok else 1))"
 
 # 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/reports
@@ -79,6 +78,7 @@ ENV DATABASE_PATH=/app/data/stock_analysis.db
 # Web/API service
 ENV WEBUI_HOST=0.0.0.0
 ENV API_PORT=8000
+ENV WOLFYSTOCK_WEB_ARTIFACT_MODE=package
 
 # 暴露 API 端口
 EXPOSE 8000

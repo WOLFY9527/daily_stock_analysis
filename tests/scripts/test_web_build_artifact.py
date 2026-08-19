@@ -7,7 +7,10 @@ import subprocess
 from pathlib import Path
 
 from scripts import web_build_artifact as artifact
+from scripts import docker_package
 from scripts.uat_fresh_build_verifier import VerificationResult
+from src import web_artifact as common_artifact
+from src import webui_frontend
 
 
 def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
@@ -547,3 +550,181 @@ def test_verify_artifact_rejects_manifest_tampering(monkeypatch, tmp_path: Path)
     assert "channel:" not in config
     assert "node_modules/.tmp" not in config
     assert "node_modules/.vite" not in config
+
+
+def _write_packaged_runtime(tmp_path: Path) -> Path:
+    repo, artifact_path = _write_fixture(tmp_path)
+    _patch_manifest = {
+        "contract": artifact.ARTIFACT_CONTRACT,
+        "candidate": {"commit": "a" * 40, "tree": "b" * 40, "dirty": False},
+        "packageLock": {"path": "apps/dsa-web/package-lock.json", "sha256": "c" * 64},
+        "dependencyIntegrity": {
+            "command": "npm --prefix apps/dsa-web ls --all --json",
+            "sha256": "d" * 64,
+            "valid": True,
+        },
+        "toolchain": {"node": "v20.20.2", "npm": "10.8.2"},
+        "configuration": {"sha256": {"vite.config.ts": "e" * 64}},
+        "environment": {
+            "managed": {
+                "schemaVersion": "wolfystock_environment_evidence_v1",
+                "environmentPolicyVersion": "wolfystock_test_environment_policy_v1",
+                "environmentFingerprint": "f" * 64,
+                "componentFingerprints": {
+                    name: {"input": "1" * 64, "installed": "2" * 64}
+                    for name in ("python", "web", "browser", "rg")
+                },
+            },
+            "buildVariables": {"NODE_ENV": "3" * 64},
+            "viteEnvFiles": {
+                name: {"present": False, "sha256": None}
+                for name in common_artifact.VITE_ENV_PATHS
+            },
+            "viteResolvedValues": {
+                "mode": "production",
+                "envDirMatchesWebRoot": True,
+                "values": {"MODE": "4" * 64},
+            },
+        },
+        "commands": [{"command": "npm run build:bundle", "exitCode": 0}],
+        "index": {
+            **common_artifact.index_inventory(repo / "static" / "index.html"),
+            "localeSourceFiles": ["src/i18n/catalog.ts"],
+        },
+        "assets": common_artifact.asset_inventory(repo / "static"),
+    }
+    _patch_manifest["fingerprint"] = common_artifact.canonical_digest(_patch_manifest)
+    artifact_path.write_text(json.dumps(_patch_manifest), encoding="utf-8")
+    identity = common_artifact.write_package_identity(repo, _patch_manifest)
+    assert identity.ok
+    shutil.rmtree(repo / "apps")
+    return repo
+
+
+def test_packaged_runtime_verifies_without_git_web_source_or_node(monkeypatch, tmp_path: Path) -> None:
+    root = _write_packaged_runtime(tmp_path)
+
+    result = common_artifact.verify_packaged_artifact(
+        root,
+        expected_sha="a" * 40,
+        expected_tree="b" * 40,
+    )
+
+    assert result.ok is True
+
+    identity = json.loads((root / common_artifact.PACKAGE_IDENTITY_FILENAME).read_text(encoding="utf-8"))
+    (root / "src").mkdir()
+    monkeypatch.setattr(webui_frontend, "__file__", str(root / "src" / "webui_frontend.py"))
+    monkeypatch.setenv("WOLFYSTOCK_WEB_ARTIFACT_MODE", "package")
+    monkeypatch.setenv("WOLFYSTOCK_RELEASE_CANDIDATE_SHA", "a" * 40)
+    monkeypatch.setenv("WOLFYSTOCK_RELEASE_CANDIDATE_TREE", "b" * 40)
+    monkeypatch.setenv("WOLFYSTOCK_WEB_ARTIFACT_FINGERPRINT", identity["artifact"]["fingerprint"])
+
+    assert webui_frontend.verify_webui_frontend_artifact().ok is True
+
+    monkeypatch.delenv("WOLFYSTOCK_RELEASE_CANDIDATE_SHA")
+    monkeypatch.delenv("WOLFYSTOCK_RELEASE_CANDIDATE_TREE")
+    monkeypatch.delenv("WOLFYSTOCK_WEB_ARTIFACT_FINGERPRINT")
+    assert webui_frontend.verify_webui_frontend_artifact().ok is True
+
+    monkeypatch.setenv("WOLFYSTOCK_RELEASE_CANDIDATE_SHA", "a" * 40)
+    assert webui_frontend.verify_webui_frontend_artifact().error_codes == [
+        "packaged_web_artifact_expectations_missing"
+    ]
+
+
+def _rewrite_packaged_manifest(root: Path, mutate) -> None:
+    artifact_path = root / "static" / common_artifact.ARTIFACT_FILENAME
+    manifest = json.loads(artifact_path.read_text(encoding="utf-8"))
+    mutate(manifest)
+    artifact_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_packaged_runtime_fails_closed_for_identity_asset_and_missing_artifact(tmp_path: Path) -> None:
+    root = _write_packaged_runtime(tmp_path)
+    identity_path = root / common_artifact.PACKAGE_IDENTITY_FILENAME
+    identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    identity["candidate"]["commit"] = "c" * 40
+    identity_path.write_text(json.dumps(identity), encoding="utf-8")
+    identity_mismatch = common_artifact.verify_packaged_artifact(
+        root,
+        expected_sha="a" * 40,
+        expected_tree="b" * 40,
+    )
+    assert {"package_identity_tampered", "package_candidate_sha_mismatch"} <= set(identity_mismatch.error_codes)
+
+    root = _write_packaged_runtime(tmp_path / "tree")
+    tree_mismatch = common_artifact.verify_packaged_artifact(root, expected_tree="c" * 40)
+    assert "package_candidate_tree_mismatch" in tree_mismatch.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "fingerprint")
+    fingerprint_mismatch = common_artifact.verify_packaged_artifact(root, expected_fingerprint="e" * 64)
+    assert "package_artifact_fingerprint_mismatch" in fingerprint_mismatch.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "manifest")
+    _rewrite_packaged_manifest(root, lambda manifest: manifest.update({"toolchain": {"node": "tampered", "npm": "tampered"}}))
+    manifest_tamper = common_artifact.verify_packaged_artifact(root)
+    assert "artifact_manifest_tampered" in manifest_tamper.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "index")
+    (root / "static" / "index.html").write_text('<script type="module" src="/assets/index.js"></script>\n', encoding="utf-8")
+    index_tamper = common_artifact.verify_packaged_artifact(root)
+    assert "artifact_index_mismatch" in index_tamper.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "asset")
+    (root / "static" / "assets" / "index.js").write_text("tampered\n", encoding="utf-8")
+    asset_tamper = common_artifact.verify_packaged_artifact(root)
+    assert "artifact_asset_mismatch" in asset_tamper.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "extra")
+    (root / "static" / "assets" / "extra.js").write_text("extra\n", encoding="utf-8")
+    extra_asset = common_artifact.verify_packaged_artifact(root)
+    assert "artifact_asset_mismatch" in extra_asset.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "missing-asset")
+    (root / "static" / "assets" / "index.js").unlink()
+    missing_asset = common_artifact.verify_packaged_artifact(root)
+    assert {"artifact_index_mismatch", "artifact_asset_mismatch"} <= set(missing_asset.error_codes)
+
+    root = _write_packaged_runtime(tmp_path / "missing")
+    (root / "static" / artifact.ARTIFACT_FILENAME).unlink()
+    missing_artifact = common_artifact.verify_packaged_artifact(root)
+    assert "artifact_manifest_unreadable" in missing_artifact.error_codes
+
+    root = _write_packaged_runtime(tmp_path / "missing-identity")
+    (root / common_artifact.PACKAGE_IDENTITY_FILENAME).unlink()
+    missing_identity = common_artifact.verify_packaged_artifact(root)
+    assert "package_identity_unreadable" in missing_identity.error_codes
+
+
+def test_docker_package_context_binds_clean_archive_and_verified_artifact(monkeypatch, tmp_path: Path) -> None:
+    repo = _write_packaged_runtime(tmp_path / "repo")
+    (repo / ".gitignore").write_text("static/\n.wolfystock-package-identity.json\n", encoding="utf-8")
+    (repo / "docker").mkdir()
+    (repo / "docker" / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "main.py").write_text("print('runtime')\n", encoding="utf-8")
+    subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "t721@example.invalid"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "T721"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "candidate"], cwd=repo, check=True)
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=repo, text=True).strip()
+
+    artifact_path = repo / "static" / common_artifact.ARTIFACT_FILENAME
+    manifest = json.loads(artifact_path.read_text(encoding="utf-8"))
+    manifest["candidate"] = {"commit": commit, "tree": tree, "dirty": False}
+    manifest["fingerprint"] = common_artifact.canonical_digest(
+        {key: value for key, value in manifest.items() if key != "fingerprint"}
+    )
+    artifact_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(docker_package, "build_artifact", lambda *_args, **_kwargs: common_artifact.ArtifactResult(True, manifest))
+
+    context = tmp_path / "context"
+    result = docker_package.prepare_context(repo, context, expected_sha=commit)
+
+    assert result.ok is True
+    assert (context / "docker" / "Dockerfile").is_file()
+    assert (context / "static" / common_artifact.ARTIFACT_FILENAME).is_file()
+    assert not (context / ".git").exists()
+    assert result.payload["candidate"] == {"commit": commit, "tree": tree}

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -13,18 +12,25 @@ import stat
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.web_artifact import (
+    ARTIFACT_CONTRACT,
+    ARTIFACT_FILENAME,
+    ArtifactResult,
+    asset_inventory,
+    canonical_digest,
+    sha256_file,
+    source_index_inventory,
+    verify_manifest_contents,
+)
 
-ARTIFACT_CONTRACT = "wolfystock_web_build_artifact_v1"
-ARTIFACT_FILENAME = ".wolfystock-web-build-artifact.json"
+
 WEB_RELATIVE = Path("apps/dsa-web")
 STATIC_RELATIVE = Path("static")
 PLAYWRIGHT_ARTIFACT_DIRECTORY = "playwright-web-artifact"
@@ -69,14 +75,6 @@ process.stdout.write(JSON.stringify({
 """
 
 
-@dataclass(frozen=True)
-class ArtifactResult:
-    ok: bool
-    payload: dict[str, Any]
-    error_codes: list[str] = field(default_factory=list)
-    warning_codes: list[str] = field(default_factory=list)
-
-
 def _run(repo_root: Path, *args: str, capture: bool = True) -> subprocess.CompletedProcess[str]:
     command = list(args)
     if command and command[0] == "npm":
@@ -92,17 +90,11 @@ def _git(repo_root: Path, *args: str) -> tuple[str | None, bool]:
 
 
 def _sha256_file(path: Path) -> str | None:
-    if not path.is_file():
-        return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return sha256_file(path)
 
 
 def _sha256_json(payload: Any) -> str:
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return canonical_digest(payload)
 
 
 def _npm_integrity(repo_root: Path) -> tuple[dict[str, Any], list[str]]:
@@ -269,35 +261,11 @@ def _environment_contract(
 
 
 def _index_inventory(index_path: Path, web_root: Path) -> dict[str, Any]:
-    text = index_path.read_text(encoding="utf-8")
-    tags = re.findall(r"<(?:script|link)\b[^>]*>", text, flags=re.IGNORECASE)
-
-    def references(tag: str) -> list[str]:
-        return re.findall(r"(?:src|href)=[\"']([^\"']+)[\"']", tag, flags=re.IGNORECASE)
-
-    def asset_references(predicate: Any) -> list[str]:
-        return sorted({ref for tag in tags if predicate(tag) for ref in references(tag) if ref.startswith("/assets/")})
-
-    return {
-        "indexSha256": _sha256_file(index_path),
-        "entry": asset_references(lambda tag: tag.lower().startswith("<script")),
-        "css": asset_references(lambda tag: re.search(r"rel=[\"']stylesheet[\"']", tag, flags=re.IGNORECASE)),
-        "preload": asset_references(lambda tag: re.search(r"rel=[\"'](?:modulepreload|preload)[\"']", tag, flags=re.IGNORECASE)),
-        "localeSourceFiles": sorted(
-            path.relative_to(web_root).as_posix() for path in (web_root / "src" / "i18n").rglob("*.ts")
-        ) if (web_root / "src" / "i18n").is_dir() else [],
-    }
+    return source_index_inventory(index_path, web_root)
 
 
 def _assets(static_root: Path) -> list[dict[str, Any]]:
-    inventory: list[dict[str, Any]] = []
-    for path in sorted(item for item in static_root.rglob("*") if item.is_file() and item.name != ARTIFACT_FILENAME):
-        inventory.append({
-            "path": path.relative_to(static_root).as_posix(),
-            "size": path.stat().st_size,
-            "sha256": _sha256_file(path),
-        })
-    return inventory
+    return asset_inventory(static_root)
 
 
 def _make_read_only(root: Path) -> None:
@@ -466,16 +434,6 @@ def _build_artifact(
                 ["vite_environment_changed_during_build"],
             )
 
-        from scripts.uat_fresh_build_verifier import read_backend_info, write_frontend_build_identity
-
-        legacy_identity = write_frontend_build_identity(
-            static_root=staged_root,
-            backend_info=read_backend_info(repo),
-            repo_root=repo,
-        )
-        if not legacy_identity.ok:
-            return ArtifactResult(False, legacy_identity.payload, legacy_identity.error_codes)
-
         generated = generate_manifest(
             repo,
             static_root=staged_root,
@@ -571,92 +529,6 @@ def prepare_playwright_artifact(
     return ArtifactResult(prepared.ok, payload, prepared.error_codes, prepared.warning_codes)
 
 
-def _manifest_provenance_errors(manifest: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    integrity = manifest.get("dependencyIntegrity")
-    if not isinstance(integrity, dict) or (
-        integrity.get("command") != "npm --prefix apps/dsa-web ls --all --json"
-        or integrity.get("valid") is not True
-        or not re.fullmatch(r"[0-9a-f]{64}", str(integrity.get("sha256") or ""))
-    ):
-        errors.append("artifact_provenance_invalid")
-
-    toolchain = manifest.get("toolchain")
-    if not isinstance(toolchain, dict) or set(toolchain) != {"node", "npm"} or any(
-        not isinstance(toolchain.get(name), str) or not toolchain[name]
-        for name in ("node", "npm")
-    ):
-        errors.append("artifact_provenance_invalid")
-
-    environment = manifest.get("environment")
-    managed = environment.get("managed") if isinstance(environment, dict) else None
-    components = managed.get("componentFingerprints") if isinstance(managed, dict) else None
-    vite_env_files = environment.get("viteEnvFiles") if isinstance(environment, dict) else None
-    vite_resolved_values = environment.get("viteResolvedValues") if isinstance(environment, dict) else None
-    if (
-        not isinstance(environment, dict)
-        or not isinstance(environment.get("buildVariables"), dict)
-        or not environment["buildVariables"]
-        or any(
-            not isinstance(key, str)
-            or not re.fullmatch(r"[0-9a-f]{64}", str(value or ""))
-            for key, value in environment["buildVariables"].items()
-        )
-        or not isinstance(managed, dict)
-        or not isinstance(managed.get("schemaVersion"), str)
-        or not managed["schemaVersion"].strip()
-        or not isinstance(managed.get("environmentPolicyVersion"), str)
-        or not managed["environmentPolicyVersion"].strip()
-        or not re.fullmatch(r"[0-9a-f]{64}", str(managed.get("environmentFingerprint") or ""))
-        or not isinstance(components, dict)
-        or set(components) != {"python", "web", "browser", "rg"}
-    ):
-        errors.append("artifact_provenance_invalid")
-    elif any(
-        not isinstance(components.get(component), dict)
-        or any(
-            not re.fullmatch(r"[0-9a-f]{64}", str(components[component].get(field) or ""))
-            for field in ("input", "installed")
-        )
-        for component in ("python", "web", "browser", "rg")
-    ):
-        errors.append("artifact_provenance_invalid")
-
-    if not isinstance(vite_env_files, dict) or set(vite_env_files) != {path.as_posix() for path in VITE_ENV_FILES}:
-        errors.append("artifact_provenance_invalid")
-    else:
-        for source in vite_env_files.values():
-            if not isinstance(source, dict) or set(source) != {"present", "sha256"}:
-                errors.append("artifact_provenance_invalid")
-                break
-            present = source.get("present")
-            digest = source.get("sha256")
-            if not isinstance(present, bool) or (present and not re.fullmatch(r"[0-9a-f]{64}", str(digest or ""))) or (
-                not present and digest is not None
-            ):
-                errors.append("artifact_provenance_invalid")
-                break
-
-    if not _valid_vite_resolved_values(vite_resolved_values):
-        errors.append("artifact_provenance_invalid")
-
-    commands = manifest.get("commands")
-    if (
-        not isinstance(commands, list)
-        or not commands
-        or any(
-            not isinstance(command, dict)
-            or set(command) != {"command", "exitCode"}
-            or not isinstance(command.get("command"), str)
-            or not command["command"].strip()
-            or command.get("exitCode") != 0
-            for command in commands
-        )
-    ):
-        errors.append("artifact_provenance_invalid")
-    return sorted(set(errors))
-
-
 def _verify_manifest_artifact(
     repo: Path,
     artifact: Path,
@@ -668,32 +540,14 @@ def _verify_manifest_artifact(
     resolved_artifact = artifact.resolve()
     if require_canonical and resolved_artifact != canonical:
         return ArtifactResult(False, {}, ["artifact_path_not_canonical"])
-    try:
-        manifest = json.loads(resolved_artifact.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return ArtifactResult(False, {}, ["artifact_manifest_unreadable"])
-    if not isinstance(manifest, dict) or manifest.get("contract") != ARTIFACT_CONTRACT:
-        return ArtifactResult(
-            False,
-            manifest if isinstance(manifest, dict) else {},
-            ["artifact_contract_mismatch"],
-        )
-
-    errors = _manifest_provenance_errors(manifest)
+    candidate, candidate_errors = _candidate(repo, expected_sha)
+    common = verify_manifest_contents(resolved_artifact, expected_candidate=candidate)
+    if not common.payload:
+        return common
+    manifest = common.payload
+    errors = [*common.error_codes, *candidate_errors]
     package_lock = manifest.get("packageLock")
     configuration = manifest.get("configuration")
-    if (
-        not isinstance(package_lock, dict)
-        or package_lock.get("path") != "apps/dsa-web/package-lock.json"
-        or not re.fullmatch(r"[0-9a-f]{64}", str(package_lock.get("sha256") or ""))
-        or not isinstance(configuration, dict)
-        or not isinstance(configuration.get("sha256"), dict)
-    ):
-        errors.append("artifact_metadata_invalid")
-    candidate, candidate_errors = _candidate(repo, expected_sha)
-    errors.extend(candidate_errors)
-    if manifest.get("candidate") != candidate:
-        errors.append("artifact_candidate_mismatch")
     web_root = repo / WEB_RELATIVE
     if not isinstance(package_lock, dict) or package_lock.get("sha256") != _sha256_file(web_root / "package-lock.json"):
         errors.append("artifact_lockfile_mismatch")
@@ -705,25 +559,6 @@ def _verify_manifest_artifact(
     environment = manifest.get("environment")
     if not isinstance(environment, dict) or environment.get("viteEnvFiles") != _vite_env_file_hashes(web_root):
         errors.append("artifact_vite_env_mismatch")
-
-    static_root = resolved_artifact.parent
-    index_path = static_root / "index.html"
-    try:
-        index_matches = index_path.is_file() and manifest.get("index") == _index_inventory(index_path, web_root)
-    except (OSError, UnicodeError):
-        index_matches = False
-    if not index_matches:
-        errors.append("artifact_index_mismatch")
-    try:
-        assets_match = manifest.get("assets") == _assets(static_root)
-    except OSError:
-        assets_match = False
-    if not assets_match:
-        errors.append("artifact_asset_mismatch")
-    fingerprint_payload = dict(manifest)
-    fingerprint = fingerprint_payload.pop("fingerprint", None)
-    if fingerprint != _sha256_json(fingerprint_payload):
-        errors.append("artifact_manifest_tampered")
     return ArtifactResult(not errors, manifest, sorted(set(errors)))
 
 

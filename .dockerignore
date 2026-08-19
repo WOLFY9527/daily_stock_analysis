@@ -3,6 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.git/
+apps/dsa-web/node_modules/
+static/.wolfystock-build-identity.json
+output/
+data/
+logs/
+reports/
 
 # 忽略虚拟环境
 venv/
@@ -15,11 +22,6 @@ env/
 .vscode/
 *.swp
 *.swo
-
-# 忽略数据文件（可选，如果想持久化就注释掉）
-# data/
-# logs/
-# reports/
 
 # 忽略测试文件
 test_*.py

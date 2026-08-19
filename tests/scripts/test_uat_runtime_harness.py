@@ -134,9 +134,9 @@ def _evidence_asset_identity(repo_root: Path, *, git_sha: str = "45b6965d") -> d
             "index-CSS123.css": css_hash,
         },
         "buildIdentity": {
-            "contract": "wolfystock_frontend_build_identity_v1",
-            "gitSha": git_sha,
-            "repositoryRoot": str(repo_root.resolve()),
+            "contract": "wolfystock_web_build_artifact_v1",
+            "candidate": {"commit": git_sha, "tree": "tree"},
+            "fingerprint": "f" * 64,
             "indexHtmlSha256": index_hash,
             "mainJsAssetFilename": asset_name,
             "mainJsAssetSha256": main_hash,

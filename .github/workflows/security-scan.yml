@@ -129,8 +129,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Prepare verified Web package
+        run: |
+          set -euo pipefail
+          ./wolfy bootstrap --ensure
+          candidate_sha="$(git rev-parse HEAD)"
+          candidate_tree="$(git rev-parse HEAD^{tree})"
+          ./wolfy exec --profile test -- python scripts/docker_package.py context \
+            --output output/docker-context --expected-sha "${candidate_sha}"
+          artifact_fingerprint="$(python -c 'import json; print(json.load(open("output/docker-context/.wolfystock-package-identity.json", encoding="utf-8"))["artifact"]["fingerprint"])')"
+          echo "WOLFYSTOCK_CANDIDATE_SHA=${candidate_sha}" >> "${GITHUB_ENV}"
+          echo "WOLFYSTOCK_CANDIDATE_TREE=${candidate_tree}" >> "${GITHUB_ENV}"
+          echo "WOLFYSTOCK_ARTIFACT_FINGERPRINT=${artifact_fingerprint}" >> "${GITHUB_ENV}"
+
       - name: Build local scan image
-        run: docker build -t daily-stock-analysis:security-scan -f docker/Dockerfile .
+        run: |
+          docker build \
+            --build-arg WOLFYSTOCK_CANDIDATE_SHA="${WOLFYSTOCK_CANDIDATE_SHA}" \
+            --build-arg WOLFYSTOCK_CANDIDATE_TREE="${WOLFYSTOCK_CANDIDATE_TREE}" \
+            --build-arg WOLFYSTOCK_ARTIFACT_FINGERPRINT="${WOLFYSTOCK_ARTIFACT_FINGERPRINT}" \
+            -t daily-stock-analysis:security-scan -f output/docker-context/docker/Dockerfile output/docker-context
 
       - name: Scan local image with Trivy
         uses: aquasecurity/trivy-action@0.33.1

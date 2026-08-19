@@ -12,7 +12,12 @@ version: '3.8'
 
 x-common: &common
   build:
-    context: ..
+    # Generate this immutable context first:
+    # ./wolfy exec --profile test -- python scripts/docker_package.py context \
+    #   --output output/docker-context --expected-sha "$(git rev-parse HEAD)"
+    # The generated package identity sidecar is the image's candidate authority;
+    # no identity variables need to be exported for this Compose path.
+    context: ../output/docker-context
     dockerfile: docker/Dockerfile
   restart: unless-stopped
 

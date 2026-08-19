@@ -55,6 +55,13 @@ nested environment evidence, reviewed Python lock, Web artifact identity, and
 amd64/arm64 image digests, then records twelve explicit qualification gates.
 Missing, skipped, cancelled, neutral, unknown, or failed gates remain NO-GO.
 
+The release image consumes the source-verified Web artifact through
+`scripts/docker_package.py`. The generated Docker context is the only package
+boundary: its embedded package identity carries the candidate SHA/tree and Web
+artifact fingerprint, and the Dockerfile verifies those values before the
+image can be built. The final runtime therefore does not rebuild Web assets or
+reconstruct source-only Git, dependency, or environment facts.
+
 The read-only operator-evidence consumer is a dedicated `release-approval` job.
 It uses explicit private producer run and artifact IDs, authenticates them
 against the pinned private repository/workflow/head commit, and validates the

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-07-23",
+  "capturedOn": "2026-08-19",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8285,
-      "sha256": "096bbca687671114e3f3b11999f5638a0f01d643b943c043aba41339dc411b1b"
+      "count": 8288,
+      "sha256": "6836bc4c4c9ec72e3437aa6b3de2683df6bfd4ed420b62a28ba004272d2315a6"
     },
     "tests": [
       {
@@ -7524,9 +7524,24 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_web_build_artifact.py::test_docker_package_context_binds_clean_archive_and_verified_artifact",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_web_build_artifact.py::test_manifest_regeneration_is_deterministic",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_packaged_runtime_fails_closed_for_identity_asset_and_missing_artifact",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_packaged_runtime_verifies_without_git_web_source_or_node",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_web_build_artifact.py::test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes",

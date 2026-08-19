@@ -146,18 +146,6 @@ async function verifyCurrentCanonicalArtifact(): Promise<void> {
     throw new Error('Canonical Web artifact module entry is not a contained asset path');
   }
 
-  const buildIdentity = requireRecord(
-    JSON.parse(await readFile(path.join(artifactRoot, '.wolfystock-build-identity.json'), 'utf8')),
-    'canonical Web build identity',
-  );
-  if (
-    buildIdentity.contract !== 'wolfystock_frontend_build_identity_v1'
-    || requireHash(buildIdentity.gitSha, 'canonical Web build identity gitSha', 40) !== expectedCandidateSha
-    || buildIdentity.repositoryRoot !== repoRoot
-    || buildIdentity.mainJsAssetFilename !== path.posix.basename(entry)
-  ) {
-    throw new Error('Canonical Web build identity does not match the marker entry and current candidate');
-  }
   const assets = marker.assets;
   if (!Array.isArray(assets)) {
     throw new Error('Canonical Web artifact assets must be an array');
@@ -165,9 +153,8 @@ async function verifyCurrentCanonicalArtifact(): Promise<void> {
   const entryAsset = assets
     .map((asset) => requireRecord(asset, 'canonical Web artifact asset'))
     .find((asset) => asset.path === entry.slice(1));
-  if (!entryAsset || requireHash(entryAsset.sha256, 'canonical Web artifact entry asset SHA-256', 64)
-    !== requireHash(buildIdentity.mainJsAssetSha256, 'canonical Web build identity mainJsAssetSha256', 64)) {
-    throw new Error('Canonical Web module entry does not match the build identity');
+  if (!entryAsset) {
+    throw new Error('Canonical Web module entry is missing from the artifact inventory');
   }
 
   const verification = requireRecord(
