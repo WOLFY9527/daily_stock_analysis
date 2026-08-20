@@ -64,7 +64,7 @@ function resolveMarketOverviewProviderState(
   if (state === 'unavailable' && (panel?.status === 'success' || panel?.status === 'partial')) {
     return 'partial';
   }
-  if (state === 'synthetic') return 'synthetic';
+  if (state === 'synthetic' || state === 'fallback') return 'synthetic';
   if (state === 'partial') return 'partial';
   if (state === 'unavailable' || state === 'error') return 'refreshFailed';
   if (state === 'stale') return 'stale';

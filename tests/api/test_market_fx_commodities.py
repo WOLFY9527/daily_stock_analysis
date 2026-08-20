@@ -121,6 +121,14 @@ def test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failu
     assert payload["providerHealth"]["status"] != "live"
     assert items["DXY"]["source"] == "yfinance_proxy"
     assert items["DXY"]["isFallback"] is False
-    assert items["USDCNH"]["source"] == "fallback"
-    assert items["USDCNH"]["freshness"] == "fallback"
-    assert items["USDCNH"]["isFallback"] is True
+    assert items["DXY"]["asOf"] is not None
+    assert items["USDCNH"]["source"] == "unavailable"
+    assert items["USDCNH"]["freshness"] == "unavailable"
+    assert items["USDCNH"]["isFallback"] is False
+    assert items["USDCNH"]["isUnavailable"] is True
+    assert items["USDCNH"]["asOf"] is None
+    assert items["USDCNH"]["value"] is None
+    assert items["USDCNH"]["price"] is None
+    assert items["USDCNH"]["change"] is None
+    assert items["USDCNH"]["changePercent"] is None
+    assert items["USDCNH"]["trend"] == []

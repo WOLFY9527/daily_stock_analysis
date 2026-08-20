@@ -658,7 +658,7 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         evidence = payload["evidenceSnapshot"]
         assert evidence["source"] == "unavailable"
         assert evidence["freshness"] == "unavailable"
-        assert evidence["isFallback"] is True
+        assert evidence["isFallback"] is False
         assert evidence["isStale"] is False
         assert evidence["isPartial"] is False
         assert evidence["isUnavailable"] is True

@@ -117,7 +117,7 @@ export type PanelKey = keyof PanelState;
 export type CryptoRealtimeStatus = 'live' | 'reconnecting' | 'snapshot';
 
 type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
-type CardCoverageKind = 'real' | 'mixed' | 'fallback';
+type CardCoverageKind = 'real' | 'mixed' | 'example' | 'unavailable';
 type MarketOverviewRowTier = 'hero' | 'secondary' | 'deep';
 type MarketOverviewRowColumns = 1 | 2 | 3;
 type MarketOverviewLayoutRow = {
@@ -343,10 +343,10 @@ const US_BREADTH_INPUT_LABELS: Record<string, string> = {
 const US_BREADTH_FRESHNESS_LABELS: Record<string, string> = {
   live: '可用',
   delayed: '延迟可用',
-  cached: '延迟可用',
-  stale: '延迟可用',
-  fallback: '延迟可用',
-  mock: '证据不足',
+  cached: '缓存可用',
+  stale: '数据过期',
+  fallback: '示例数据',
+  mock: '示例数据',
   error: '暂不可用',
   unavailable: '暂不可用',
 };
@@ -1097,8 +1097,9 @@ function unavailableMarketItem(symbol: string, label: string, message: string): 
     trend: [],
     source: 'unavailable',
     sourceLabel: '未接入',
-    freshness: 'fallback',
-    isFallback: true,
+    freshness: 'unavailable',
+    isFallback: false,
+    isUnavailable: true,
     warning: message,
     hoverDetails: [message],
   };
@@ -1382,8 +1383,8 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       {
         label: language === 'en' ? 'Data quality' : '数据质量',
         meta: language === 'en'
-          ? `${consumerDataQualityLabel} · ${activeCategoryLabel}: observed ${coverageSummary.real}, partial ${coverageSummary.mixed}, limited ${coverageSummary.fallback}`
-          : `${consumerDataQualityLabel} · ${activeCategoryLabel}：已观测 ${coverageSummary.real}，部分 ${coverageSummary.mixed}，受限 ${coverageSummary.fallback}`,
+          ? `${consumerDataQualityLabel} · ${activeCategoryLabel}: observed ${coverageSummary.real}, partial ${coverageSummary.mixed}, example ${coverageSummary.example}, unavailable ${coverageSummary.unavailable}`
+          : `${consumerDataQualityLabel} · ${activeCategoryLabel}：已观测 ${coverageSummary.real}，部分 ${coverageSummary.mixed}，示例 ${coverageSummary.example}，不可用 ${coverageSummary.unavailable}`,
       },
       ...heroEvidence,
       ...briefingEvidence,
@@ -1606,7 +1607,10 @@ function regimeResearchFreshnessLabel(freshness?: string | null, language: 'zh' 
   if (normalized === 'stale') {
     return language === 'en' ? 'Stale' : '过期';
   }
-  if (normalized === 'fallback' || normalized === 'mock' || normalized === 'synthetic' || normalized === 'unavailable' || normalized === 'error') {
+  if (normalized === 'fallback' || normalized === 'mock' || normalized === 'synthetic') {
+    return language === 'en' ? 'Example data' : '示例数据';
+  }
+  if (normalized === 'unavailable' || normalized === 'error') {
     return language === 'en' ? 'Unavailable' : '暂不可用';
   }
   return language === 'en' ? 'Delayed available' : '延迟可用';
@@ -2188,8 +2192,6 @@ function isFallbackOnlyMeta(meta: {
     meta.source === 'fallback'
     || meta.freshness === 'fallback'
     || meta.isFallback
-    || meta.isReliable === false
-    || meta.metadata?.isReliable === false
     || (items.length > 0 && items.every((item) => item.isFallback || item.freshness === 'fallback' || item.source === 'fallback')),
   );
 }
@@ -2225,23 +2227,26 @@ function getCardCoverageKind(panels: PanelState, cardKey: CardKey): CardCoverage
   const meta = getCardMeta(panels, cardKey);
   const items = meta.items || [];
   const observationState = marketObservationCollectionState([meta, ...items]);
-  if (['unavailable', 'error', 'unknown', 'synthetic'].includes(observationState)) {
-    return 'fallback';
+  if (['unavailable', 'error', 'unknown'].includes(observationState)) {
+    return 'unavailable';
+  }
+  if (['synthetic', 'fallback'].includes(observationState)) {
+    return 'example';
   }
   if (observationState === 'partial') {
-    return items.length > 0 ? 'mixed' : 'fallback';
+    return items.length > 0 ? 'mixed' : 'unavailable';
   }
   if (meta.status && !['success', 'partial'].includes(meta.status)) {
-    return items.length > 0 ? 'mixed' : 'fallback';
+    return items.length > 0 ? 'mixed' : 'unavailable';
   }
   if (!meta.source && !meta.freshness && items.length === 0) {
-    return 'fallback';
+    return 'unavailable';
   }
   if (meta.source === 'error' || meta.freshness === 'error') {
-    return items.length > 0 ? 'mixed' : 'fallback';
+    return items.length > 0 ? 'mixed' : 'unavailable';
   }
   if (isFallbackOnlyMeta(meta)) {
-    return 'fallback';
+    return 'example';
   }
   if (meta.source === 'mixed' || items.some(isItemFallback)) {
     return 'mixed';
@@ -2253,7 +2258,7 @@ function summarizeCardCoverage(panels: PanelState, cards: CardKey[]): Record<Car
   return cards.reduce<Record<CardCoverageKind, number>>((summary, cardKey) => {
     summary[getCardCoverageKind(panels, cardKey)] += 1;
     return summary;
-  }, { real: 0, mixed: 0, fallback: 0 });
+  }, { real: 0, mixed: 0, example: 0, unavailable: 0 });
 }
 
 function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
@@ -2340,7 +2345,7 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
         : counts.partial > 0
           ? '存在部分可用数据'
           : counts.fallback > 0
-            ? '延迟可用'
+            ? '存在样本观察'
             : '可用';
   return {
     status,
@@ -2366,7 +2371,8 @@ function summarizeTopLevelDataStatus(params: {
   const categoryStatuses = CATEGORY_CARDS[activeCategory].map((cardKey) => resolveProviderStatus(getCardMeta(panels, cardKey)));
   const usableCount = coverageSummary.real + coverageSummary.mixed;
   const hasRefreshing = loading || refreshingPanel !== null || categoryStatuses.some((status) => status === 'refreshing');
-  const hasMissingPanels = coverageSummary.fallback > 0 || categoryStatuses.some((status) => ['partial', 'synthetic', 'unavailable', 'error'].includes(status));
+  const hasMissingPanels = coverageSummary.example + coverageSummary.unavailable > 0
+    || categoryStatuses.some((status) => ['partial', 'synthetic', 'fallback', 'unavailable', 'error'].includes(status));
 
   if (usableCount === 0) {
     return hasRefreshing
@@ -2657,27 +2663,31 @@ const CnShortSentimentCard: React.FC<{
   refreshing?: boolean;
   onRefresh: () => void;
 }> = ({ data, loading = false, refreshing = false, onRefresh }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const title = t('marketOverviewPage.cards.cnShortSentiment.title');
   const panel: MarketOverviewPanel = {
     panelName: 'CnShortSentimentCard',
-    status: data.isFallback ? 'failure' : 'success',
+    status: data.isFallback || data.isUnavailable ? 'failure' : 'success',
     lastRefreshAt: data.updatedAt,
     items: [],
     ...data,
   };
-  const metrics = [
+  const fallbackOnly = isFallbackOnlyMeta(data);
+  const unavailable = data.isUnavailable || data.freshness === 'unavailable' || data.sentimentScore === null;
+  const metrics = unavailable ? [] : [
     ['limitUpCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.limitUpCount'), data.metrics.limitUpCount],
     ['limitDownCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.limitDownCount'), data.metrics.limitDownCount],
     ['failedLimitUpRate', t('marketOverviewPage.cards.cnShortSentiment.metrics.failedLimitUpRate'), `${data.metrics.failedLimitUpRate}%`],
     ['maxConsecutiveLimitUps', t('marketOverviewPage.cards.cnShortSentiment.metrics.maxConsecutiveLimitUps'), data.metrics.maxConsecutiveLimitUps],
-    ['yesterdayLimitUpPerformance', t('marketOverviewPage.cards.cnShortSentiment.metrics.yesterdayLimitUpPerformance'), `${data.metrics.yesterdayLimitUpPerformance >= 0 ? '+' : ''}${data.metrics.yesterdayLimitUpPerformance}%`],
+    ['yesterdayLimitUpPerformance', t('marketOverviewPage.cards.cnShortSentiment.metrics.yesterdayLimitUpPerformance'), `${data.metrics.yesterdayLimitUpPerformance! >= 0 ? '+' : ''}${data.metrics.yesterdayLimitUpPerformance}%`],
     ['firstBoardCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.firstBoardCount'), data.metrics.firstBoardCount],
     ['secondBoardCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.secondBoardCount'), data.metrics.secondBoardCount],
     ['highBoardCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.highBoardCount'), data.metrics.highBoardCount],
     ['twentyCmLimitUpCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.twentyCmLimitUpCount'), data.metrics.twentyCmLimitUpCount],
   ] as const;
-  const fallbackOnly = isFallbackOnlyMeta(data);
+  const unavailableCopy = language === 'en'
+    ? 'Real market observation unavailable'
+    : '真实市场观察暂不可用';
   return (
     <MarketOverviewCardFrame size="compact" className={cn('h-full', fallbackOnly ? 'border-orange-300/12' : '')}>
       <div className="flex h-full min-h-0 flex-col gap-3">
@@ -2692,9 +2702,9 @@ const CnShortSentimentCard: React.FC<{
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-[color:var(--wolfy-text-muted)]' : 'text-[color:var(--state-success-text)]')}>{data.sentimentScore}</p>
+              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-[color:var(--wolfy-text-muted)]' : 'text-[color:var(--state-success-text)]')}>{unavailable ? '—' : data.sentimentScore}</p>
             </div>
-            <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{data.summary}</p>
+            <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{unavailable ? unavailableCopy : data.summary}</p>
           </div>
         </div>
         <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto no-scrollbar ui-scroll-y-quiet">
@@ -2707,7 +2717,7 @@ const CnShortSentimentCard: React.FC<{
         </div>
         {metrics.length > 6 ? <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">其余 {metrics.length - 6} 项已折叠</p> : null}
         {loading ? <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.loading')}</div> : null}
-        <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || (fallbackOnly ? '延迟可用' : '可用')} />
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || (unavailable ? unavailableCopy : language === 'en' ? 'Available' : '可用')} />
       </div>
     </MarketOverviewCardFrame>
   );

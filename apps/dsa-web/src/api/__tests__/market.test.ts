@@ -212,13 +212,14 @@ describe('market temperature evidence normalization', () => {
       ['BINANCE', '可用'],
       ['REAL', '可用'],
       ['MIXED', '部分可用'],
-      ['FALLBACK', '延迟可用'],
+      ['FALLBACK', '示例数据'],
       ['ETF flow proxy', 'ETF 资金流指标'],
       ['Institutional pressure proxy', '机构压力指标'],
       ['Industry breadth proxy', '行业广度指标'],
       ['Binance Futures', '可用'],
       ['local cache', '延迟可用'],
-      ['synthetic fixture', '证据不足'],
+      ['fallback', '示例数据'],
+      ['synthetic fixture', '示例数据'],
     ] as const;
 
     for (const [rawLabel, productLabel] of cases) {
@@ -251,11 +252,13 @@ describe('market temperature evidence normalization', () => {
       ],
     });
 
-    expect(panel.sourceLabel).toBe('延迟可用');
-    expect(panel.warning).toBe('已使用最近一次可用数据，不代表当前实时行情');
-    expect(panel.items[0].sourceLabel).toBe('延迟可用');
+    expect(panel.sourceLabel).toBe('示例数据');
+    expect(panel.warning).toBe('示例数据，不是市场观察');
+    expect(panel.items[0].sourceLabel).toBe('示例数据');
     expect(panel.items[0].warning).toBe('数据待补');
-    expect(panel.items[0].hoverDetails).toEqual(['最近可用数据仅保留市场结构观察']);
+    expect(panel.items[0].hoverDetails).toEqual(['示例数据仅用于说明页面结构']);
+    expect(panel.warning).not.toMatch(/最近|延迟|实时行情/);
+    expect(panel.items[0].sourceLabel).not.toMatch(/最近|延迟/);
   });
 
   it('projects market overview proxy item labels before UI rendering', () => {

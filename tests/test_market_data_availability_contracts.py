@@ -324,16 +324,23 @@ def test_market_overview_fallback_only_panels_preserve_unavailable_and_fallback_
     rates = service._fallback_rates_snapshot()
     rates_provenance = _payload_provenance(rates)
 
-    assert rates["source"] == "fallback"
-    assert rates["isFallback"] is True
+    assert rates["source"] == "unavailable"
+    assert rates["isFallback"] is False
     assert rates["fallbackUsed"] is True
-    assert "isUnavailable" not in rates
-    assert rates["sourceLabel"] == "备用数据"
-    assert rates_provenance["sourceType"] == "fallback_static"
-    assert rates_provenance["sourceLabel"] == "备用数据"
-    assert rates_provenance["freshnessLabel"] == "备用/缺失"
-    assert all("isUnavailable" not in item for item in rates["items"])
-    assert all(item["value"] is not None for item in rates["items"])
+    assert rates["isUnavailable"] is True
+    assert rates["asOf"] is None
+    assert rates["freshness"] == "unavailable"
+    assert rates["sourceLabel"] == "未接入"
+    assert rates_provenance["sourceType"] == "missing"
+    assert rates_provenance["sourceLabel"] == "未接入"
+    assert rates_provenance["freshnessLabel"] == "不可用"
+    assert all(item["isUnavailable"] is True for item in rates["items"])
+    assert all(item["asOf"] is None for item in rates["items"])
+    assert all(item["value"] is None for item in rates["items"])
+    assert all(item["price"] is None for item in rates["items"])
+    assert all(item["change"] is None for item in rates["items"])
+    assert all(item["changePercent"] is None for item in rates["items"])
+    assert all(item["trend"] == [] for item in rates["items"])
 
 
 def test_sector_rotation_projection_stays_proxy_computed_not_official_or_live() -> None:
@@ -702,9 +709,9 @@ def test_market_overview_futures_proxy_payload_preserves_proxy_and_fail_closed_f
 
     assert payload["source"] == "mixed"
     assert payload["sourceType"] == "unofficial_proxy"
-    assert payload["freshness"] == "delayed"
+    assert payload["freshness"] == "proxy"
     assert payload_provenance["sourceType"] == "unofficial_proxy"
-    assert payload_provenance["freshnessLabel"] == "延迟"
+    assert "延迟" in payload["warning"]
     assert nq["source"] == "yfinance_proxy"
     assert nq["sourceType"] == "unofficial_proxy"
     assert nq["freshness"] == "delayed"
@@ -716,12 +723,16 @@ def test_market_overview_futures_proxy_payload_preserves_proxy_and_fail_closed_f
     assert nq["scoreContributionAllowed"] is False
     assert nq["scoreAuthorityEligible"] is False
     assert nq_provenance["sourceType"] == "unofficial_proxy"
-    assert nq_provenance["freshnessLabel"] == "延迟"
-    assert fallback["source"] == "fallback"
-    assert fallback["freshness"] == "fallback"
-    assert fallback["isFallback"] is True
-    assert fallback_provenance["sourceType"] == "fallback_static"
-    assert fallback_provenance["freshnessLabel"] == "备用/缺失"
+    assert datetime.fromisoformat(nq["asOf"]) == as_of.replace(microsecond=0)
+    assert fallback["source"] == "unavailable"
+    assert fallback["freshness"] == "unavailable"
+    assert fallback["isFallback"] is False
+    assert fallback["isUnavailable"] is True
+    assert fallback["asOf"] is None
+    assert fallback["value"] is None
+    assert fallback["trend"] == []
+    assert fallback_provenance["sourceType"] == "missing"
+    assert fallback_provenance["freshnessLabel"] == "不可用"
 
 
 def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(

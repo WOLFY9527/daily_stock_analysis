@@ -18,32 +18,39 @@ class MarketCnShortSentimentApiTestCase(unittest.TestCase):
     def test_get_cn_short_sentiment_returns_contract_payload(self) -> None:
         service = MagicMock()
         service.get_cn_short_sentiment.return_value = {
-            "source": "fallback",
+            "source": "unavailable",
             "updatedAt": "2026-04-30T10:00:00+08:00",
-            "sentimentScore": 64,
-            "summary": "涨停家数占优，炸板率可控。",
+            "asOf": None,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isUnavailable": True,
+            "sentimentScore": None,
+            "summary": "真实短线情绪观察暂不可用",
             "metrics": {
-                "limitUpCount": 68,
-                "limitDownCount": 18,
-                "failedLimitUpRate": 24.5,
-                "maxConsecutiveLimitUps": 5,
-                "yesterdayLimitUpPerformance": 2.8,
-                "firstBoardCount": 42,
-                "secondBoardCount": 12,
-                "highBoardCount": 6,
-                "twentyCmLimitUpCount": 9,
-                "stRiskLevel": "normal",
+                "limitUpCount": None,
+                "limitDownCount": None,
+                "failedLimitUpRate": None,
+                "maxConsecutiveLimitUps": None,
+                "yesterdayLimitUpPerformance": None,
+                "firstBoardCount": None,
+                "secondBoardCount": None,
+                "highBoardCount": None,
+                "twentyCmLimitUpCount": None,
+                "stRiskLevel": "unknown",
             },
         }
 
         with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
             payload = market.get_cn_short_sentiment()
 
-        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["source"], "unavailable")
         self.assertTrue(payload["updatedAt"])
-        self.assertGreaterEqual(payload["sentimentScore"], 0)
-        self.assertLessEqual(payload["sentimentScore"], 100)
-        self.assertTrue(payload["summary"])
+        self.assertIsNone(payload["asOf"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isUnavailable"])
+        self.assertIsNone(payload["sentimentScore"])
+        self.assertEqual(payload["summary"], "真实短线情绪观察暂不可用")
         for key in (
             "limitUpCount",
             "limitDownCount",
@@ -57,17 +64,24 @@ class MarketCnShortSentimentApiTestCase(unittest.TestCase):
             "stRiskLevel",
         ):
             self.assertIn(key, payload["metrics"])
+        for key, value in payload["metrics"].items():
+            if key != "stRiskLevel":
+                self.assertIsNone(value)
 
     def test_get_cn_short_sentiment_falls_back_when_public_source_fails(self) -> None:
         service = MarketOverviewService()
         with patch.object(service, "_fetch_cn_short_sentiment_snapshot", side_effect=RuntimeError("source down")):
             payload = service.get_cn_short_sentiment()
 
-        self.assertIn(payload["source"], {"fallback", "mixed", "public"})
+        self.assertEqual(payload["source"], "unavailable")
         self.assertTrue(payload["updatedAt"])
-        self.assertGreaterEqual(payload["sentimentScore"], 0)
-        self.assertLessEqual(payload["sentimentScore"], 100)
+        self.assertIsNone(payload["asOf"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isUnavailable"])
+        self.assertIsNone(payload["sentimentScore"])
         self.assertTrue(payload["metrics"])
+        self.assertTrue(all(value is None for key, value in payload["metrics"].items() if key != "stRiskLevel"))
 
 
 if __name__ == "__main__":

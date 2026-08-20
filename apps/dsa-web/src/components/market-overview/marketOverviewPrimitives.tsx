@@ -18,9 +18,9 @@ const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   fresh: '实时',
   delayed: '延迟可读',
   cached: '保存快照',
-  stale: '可能延迟',
+  stale: '数据过期',
   partial: '部分可用',
-  fallback: '替代快照',
+  fallback: '示例数据',
   mock: '示例观察',
   synthetic: '示例观察',
   error: '读取异常',
@@ -34,9 +34,9 @@ const FRESHNESS_LABELS_EN: Record<MarketDataFreshness, string> = {
   fresh: 'Live',
   delayed: 'Delayed',
   cached: 'Saved snapshot',
-  stale: 'May be delayed',
+  stale: 'Stale',
   partial: 'Partially available',
-  fallback: 'Alternative snapshot',
+  fallback: 'Example data',
   mock: 'Example observation',
   synthetic: 'Example observation',
   error: 'Read error',
@@ -52,8 +52,8 @@ const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
   live: '实时',
   cache: '保存快照',
   delayed: '延迟可读',
-  stale: '可能延迟',
-  fallback: '替代快照',
+  stale: '数据过期',
+  fallback: '示例数据',
   mock: '示例观察',
   synthetic: '示例观察',
   proxy: '代理数据',
@@ -67,8 +67,8 @@ const STATUS_LABELS_EN: Record<MarketFreshnessBadgeKey, string> = {
   live: 'Live',
   cache: 'Saved snapshot',
   delayed: 'Delayed',
-  stale: 'May be delayed',
-  fallback: 'Alternative snapshot',
+  stale: 'Stale',
+  fallback: 'Example data',
   mock: 'Example observation',
   synthetic: 'Example observation',
   proxy: 'Proxy data',
@@ -250,12 +250,8 @@ export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; sta
 function metaText(meta?: Partial<MarketDataMeta>, language: 'zh' | 'en' = 'zh'): string[] {
   const parts: string[] = [];
   const asOf = formatMarketOverviewTimestamp(meta?.asOf);
-  const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
   if (asOf) {
     parts.push(`${language === 'en' ? 'As of' : '行情截至'} ${asOf}`);
-  }
-  if (updatedAt) {
-    parts.push(`${language === 'en' ? 'Fetched at' : '获取于'} ${updatedAt}`);
   }
   return parts;
 }
@@ -263,8 +259,7 @@ function metaText(meta?: Partial<MarketDataMeta>, language: 'zh' | 'en' = 'zh'):
 function compactMetaText(meta?: Partial<MarketDataMeta>, language: 'zh' | 'en' = 'zh'): string {
   const asOf = formatMarketOverviewTimestamp(meta?.asOf);
   if (asOf) return `${language === 'en' ? 'As of' : '行情截至'} ${asOf}`;
-  const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
-  return updatedAt ? `${language === 'en' ? 'Fetched at' : '获取于'} ${updatedAt}` : '';
+  return '';
 }
 
 function sortableTimestamp(value?: string | null): { time: number; label: string } | null {

@@ -49,10 +49,10 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   'BINANCE PARTIAL SNAPSHOT': '延迟可用',
   'RECENT CACHE': '延迟可用',
   'LOCAL CACHE': '延迟可用',
-  FALLBACK: '延迟可用',
-  MOCK: '证据不足',
-  'SYNTHETIC FIXTURE': '证据不足',
-  '备用数据': '延迟可用',
+  FALLBACK: '示例数据',
+  MOCK: '示例数据',
+  'SYNTHETIC FIXTURE': '示例数据',
+  '备用数据': '示例数据',
   '最近可用数据': '延迟可用',
   'OFFICIAL MACRO MIX': '可用',
   'NYSE OFFICIAL BREADTH CACHE': '可用',
@@ -71,8 +71,8 @@ const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/Institutional pressure proxy/gi, '机构压力指标'],
   [/Industry breadth proxy/gi, '行业广度指标'],
   [/Sector ETF proxy|proxy/gi, '部分可用'],
-  [/local cache|recent cache|cache|fallback/gi, '延迟可用'],
-  [/mock|synthetic/gi, '证据不足'],
+  [/local cache|recent cache|cache/gi, '延迟可用'],
+  [/fallback|mock|synthetic/gi, '示例数据'],
   [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
   [/freshness\s*=\s*unavailable|freshness unavailable/gi, '数据新鲜度暂不可用'],
 ];
@@ -81,8 +81,8 @@ const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
   [/当前真实数据不足/g, '当前关键数据不足'],
   [/市场温度仅供界面演示/g, '暂不形成方向判断'],
   [/当前关键数据不足[，,]\s*暂不形成方向判断。?/g, '数据待补'],
-  [/备用示例数据仅用于保持界面结构/g, '最近可用数据仅保留市场结构观察'],
-  [/备用示例数据，不代表当前行情/g, '已使用最近一次可用数据，不代表当前实时行情'],
+  [/备用示例数据仅用于保持界面结构/g, '示例数据仅用于说明页面结构'],
+  [/备用示例数据，不代表当前行情/g, '示例数据，不是市场观察'],
   [/等待真实行情源/g, '等待数据恢复'],
   [/数据源异常/g, '数据更新中'],
   [/数据源暂不可用/g, '部分数据暂不可用'],
@@ -171,7 +171,18 @@ export function isMarketObservationPersistable(input: unknown): boolean {
     ...observation,
     availability: observation.status ?? temperatureAvailable,
   });
-  return truth.availability !== 'unavailable'
+  const hasObservationTime = Boolean(
+    truth.timestamps.asOf
+    || truth.timestamps.observedAt
+    || truth.timestamps.marketTime
+    || truth.timestamps.providerTime,
+  );
+  const isAuthoritativeEmptyPanel = observation.status === 'success'
+    && Array.isArray(input.items)
+    && input.items.length === 0;
+  return !['fallback', 'synthetic', 'fixture'].includes(truth.source.class)
+    && (hasObservationTime || isAuthoritativeEmptyPanel)
+    && truth.availability !== 'unavailable'
     && truth.availability !== 'malformed'
     && truth.freshness !== 'unavailable'
     && truth.freshness !== 'error'
@@ -3167,8 +3178,7 @@ export function isCnShortSentimentContract(value: unknown): value is CnShortSent
   if (
     !isMarketContractRecord(value)
     || !hasMarketAuxiliaryObservationContract(value)
-    || typeof value.sentimentScore !== 'number'
-    || !Number.isFinite(value.sentimentScore)
+    || !isFiniteMarketContractNumberOrNull(value.sentimentScore)
     || !hasMarketContractText(value.summary)
     || !isMarketContractRecord(value.metrics)
   ) {
@@ -3176,7 +3186,7 @@ export function isCnShortSentimentContract(value: unknown): value is CnShortSent
   }
   const metrics = value.metrics;
   return CN_SHORT_SENTIMENT_METRIC_KEYS.every((key) => (
-    typeof metrics[key] === 'number' && Number.isFinite(metrics[key])
+    isFiniteMarketContractNumberOrNull(metrics[key])
   ));
 }
 
@@ -4348,22 +4358,23 @@ export type CnShortSentimentResponse = {
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
+  isUnavailable?: boolean;
   isStale?: boolean;
   isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
-  sentimentScore: number;
+  sentimentScore: number | null;
   summary: string;
   metrics: {
-    limitUpCount: number;
-    limitDownCount: number;
-    failedLimitUpRate: number;
-    maxConsecutiveLimitUps: number;
-    yesterdayLimitUpPerformance: number;
-    firstBoardCount: number;
-    secondBoardCount: number;
-    highBoardCount: number;
-    twentyCmLimitUpCount: number;
+    limitUpCount: number | null;
+    limitDownCount: number | null;
+    failedLimitUpRate: number | null;
+    maxConsecutiveLimitUps: number | null;
+    yesterdayLimitUpPerformance: number | null;
+    firstBoardCount: number | null;
+    secondBoardCount: number | null;
+    highBoardCount: number | null;
+    twentyCmLimitUpCount: number | null;
     stRiskLevel?: string;
   };
 };

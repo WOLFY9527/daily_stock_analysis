@@ -172,8 +172,16 @@ def test_rates_panel_keeps_static_cn_fallback_rows_non_authoritative_when_us_off
     assert items["US10Y"]["sourceType"] == "official_public"
     for symbol in ("CN10Y", "DR007", "SHIBOR", "LPR"):
         item = items[symbol]
-        assert item["source"] == "fallback"
-        assert item["isFallback"] is True
+        assert item["source"] == "unavailable"
+        assert item["isFallback"] is False
+        assert item["isUnavailable"] is True
+        assert item["freshness"] == "unavailable"
+        assert item["asOf"] is None
+        assert item["value"] is None
+        assert item["price"] is None
+        assert item["change"] is None
+        assert item["changePercent"] is None
+        assert item["trend"] == []
         assert item.get("sourceAuthorityAllowed") is not True
         assert item.get("scoreContributionAllowed") is not True
         provenance = project_source_provenance(
@@ -182,7 +190,7 @@ def test_rates_panel_keeps_static_cn_fallback_rows_non_authoritative_when_us_off
             freshness=item.get("freshness"),
             is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed")),
         )
-        assert provenance["sourceType"] == "fallback_static"
+        assert provenance["sourceType"] == "missing"
 
 
 def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:
@@ -198,7 +206,7 @@ def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:
     assert payload["sourceType"] == "missing"
     assert payload["freshness"] == "unavailable"
     assert payload["breadthClaimType"] == "missing_unavailable_breadth"
-    assert payload["isFallback"] is True
+    assert payload["isFallback"] is False
     assert payload["fallbackUsed"] is True
     assert payload["sourceAuthorityAllowed"] is False
     assert payload["scoreContributionAllowed"] is False
@@ -415,13 +423,17 @@ def test_partial_provider_health_is_preserved_for_mixed_cn_indices() -> None:
     assert payload["providerHealth"]["isFallback"] is False
     assert payload["providerHealth"]["sourceLabel"] == "多来源"
     live_item = next(item for item in payload["items"] if item["source"] == "sina")
-    fallback_item = next(item for item in payload["items"] if item["isFallback"] is True)
+    fallback_item = next(item for item in payload["items"] if item["isUnavailable"] is True)
     assert live_item["isFallback"] is False
     assert live_item["sourceLabel"] == "新浪财经"
     assert live_item["sourceType"] == "public_api"
-    assert fallback_item["source"] == "fallback"
-    assert fallback_item["sourceLabel"] == "备用数据"
-    assert fallback_item["sourceType"] == "public_api"
+    assert fallback_item["source"] == "unavailable"
+    assert fallback_item["sourceLabel"] == "未接入"
+    assert fallback_item["sourceType"] == "missing"
+    assert fallback_item["isFallback"] is False
+    assert fallback_item["isUnavailable"] is True
+    assert fallback_item["asOf"] is None
+    assert fallback_item["value"] is None
 
 
 def test_latest_quote_service_shapes_yfinance_transport_history_frame() -> None:
@@ -603,7 +615,8 @@ def test_crypto_snapshot_marks_missing_funding_as_temporarily_unavailable() -> N
     funding_items = [item for item in payload["items"] if str(item["symbol"]).endswith("_FUNDING")]
     assert {item["symbol"] for item in funding_items} == {"BTC_FUNDING", "ETH_FUNDING", "SOL_FUNDING", "BNB_FUNDING"}
     assert all(item["source"] == "unavailable" for item in funding_items)
-    assert all(item["freshness"] == "fallback" for item in funding_items)
+    assert all(item["freshness"] == "unavailable" for item in funding_items)
+    assert all(item["isFallback"] is False for item in funding_items)
     normalized_panel = service._with_market_meta(payload, "crypto")
     btc = service._with_item_meta(payload["items"][0], "crypto", normalized_panel)
     assert normalized_panel["asOf"] is None
@@ -641,4 +654,5 @@ def test_crypto_depth_fallback_marks_liquidity_and_dominance_unavailable() -> No
         }
     ]
     assert all(item["source"] == "unavailable" for item in unavailable)
-    assert all(item["freshness"] == "fallback" for item in unavailable)
+    assert all(item["freshness"] == "unavailable" for item in unavailable)
+    assert all(item["isFallback"] is False for item in unavailable)

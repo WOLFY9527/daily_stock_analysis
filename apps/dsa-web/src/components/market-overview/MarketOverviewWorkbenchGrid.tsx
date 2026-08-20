@@ -25,7 +25,7 @@ export type MarketOverviewExecutiveGroupView = {
   changeText: string;
   changeToneClass: string;
   freshness: MarketOverviewPanel['freshness'];
-  coverage: 'real' | 'mixed' | 'fallback';
+  coverage: 'real' | 'mixed' | 'example' | 'unavailable';
 };
 
 export type MarketOverviewEvidenceGroupView = {
@@ -58,13 +58,15 @@ type MarketOverviewWorkbenchGridProps = {
 const EXECUTIVE_COVERAGE_LABELS: Record<MarketOverviewExecutiveGroupView['coverage'], string> = {
   real: '可用',
   mixed: '部分可用',
-  fallback: '延迟可用',
+  example: '示例数据',
+  unavailable: '暂不可用',
 };
 
 const EXECUTIVE_COVERAGE_LABELS_EN: Record<MarketOverviewExecutiveGroupView['coverage'], string> = {
   real: 'Available',
   mixed: 'Partially available',
-  fallback: 'Delayed',
+  example: 'Example data',
+  unavailable: 'Unavailable',
 };
 
 const RailSummaryBlock: React.FC<{
@@ -120,13 +122,8 @@ const ContextHighlightsRail: React.FC<{
 
 function isMeaningfulExecutiveGroup(group: MarketOverviewExecutiveGroupView): boolean {
   const value = String(group.valueText || '').trim();
-  const change = String(group.changeText || '').trim();
   if (!value || value === '待确认' || value === 'Pending confirmation' || value === '—' || value === '--') {
     return false;
-  }
-  if ((change === '待确认' || change === 'Pending confirmation') && group.coverage === 'fallback') {
-    // Delayed coverage with a real value still counts as useful evidence.
-    return true;
   }
   return true;
 }
@@ -202,7 +199,7 @@ const ExecutiveSecondaryGroups: React.FC<{
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <DataFreshnessBadge
-                freshness={(group.freshness || (group.coverage === 'fallback' ? 'fallback' : 'cached')) as MarketOverviewPanel['freshness']}
+                freshness={(group.freshness || (group.coverage === 'example' ? 'fallback' : group.coverage === 'unavailable' ? 'unavailable' : 'cached')) as MarketOverviewPanel['freshness']}
                 status={group.coverage === 'mixed' ? 'partial' : undefined}
                 className="px-1.5 text-[9px]"
               />

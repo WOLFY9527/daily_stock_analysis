@@ -132,6 +132,7 @@ CN_TZ = timezone(timedelta(hours=8))
 US_EASTERN_TZ = ZoneInfo("America/New_York")
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 STATIC_MARKET_FALLBACK_UNAVAILABLE_REASON = "static_market_overview_fallback_unavailable"
+STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING = "真实市场观察暂不可用，未显示示例数值"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 MARKET_OVERVIEW_BRIEFING_SCHEMA_VERSION = "market_overview_briefing_v1"
 MARKET_OVERVIEW_BRIEFING_NO_ADVICE_DISCLOSURE = "仅供市场结构观察与研究整理，不用于个性化决策或执行。"
@@ -5848,7 +5849,13 @@ class MarketOverviewService:
             if isinstance(source_freshness, Mapping) and source_freshness.get("freshness"):
                 raw_freshness = source_freshness.get("freshness")
             if not raw_freshness and not item_proxy and not item.get("isUnavailable"):
-                continue
+                if (
+                    _has_valid_market_value(dict(item))
+                    and extract_authoritative_market_time(item).observed_at is not None
+                ):
+                    raw_freshness = fallback_freshness
+                else:
+                    continue
             if not raw_freshness and item_proxy:
                 raw_freshness = "proxy"
             item_state = cls._normalize_market_overview_freshness_state(raw_freshness)
@@ -7242,7 +7249,8 @@ class MarketOverviewService:
             if quote:
                 live_count += 1
                 merged_items.append({
-                    **fallback_item,
+                    "name": quote.get("name") or fallback_item.get("name"),
+                    "label": quote.get("name") or fallback_item.get("label"),
                     **quote,
                     "symbol": canonical_symbol,
                     "label": quote.get("name") or fallback_item.get("label"),
@@ -7252,6 +7260,7 @@ class MarketOverviewService:
                     "source": "sina",
                     "sourceLabel": "新浪财经",
                     "isFallback": False,
+                    "isUnavailable": False,
                     "warning": None,
                 })
             else:
@@ -7270,7 +7279,7 @@ class MarketOverviewService:
             "asOf": authoritative_market_watermark(merged_items).observed_at,
             "items": merged_items,
             "fallbackUsed": is_partial,
-            "warning": FALLBACK_WARNING if is_partial else None,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING if is_partial else None,
         }
         if is_partial:
             payload["freshness"] = "partial"
@@ -7906,9 +7915,9 @@ class MarketOverviewService:
                 else fallback.get("sourceLabel", self._source_label("fallback"))
             ),
             "items": items,
-            "fallbackUsed": any(bool(item.get("isFallback")) for item in items),
+            "fallbackUsed": any(bool(item.get("isUnavailable")) for item in items),
             "isFallback": False,
-            "warning": FALLBACK_WARNING if any(bool(item.get("isFallback")) for item in items) else None,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING if any(bool(item.get("isUnavailable")) for item in items) else None,
         }
 
     def _project_sector_rotation_snapshot(self, radar_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -9428,7 +9437,11 @@ class MarketOverviewService:
             change_percent = ((latest - previous) / previous * 100) if previous else 0.0
             trend = [round(value, 3) for value in closes[-8:]]
             merged_items.append({
-                **fallback_item,
+                "name": fallback_item.get("name"),
+                "label": fallback_item.get("label"),
+                "symbol": symbol,
+                "unit": fallback_item.get("unit"),
+                "market": fallback_item.get("market"),
                 "value": round(latest, 3),
                 "price": round(latest, 3),
                 "change": round(change, 3),
@@ -9439,9 +9452,11 @@ class MarketOverviewService:
                 "source": "yfinance_proxy",
                 "sourceLabel": self._source_label("yfinance_proxy"),
                 "sourceType": "unofficial_proxy",
+                "freshness": "delayed",
                 "updatedAt": updated_at,
                 "asOf": as_of,
                 "isFallback": False,
+                "isUnavailable": False,
                 "warning": None,
                 "sourceFreshnessEvidence": {
                     "freshness": "delayed",
@@ -9460,7 +9475,7 @@ class MarketOverviewService:
         partial = proxy_count != len(fallback_items)
         warning = "代理延迟数据，不代表实时/官方行情"
         if partial:
-            warning = f"{warning}；部分品种仍为备用数据"
+            warning = f"{warning}；部分品种暂不可用，未显示示例数值"
         return {
             "source": "mixed" if partial else "yfinance_proxy",
             "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
@@ -9515,7 +9530,12 @@ class MarketOverviewService:
             change_percent = ((latest - previous) / previous * 100) if previous else 0.0
             trend = [round(value, 3) for value in closes[-8:]]
             merged_items.append({
-                **fallback_item,
+                "name": fallback_item.get("name"),
+                "label": fallback_item.get("label"),
+                "symbol": symbol,
+                "unit": fallback_item.get("unit"),
+                "market": fallback_item.get("market"),
+                "session": fallback_item.get("session"),
                 "value": round(latest, 3),
                 "price": round(latest, 3),
                 "change": round(change, 3),
@@ -9526,9 +9546,11 @@ class MarketOverviewService:
                 "source": "yfinance_proxy",
                 "sourceLabel": self._source_label("yfinance_proxy"),
                 "sourceType": "unofficial_proxy",
+                "freshness": "delayed",
                 "updatedAt": updated_at,
                 "asOf": as_of,
                 "isFallback": False,
+                "isUnavailable": False,
                 "warning": None,
                 "sourceFreshnessEvidence": {
                     "freshness": "delayed",
@@ -9544,10 +9566,10 @@ class MarketOverviewService:
         if proxy_count == 0:
             return fallback
 
-        partial = any(bool(item.get("isFallback")) for item in merged_items)
+        partial = any(bool(item.get("isUnavailable")) for item in merged_items)
         warning = "代理延迟数据，不代表实时/官方行情"
         if partial:
-            warning = f"{warning}；部分品种仍为备用数据"
+            warning = f"{warning}；部分品种暂不可用，未显示示例数值"
         return {
             "source": "mixed" if partial else "yfinance_proxy",
             "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
@@ -9664,7 +9686,7 @@ class MarketOverviewService:
             "sourceFreshnessEvidence": {
                 "freshness": "unavailable",
                 "isUnavailable": True,
-                "isFallback": True,
+                "isFallback": False,
                 "warning": warning,
             },
         }
@@ -9681,7 +9703,7 @@ class MarketOverviewService:
             "asOf": None,
             "freshness": "unavailable",
             "fallbackUsed": True,
-            "isFallback": True,
+            "isFallback": False,
             "warning": warning,
             "authorityDiagnostics": diagnostic,
             **missing_meta,
@@ -9829,66 +9851,67 @@ class MarketOverviewService:
     def _fallback_futures_snapshot(self) -> Dict[str, Any]:
         updated_at = _now_iso()
         rows = [
-            ("纳指期货", "NQ", 18420.5, 65.2, 0.35, "US", "premarket", [18320, 18380, 18400, 18420.5]),
-            ("标普500期货", "ES", 5238.25, 14.5, 0.28, "US", "premarket", [5208, 5218, 5229, 5238.25]),
-            ("道指期货", "YM", 38980.0, 72.0, 0.19, "US", "premarket", [38820, 38890, 38930, 38980]),
-            ("罗素2000期货", "RTY", 2094.6, -3.8, -0.18, "US", "premarket", [2108, 2102, 2098, 2094.6]),
-            ("富时A50期货", "CN00Y", 12580.0, 38.0, 0.30, "CN", "day", [12420, 12488, 12542, 12580]),
-            ("恒指期货", "HSI_F", 17712.0, 128.0, 0.73, "HK", "day", [17490, 17580, 17640, 17712]),
-            ("日经期货", "NKY_F", 38620.0, -90.0, -0.23, "JP", "day", [38880, 38740, 38690, 38620]),
+            ("纳指期货", "NQ", "US", "premarket"),
+            ("标普500期货", "ES", "US", "premarket"),
+            ("道指期货", "YM", "US", "premarket"),
+            ("罗素2000期货", "RTY", "US", "premarket"),
+            ("富时A50期货", "CN00Y", "CN", "day"),
+            ("恒指期货", "HSI_F", "HK", "day"),
+            ("日经期货", "NKY_F", "JP", "day"),
         ]
         return {
-            "source": "fallback",
-            "sourceLabel": "备用数据",
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
             "updatedAt": updated_at,
             "asOf": None,
+            "freshness": "unavailable",
             "fallbackUsed": True,
-            "isFallback": True,
-            "warning": FALLBACK_WARNING,
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
             "items": [
                 {
-                    "name": name,
-                    "symbol": symbol,
-                    "value": value,
-                    "change": change,
-                    "changePercent": change_percent,
+                    **self._unavailable_item(
+                        name,
+                        symbol,
+                        STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+                        updated_at,
+                    ),
+                    "isFallback": False,
                     "market": market,
                     "session": session,
-                    "sparkline": sparkline,
-                    "source": "fallback",
-                    "sourceLabel": "备用数据",
-                    "updatedAt": updated_at,
-                    "asOf": None,
-                    "isFallback": True,
-                    "warning": FALLBACK_WARNING,
                 }
-                for name, symbol, value, change, change_percent, market, session, sparkline in rows
+                for name, symbol, market, session in rows
             ],
         }
 
     def _fallback_cn_short_sentiment_snapshot(self) -> Dict[str, Any]:
         metrics = {
-            "limitUpCount": 68,
-            "limitDownCount": 18,
-            "failedLimitUpRate": 24.5,
-            "maxConsecutiveLimitUps": 5,
-            "yesterdayLimitUpPerformance": 2.8,
-            "firstBoardCount": 42,
-            "secondBoardCount": 12,
-            "highBoardCount": 6,
-            "twentyCmLimitUpCount": 9,
-            "stRiskLevel": "normal",
+            "limitUpCount": None,
+            "limitDownCount": None,
+            "failedLimitUpRate": None,
+            "maxConsecutiveLimitUps": None,
+            "yesterdayLimitUpPerformance": None,
+            "firstBoardCount": None,
+            "secondBoardCount": None,
+            "highBoardCount": None,
+            "twentyCmLimitUpCount": None,
+            "stRiskLevel": "unknown",
         }
-        score = self._compute_cn_short_sentiment_score(metrics)
         return {
-            "source": "fallback",
-            "sourceLabel": "备用数据",
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
             "updatedAt": _now_iso(),
+            "asOf": None,
+            "freshness": "unavailable",
             "fallbackUsed": True,
-            "isFallback": True,
-            "warning": FALLBACK_WARNING,
-            "sentimentScore": score,
-            "summary": self._build_cn_short_sentiment_summary(metrics, score),
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+            "sentimentScore": None,
+            "summary": "真实短线情绪观察暂不可用",
             "metrics": metrics,
         }
 
@@ -10107,11 +10130,29 @@ class MarketOverviewService:
         rates = self._fallback_rates_snapshot()
         fx = self._fallback_fx_commodities_snapshot()
         futures = self._fallback_futures_snapshot()
+        updated_at = _now_iso()
         sentiment = {
-            "items": [
-                self._metric_item("Fear & Greed", "FGI", 50, 0, 0, "score", [48, 49, 50, 50], explanation="备用情绪数据。")
-            ],
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
+            "updatedAt": updated_at,
+            "asOf": None,
+            "freshness": "unavailable",
             "fallbackUsed": True,
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+            "items": [
+                {
+                    **self._unavailable_item(
+                        "Fear & Greed",
+                        "FGI",
+                        STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+                        updated_at,
+                    ),
+                    "isFallback": False,
+                }
+            ],
         }
         return {
             "indices": indices,
@@ -11133,17 +11174,18 @@ class MarketOverviewService:
     def _card_snapshot(self, items: List[Dict[str, Any]], explanation: Optional[str] = None) -> Dict[str, Any]:
         updated_at = _now_iso()
         payload: Dict[str, Any] = {
-            "source": "fallback",
-            "sourceLabel": "备用数据",
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
             "updatedAt": updated_at,
             "asOf": None,
+            "freshness": "unavailable",
             "items": [self._mark_static_fallback_item(item, updated_at) for item in items],
             "fallbackUsed": True,
-            "isFallback": True,
-            "warning": FALLBACK_WARNING,
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
         }
-        if explanation:
-            payload["explanation"] = explanation
         return payload
 
     def _computed_metric_item(self, label: str, symbol: str, value: float, unit: str, detail: Optional[str] = None) -> Dict[str, Any]:
@@ -11191,8 +11233,8 @@ class MarketOverviewService:
             "sourceLabel": "未接入",
             "updatedAt": updated_at,
             "asOf": None,
-            "freshness": "fallback",
-            "isFallback": True,
+            "freshness": "unavailable",
+            "isFallback": False,
             "isUnavailable": True,
             "warning": message,
             "risk_direction": "neutral",
@@ -11205,15 +11247,36 @@ class MarketOverviewService:
         }
 
     def _mark_static_fallback_item(self, item: Dict[str, Any], updated_at: str) -> Dict[str, Any]:
-        return {
+        # A layout fallback has no market observation authority. Clearing every
+        # numeric projection here prevents future static card factories from
+        # accidentally publishing examples as recent observations.
+        normalized = {
             **item,
-            "source": "fallback",
-            "sourceLabel": "备用数据",
+            "value": None,
+            "price": None,
+            "change": None,
+            "changePercent": None,
+            "change_text": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+            "sparkline": [],
+            "trend": [],
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
             "updatedAt": updated_at,
             "asOf": None,
-            "isFallback": True,
-            "warning": FALLBACK_WARNING,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": STATIC_MARKET_FALLBACK_UNAVAILABLE_WARNING,
+            "risk_direction": "neutral",
+            "hover_details": [],
         }
+        if "relativeStrength" in normalized:
+            normalized["relativeStrength"] = None
+        if "rank" in normalized:
+            normalized["rank"] = None
+        normalized.pop("explanation", None)
+        return normalized
 
     def _metric_item(
         self,

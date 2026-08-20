@@ -136,6 +136,112 @@ async function installPartialTemperaturePayload(page: Page) {
   });
 }
 
+const MARKET_TRUTH_UAT_AS_OF = '2026-08-19T14:00:00Z';
+const MARKET_TRUTH_UAT_REFRESHED_AT = '2026-08-20T06:00:00Z';
+
+function marketTruthUatPanel(
+  state: 'live' | 'delayed' | 'cached' | 'stale' | 'example' | 'unavailable' | 'partial',
+) {
+  if (state === 'unavailable') {
+    return {
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+      status: 'unavailable',
+      source: 'unavailable',
+      sourceLabel: 'Market observation unavailable',
+      freshness: 'unavailable',
+      updatedAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+      asOf: null,
+      isFallback: false,
+      fallbackUsed: true,
+      isUnavailable: true,
+      items: [{
+        symbol: 'SPX_UNAVAILABLE',
+        label: 'SPX unavailable',
+        value: null,
+        changePct: null,
+        trend: [],
+        source: 'unavailable',
+        freshness: 'unavailable',
+        asOf: null,
+        isFallback: false,
+        isUnavailable: true,
+      }],
+    };
+  }
+
+  if (state === 'partial') {
+    return {
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+      status: 'partial',
+      source: 'mixed',
+      sourceLabel: 'Mixed market observations',
+      freshness: 'partial',
+      updatedAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+      asOf: MARKET_TRUTH_UAT_AS_OF,
+      isFallback: false,
+      isPartial: true,
+      items: [
+        {
+          symbol: 'SPX',
+          label: 'SPX observed',
+          value: 5_432.1,
+          changePct: 0.42,
+          trend: [5_420, 5_432.1],
+          source: 'qualified_market_feed',
+          freshness: 'delayed',
+          asOf: MARKET_TRUTH_UAT_AS_OF,
+          isFallback: false,
+        },
+        {
+          symbol: 'NDX_UNAVAILABLE',
+          label: 'NDX unavailable',
+          value: null,
+          changePct: null,
+          trend: [],
+          source: 'unavailable',
+          freshness: 'unavailable',
+          asOf: null,
+          isFallback: false,
+          isUnavailable: true,
+        },
+      ],
+    };
+  }
+
+  const example = state === 'example';
+  const freshness = example ? 'fallback' : state;
+  return {
+    panelName: 'IndexTrendsCard',
+    lastRefreshAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+    status: 'success',
+    source: example ? 'fallback' : 'qualified_market_feed',
+    sourceLabel: example ? 'Example market sample' : 'Qualified market observation',
+    sourceType: example ? 'fixture' : 'real',
+    freshness,
+    updatedAt: MARKET_TRUTH_UAT_REFRESHED_AT,
+    asOf: MARKET_TRUTH_UAT_AS_OF,
+    isFallback: example,
+    isStale: state === 'stale',
+    sampleState: example ? 'sample' : undefined,
+    items: [{
+      symbol: example ? 'SAMPLE_SPX' : 'SPX',
+      label: example ? 'SPX example sample' : 'SPX observed',
+      value: example ? 1_234.56 : 5_432.1,
+      changePct: example ? 0.12 : 0.42,
+      trend: example ? [1_230, 1_234.56] : [5_420, 5_432.1],
+      source: example ? 'fallback' : 'qualified_market_feed',
+      sourceType: example ? 'fixture' : 'real',
+      freshness,
+      asOf: MARKET_TRUTH_UAT_AS_OF,
+      isFallback: example,
+      isStale: state === 'stale',
+      sampleState: example ? 'sample' : undefined,
+    }],
+  };
+}
+
 async function openMarketOverviewEvidenceDetails(page: Page) {
   const disclosure = page.getByTestId('market-overview-evidence-disclosure');
   await expect(disclosure).toBeVisible();
@@ -539,6 +645,14 @@ test.describe('market overview smoke', () => {
   });
 
   test('market overview degrades partial temperature payload without blanking', async ({ page }) => {
+    let currentPanel = marketTruthUatPanel('live');
+    await page.route('**/api/v1/market-overview/indices', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(currentPanel),
+      });
+    });
     await installPartialTemperaturePayload(page);
 
     const viewports = [
@@ -589,6 +703,54 @@ test.describe('market overview smoke', () => {
       await expect(evidenceDetails).not.toContainText('N/A');
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload|partial_context_only|reasonCode|sourceAuthorityAllowed|scoreContributionAllowed|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i);
+    }
+
+    const states = [
+      { state: 'live', badge: 'live', zh: '实时', en: 'Live', hasObservation: true },
+      { state: 'delayed', badge: 'delayed', zh: '延迟可读', en: 'Delayed', hasObservation: true },
+      { state: 'cached', badge: 'cache', zh: '保存快照', en: 'Saved snapshot', hasObservation: true },
+      { state: 'stale', badge: 'stale', zh: '数据过期', en: 'Stale', hasObservation: true },
+      { state: 'example', badge: 'synthetic', zh: '样本 / 演示', en: 'Example observation', hasObservation: true },
+      { state: 'unavailable', badge: 'unavailable', zh: '暂不可用', en: 'Unavailable', hasObservation: false },
+      { state: 'partial', badge: 'partial', zh: '部分可用', en: 'Partially available', hasObservation: true },
+    ] as const;
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    for (const locale of ['zh', 'en'] as const) {
+      for (const expected of states) {
+        currentPanel = marketTruthUatPanel(expected.state);
+        await page.evaluate(() => window.localStorage.removeItem('wolfystock.marketOverview.lastKnownGood.v1'));
+        await page.goto(`/${locale}/market-overview`);
+        const card = page.getByTestId('market-overview-card-indices');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        const stateBadge = expected.state === 'example'
+          ? card.getByTestId('market-overview-provider-state')
+          : card.getByTestId(`data-freshness-badge-${expected.badge}`).first();
+        await expect(stateBadge).toContainText(expected[locale]);
+        const footer = card.getByTestId('market-overview-footer-meta');
+        if (expected.hasObservation) {
+          await expect(footer).toContainText(locale === 'en' ? 'As of' : '行情截至');
+        } else {
+          await expect(footer).not.toContainText(/As of|行情截至|Fetched at|获取于/);
+        }
+        if (expected.state === 'example') {
+          await expect(card).toContainText(locale === 'en'
+            ? 'Showing an example observation, not observed market evidence'
+            : '当前显示样本观察，不代表已观测市场证据');
+          await expect(card).not.toContainText(/延迟可读|延迟可用|Delayed data|Delayed$/);
+        }
+        if (expected.state === 'unavailable') {
+          await expect(card).not.toContainText(/1,234\.56|5,432\.1/);
+        }
+        if (expected.state === 'partial') {
+          await expect(card).toContainText('SPX');
+          await expect(card).toContainText('5,432.1');
+          await expect(card).not.toContainText('NDX');
+        }
+        if (['example', 'unavailable', 'partial'].includes(expected.state)) {
+          await captureShellVisualEvidence(page, `t723-market-truth-${locale}-${expected.state}`, { width: 1440, height: 1000 });
+        }
+      }
     }
   });
 });

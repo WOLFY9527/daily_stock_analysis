@@ -577,8 +577,18 @@ def test_fx_yfinance_stage_deadline_preserves_honest_fallback_metadata(monkeypat
         payload = service.get_fx_commodities()
 
     assert fetch_history.call_count < len(service.FX_COMMODITY_PROXY_TICKERS)
-    assert payload["source"] == "fallback"
-    assert payload["freshness"] == "fallback"
-    assert payload["isFallback"] is True
-    assert payload["providerHealth"]["status"] == "fallback"
-    assert all(item["freshness"] == "fallback" for item in payload["items"])
+    assert payload["source"] == "unavailable"
+    assert payload["freshness"] == "unavailable"
+    assert payload["asOf"] is None
+    assert payload["fallbackUsed"] is True
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
+    assert payload["providerHealth"]["status"] == "unavailable"
+    assert all(item["freshness"] == "unavailable" for item in payload["items"])
+    assert all(item["asOf"] is None for item in payload["items"])
+    assert all(item["value"] is None for item in payload["items"])
+    assert all(item["price"] is None for item in payload["items"])
+    assert all(item["change"] is None for item in payload["items"])
+    assert all(item["changePercent"] is None for item in payload["items"])
+    assert all(item["isFallback"] is False for item in payload["items"])
+    assert all(item["isUnavailable"] is True for item in payload["items"])

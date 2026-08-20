@@ -2905,6 +2905,11 @@ describe('MarketOverviewPage', () => {
     expect(errorPanel.asOf).toBeUndefined();
     expect(unavailable.scores.overall.value).toBeNull();
     expect(temperatureFallback.scores?.overall?.value).toBeNull();
+    expect(shortSentiment.sentimentScore).toBeNull();
+    expect(shortSentiment.asOf).toBeUndefined();
+    expect(Object.values(shortSentiment.metrics).filter((value) => typeof value !== 'string')).toEqual(
+      Array(9).fill(null),
+    );
   });
 
   it('fails closed when market overview panels are unavailable instead of rendering local sample markets', async () => {
@@ -4233,6 +4238,7 @@ describe('MarketOverviewPage', () => {
       status: 'success',
       source: 'authorized_quotes',
       freshness: 'live',
+      asOf: '2026-07-16T09:54:00Z',
       updatedAt: '2026-07-16T09:55:00Z',
       items: [{ symbol: 'ZERO', label: 'Observed zero', value: 0, trend: [0, 0] }],
     });
@@ -4572,7 +4578,8 @@ describe('MarketOverviewPage', () => {
     expect(metadata).not.toHaveTextContent(/Quote/);
     expect(metadata).not.toHaveTextContent(/Update/);
     expect(metadata).toHaveAttribute('title', expect.stringContaining('行情截至 2026'));
-    expect(metadata).toHaveAttribute('title', expect.stringContaining('获取于 2026'));
+    expect(metadata).not.toHaveAttribute('title', expect.stringContaining('获取于'));
+    expect(metadata).not.toHaveAttribute('title', expect.stringContaining('Fetched at'));
     expect(metadata.getAttribute('title') || '').not.toMatch(/Yahoo Finance|Provider|source|\bQuote\b|\bUpdate\b/i);
     expect(valueBlock).toHaveClass('col-start-4', 'text-right');
     expect(changeBlock).toHaveClass('col-start-5', 'text-right');
@@ -5588,6 +5595,18 @@ describe('MarketOverviewPage', () => {
         },
         {
           ...snapshotItem('ChinaIndicesCard', '000001.SH', '上证指数'),
+          value: null,
+          price: null,
+          change: null,
+          changePercent: null,
+          sparkline: [],
+          trend: [],
+          source: 'unavailable',
+          sourceLabel: '未接入',
+          freshness: 'unavailable' as const,
+          asOf: undefined,
+          isFallback: true,
+          isUnavailable: true,
         },
       ],
     });
@@ -5614,10 +5633,23 @@ describe('MarketOverviewPage', () => {
           source: 'sina',
           sourceLabel: 'Sina',
           freshness: 'delayed' as const,
+          asOf: '2026-05-20T09:30:00+08:00',
           isFallback: false,
         },
         {
           ...snapshotItem('ChinaIndicesCard', 'CN00Y', '富时A50期货'),
+          value: null,
+          price: null,
+          change: null,
+          changePercent: null,
+          sparkline: [],
+          trend: [],
+          source: 'unavailable',
+          sourceLabel: '未接入',
+          freshness: 'unavailable' as const,
+          asOf: undefined,
+          isFallback: true,
+          isUnavailable: true,
         },
       ],
     });
@@ -5892,8 +5924,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText('实时')).toBeInTheDocument();
     expect(screen.getByText('保存快照')).toBeInTheDocument();
     expect(screen.getByText('延迟可读')).toBeInTheDocument();
-    expect(screen.getByText('替代快照')).toBeInTheDocument();
-    expect(screen.getByText('可能延迟')).toBeInTheDocument();
+    expect(screen.getByText('示例数据')).toBeInTheDocument();
+    expect(screen.getByText('数据过期')).toBeInTheDocument();
     expect(screen.getByText('部分可用')).toBeInTheDocument();
     expect(screen.getByText('代理数据')).toBeInTheDocument();
     expect(screen.getByText('暂不可用')).toBeInTheDocument();
@@ -5901,6 +5933,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText('更新中')).toBeInTheDocument();
     expect(screen.getByTestId('data-freshness-badge-error')).not.toHaveTextContent('暂不可用');
     expect(screen.getByTestId('data-freshness-badge-fallback')).not.toHaveTextContent('实时');
+    expect(screen.getByTestId('data-freshness-badge-fallback')).toHaveTextContent('示例数据');
+    expect(screen.getByTestId('data-freshness-badge-fallback')).not.toHaveTextContent(/替代快照|延迟/);
     expect(screen.getByTestId('data-freshness-badge-proxy')).not.toHaveTextContent('实时');
   });
 

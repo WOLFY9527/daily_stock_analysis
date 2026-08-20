@@ -1240,15 +1240,27 @@ def test_cn00y_static_fallback_is_explicit_and_capped() -> None:
         log_patcher.stop()
 
     cn00y = _item(payload, "CN00Y")
-    assert cn00y["source"] == "fallback"
-    assert cn00y["freshness"] == "fallback"
-    assert cn00y["isFallback"] is True
+    assert payload["source"] == "unavailable"
+    assert payload["freshness"] == "unavailable"
+    assert payload["asOf"] is None
+    assert payload["fallbackUsed"] is True
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
+    assert cn00y["source"] == "unavailable"
+    assert cn00y["freshness"] == "unavailable"
+    assert cn00y["asOf"] is None
+    assert cn00y["value"] is None
+    assert cn00y["price"] is None
+    assert cn00y["change"] is None
+    assert cn00y["changePercent"] is None
+    assert cn00y["isFallback"] is False
+    assert cn00y["isUnavailable"] is True
     assert cn00y["providerAttempted"] is False
-    assert cn00y["providerClass"] == "static"
+    assert cn00y["providerClass"] == "fallback"
     assert cn00y["officialOverlayAttempted"] is False
     assert cn00y["officialOverlayAvailable"] is False
     assert cn00y["officialOverlayFailureReason"] == "not_configured"
-    assert cn00y["sourceTier"] == "static_fallback"
-    assert cn00y["trustLevel"] == "weak"
-    assert cn00y["degradationReason"] == "fallback_source"
-    assert cn00y["activationHint"] == "static_fallback_no_provider"
+    assert cn00y["sourceTier"] == "unavailable"
+    assert cn00y["trustLevel"] == "unavailable"
+    assert cn00y["degradationReason"] == "unavailable_source"
+    assert cn00y["activationHint"] == "provider_unavailable"

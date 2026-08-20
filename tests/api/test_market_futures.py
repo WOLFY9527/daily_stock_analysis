@@ -43,20 +43,29 @@ class MarketFuturesApiTestCase(unittest.TestCase):
     def test_get_futures_returns_contract_payload(self) -> None:
         service = MagicMock()
         service.get_futures.return_value = {
-            "source": "fallback",
+            "source": "unavailable",
             "updatedAt": "2026-04-30T10:00:00+08:00",
+            "asOf": None,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isUnavailable": True,
             "items": [
                 {
                     "name": "纳指期货",
                     "symbol": "NQ",
-                    "value": 18420.5,
-                    "change": 65.2,
-                    "changePercent": 0.35,
+                    "value": None,
+                    "change": None,
+                    "changePercent": None,
                     "market": "US",
                     "session": "premarket",
-                    "sparkline": [18320, 18380, 18420.5],
-                    "source": "fallback",
+                    "sparkline": [],
+                    "trend": [],
+                    "source": "unavailable",
                     "updatedAt": "2026-04-30T10:00:00+08:00",
+                    "asOf": None,
+                    "freshness": "unavailable",
+                    "isFallback": False,
+                    "isUnavailable": True,
                 }
             ],
         }
@@ -64,8 +73,12 @@ class MarketFuturesApiTestCase(unittest.TestCase):
         with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
             payload = market.get_futures()
 
-        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["source"], "unavailable")
         self.assertTrue(payload["updatedAt"])
+        self.assertIsNone(payload["asOf"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isUnavailable"])
         self.assertTrue(payload["items"])
         item = payload["items"][0]
         for key in ("name", "symbol", "value", "change", "changePercent", "market", "session", "sparkline", "source", "updatedAt"):
@@ -76,9 +89,18 @@ class MarketFuturesApiTestCase(unittest.TestCase):
         with patch.object(service, "_fetch_futures_snapshot", side_effect=RuntimeError("public source down")):
             payload = service.get_futures()
 
-        self.assertIn(payload["source"], {"fallback", "mixed", "public"})
+        self.assertEqual(payload["source"], "unavailable")
         self.assertTrue(payload["updatedAt"])
+        self.assertIsNone(payload["asOf"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isUnavailable"])
         self.assertTrue(payload["items"])
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
+        self.assertTrue(all(item["change"] is None for item in payload["items"]))
+        self.assertTrue(all(item["changePercent"] is None for item in payload["items"]))
+        self.assertTrue(all(item["asOf"] is None for item in payload["items"]))
+        self.assertTrue(all(item["sparkline"] == [] for item in payload["items"]))
 
     def test_get_futures_merges_delayed_proxy_items_onto_existing_fallback_card(self) -> None:
         service = MarketOverviewService()
@@ -98,7 +120,8 @@ class MarketFuturesApiTestCase(unittest.TestCase):
 
         self.assertEqual(payload["source"], "mixed")
         self.assertEqual(payload["sourceType"], "unofficial_proxy")
-        self.assertEqual(payload["freshness"], "delayed")
+        self.assertEqual(payload["freshness"], "proxy")
+        self.assertIn("延迟", payload["warning"])
         self.assertTrue(payload["fallbackUsed"])
         self.assertFalse(payload["isFallback"])
         self.assertEqual(payload["providerHealth"]["status"], "partial")
@@ -108,10 +131,19 @@ class MarketFuturesApiTestCase(unittest.TestCase):
             self.assertEqual(items_by_symbol[symbol]["sourceType"], "unofficial_proxy")
             self.assertEqual(items_by_symbol[symbol]["freshness"], "delayed")
             self.assertFalse(items_by_symbol[symbol]["isFallback"])
+            self.assertIsNotNone(items_by_symbol[symbol]["asOf"])
         for symbol in ("CN00Y", "HSI_F", "NKY_F"):
-            self.assertEqual(items_by_symbol[symbol]["source"], "fallback")
-            self.assertEqual(items_by_symbol[symbol]["freshness"], "fallback")
-            self.assertTrue(items_by_symbol[symbol]["isFallback"])
+            self.assertEqual(items_by_symbol[symbol]["source"], "unavailable")
+            self.assertEqual(items_by_symbol[symbol]["freshness"], "unavailable")
+            self.assertFalse(items_by_symbol[symbol]["isFallback"])
+            self.assertTrue(items_by_symbol[symbol]["isUnavailable"])
+            self.assertIsNone(items_by_symbol[symbol]["asOf"])
+            self.assertIsNone(items_by_symbol[symbol]["value"])
+            self.assertIsNone(items_by_symbol[symbol]["price"])
+            self.assertIsNone(items_by_symbol[symbol]["change"])
+            self.assertIsNone(items_by_symbol[symbol]["changePercent"])
+            self.assertEqual(items_by_symbol[symbol]["sparkline"], [])
+            self.assertEqual(items_by_symbol[symbol]["trend"], [])
 
     def test_get_futures_returns_existing_fallback_snapshot_when_all_proxy_lookups_fail(self) -> None:
         service = MarketOverviewService()
@@ -122,12 +154,17 @@ class MarketFuturesApiTestCase(unittest.TestCase):
         ):
             payload = service.get_futures()
 
-        self.assertEqual(payload["source"], "fallback")
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["fallbackUsed"])
-        self.assertEqual(payload["providerHealth"]["status"], "fallback")
-        self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
+        self.assertTrue(payload["isUnavailable"])
+        self.assertIsNone(payload["asOf"])
+        self.assertEqual(payload["providerHealth"]["status"], "unavailable")
+        self.assertTrue(all(item["source"] == "unavailable" for item in payload["items"]))
+        self.assertTrue(all(item["isUnavailable"] for item in payload["items"]))
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
+        self.assertTrue(all(item["asOf"] is None for item in payload["items"]))
 
     def test_get_futures_keeps_failed_proxy_symbol_on_item_level_fallback(self) -> None:
         service = MarketOverviewService()
@@ -152,11 +189,19 @@ class MarketFuturesApiTestCase(unittest.TestCase):
         items_by_symbol = {item["symbol"]: item for item in payload["items"]}
         self.assertEqual(payload["source"], "mixed")
         self.assertEqual(payload["providerHealth"]["status"], "partial")
-        self.assertIn("部分品种仍为备用数据", payload["warning"])
+        self.assertIn("部分品种暂不可用，未显示示例数值", payload["warning"])
         self.assertEqual(items_by_symbol["NQ"]["source"], "yfinance_proxy")
-        self.assertEqual(items_by_symbol["RTY"]["source"], "fallback")
-        self.assertEqual(items_by_symbol["RTY"]["freshness"], "fallback")
-        self.assertTrue(items_by_symbol["RTY"]["isFallback"])
+        self.assertEqual(items_by_symbol["RTY"]["source"], "unavailable")
+        self.assertEqual(items_by_symbol["RTY"]["freshness"], "unavailable")
+        self.assertFalse(items_by_symbol["RTY"]["isFallback"])
+        self.assertTrue(items_by_symbol["RTY"]["isUnavailable"])
+        self.assertIsNone(items_by_symbol["RTY"]["asOf"])
+        self.assertIsNone(items_by_symbol["RTY"]["value"])
+        self.assertIsNone(items_by_symbol["RTY"]["price"])
+        self.assertIsNone(items_by_symbol["RTY"]["change"])
+        self.assertIsNone(items_by_symbol["RTY"]["changePercent"])
+        self.assertEqual(items_by_symbol["RTY"]["sparkline"], [])
+        self.assertEqual(items_by_symbol["RTY"]["trend"], [])
 
 
 if __name__ == "__main__":
