@@ -6,9 +6,12 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from api.v1.schemas.admin_activity import AdminActivityEvent
+from src.services.admin_activity_service import AdminActivityService
 from src.storage import AnalysisHistory, DatabaseManager
+from src.services.execution_log_service import ExecutionLogService
 
 
 class AdminActivityServiceTestCase(unittest.TestCase):
@@ -45,8 +48,6 @@ class AdminActivityServiceTestCase(unittest.TestCase):
             )
             session.commit()
 
-        from src.services.admin_activity_service import AdminActivityService
-
         items, total = AdminActivityService(db_manager=self.db).list_activity(target_user_id="user-1")
 
         self.assertEqual(total, 1)
@@ -60,6 +61,36 @@ class AdminActivityServiceTestCase(unittest.TestCase):
         self.assertNotIn("RAW_RESULT_SHOULD_NOT_LEAK", text)
         self.assertNotIn("NEWS_CONTENT_SHOULD_NOT_LEAK", text)
         self.assertNotIn("CONTEXT_SNAPSHOT_SHOULD_NOT_LEAK", text)
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            execution_logs = ExecutionLogService()
+            for run_id, evaluated, data_failed in ((201, 5, 0), (202, 0, 3)):
+                execution_logs.record_scanner_run(
+                    run_detail={
+                        "id": run_id,
+                        "market": "us",
+                        "profile": "us_preopen_v1",
+                        "profile_label": "Scanner",
+                        "status": "completed",
+                        "run_at": datetime.now().isoformat(),
+                        "completed_at": datetime.now().isoformat(),
+                        "universe_size": max(evaluated, data_failed, 3),
+                        "evaluated_size": evaluated,
+                        "shortlist_size": 0,
+                        "summary": {"data_failed_count": data_failed},
+                        "diagnostics": {},
+                    },
+                    actor={"user_id": "user-1", "actor_type": "user"},
+                )
+
+        items, total = AdminActivityService(db_manager=self.db, execution_log_service=execution_logs).list_activity(
+            target_user_id="user-1",
+            family="scanner",
+        )
+        self.assertEqual(total, 2)
+        self.assertEqual({item["status"] for item in items}, {"empty", "data_failed"})
+        for item in items:
+            self.assertEqual(AdminActivityEvent.model_validate(item).outcome, "warning")
 
 
 if __name__ == "__main__":

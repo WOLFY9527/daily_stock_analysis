@@ -187,6 +187,8 @@ def _outcome_from_status(status: Any) -> str:
     normalized = _as_str(status).lower()
     if normalized in {"succeeded", "success", "ok", "completed"}:
         return "ok"
+    if normalized in {"empty", "data_failed"}:
+        return "warning"
     if normalized in {"partial", "partial_success"}:
         return "partial"
     if normalized in {"timeout", "timed_out", "timeout_unknown"}:
@@ -220,6 +222,10 @@ def _level_from_status(status: Any) -> str:
         return "CRITICAL"
     if normalized in {"failed", "failed_runtime", "error", "empty_result", "invalid_response", "insufficient_fields"}:
         return "ERROR"
+    if normalized == "empty":
+        return "NOTICE"
+    if normalized == "data_failed":
+        return "WARNING"
     if normalized in {"partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}:
         return "WARNING"
     return "INFO"
@@ -252,6 +258,55 @@ def _normalize_business_status(value: Any) -> str:
     if normalized in {"not_configured", "skipped_because_previous_succeeded"}:
         return "skipped"
     return _STATUS_ALIASES.get(normalized, normalized or "running")
+
+
+def _scanner_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _scanner_status_projection(
+    *,
+    run_detail: Dict[str, Any],
+    raw_status: str,
+    evaluated_count: int,
+    selected_count: int,
+    data_failed_count: int,
+    provider_failure_count: int,
+    readiness_error_count: int,
+) -> Dict[str, Any]:
+    """Project Scanner result meaning without replacing its persisted status."""
+    diagnostics = run_detail.get("diagnostics") if isinstance(run_detail.get("diagnostics"), dict) else {}
+    readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), dict) else {}
+    data_source_failure_count = data_failed_count + provider_failure_count
+    source_failure_count = data_source_failure_count + readiness_error_count
+    if raw_status in {"failed", "cancelled", "skipped", "empty", "data_failed", "partial"}:
+        status = raw_status
+    elif data_source_failure_count and evaluated_count == 0:
+        status = "data_failed"
+    elif source_failure_count or raw_status == "partial":
+        status = "partial"
+    elif selected_count == 0:
+        status = "empty"
+    else:
+        status = "success"
+    return {
+        "status": status,
+        "technicalStatus": raw_status,
+        "evaluationPerformed": evaluated_count > 0,
+        "usefulResult": selected_count > 0,
+        "dataFailedCount": data_failed_count,
+        "providerFailureCount": provider_failure_count,
+        "readinessErrorCount": readiness_error_count,
+        "readinessState": _as_str(readiness.get("state") or readiness.get("executionState")) or None,
+        "readinessBlockers": [
+            str(item)
+            for item in (readiness.get("candidateGenerationBlockers") or [])
+            if str(item).strip()
+        ],
+    }
 
 
 def _sanitize_url(value: Optional[str]) -> Optional[str]:
@@ -634,6 +689,13 @@ def normalize_trace_step_status(
     if success:
         return {
             "status": "success",
+            "reason": reason or None,
+            "message": message,
+        }
+
+    if status_token in {"partial", "warning", "empty", "data_failed"}:
+        return {
+            "status": status_token,
             "reason": reason or None,
             "message": message,
         }
@@ -1459,16 +1521,49 @@ class ExecutionLogService:
             for item in (providers.get("providers_used") or [])
             if str(item).strip()
         ]
-        provider_failure_count = int(providers.get("provider_failure_count") or 0)
+        provider_failure_count = _scanner_int(providers.get("provider_failure_count"))
         status_text = _normalize_business_status(run_detail.get("status") or "completed")
-        failed_run = status_text == "failed"
         profile_label = _as_str(run_detail.get("profile_label") or run_detail.get("profile") or "scanner")
-        universe_count = int(run_detail.get("universe_size") or coverage.get("input_universe_size") or 0)
-        evaluated_count = int(run_detail.get("evaluated_size") or coverage.get("ranked_candidate_count") or 0)
-        selected_count = int(run_detail.get("shortlist_size") or coverage.get("shortlisted_count") or 0)
+        summary = run_detail.get("summary") if isinstance(run_detail.get("summary"), dict) else {}
+        universe_count = _scanner_int(run_detail.get("universe_size") or coverage.get("input_universe_size"))
+        evaluated_count = _scanner_int(run_detail.get("evaluated_size") or coverage.get("ranked_candidate_count"))
+        selected_count = _scanner_int(run_detail.get("shortlist_size") or coverage.get("shortlisted_count"))
         rejected_count = max(0, evaluated_count - selected_count)
-        data_failed_count = int(providers.get("missing_data_symbol_count") or 0)
-        skipped_count = int(coverage.get("excluded_total") or 0)
+        candidate_diagnostics = diagnostics.get("candidate_diagnostics") if isinstance(diagnostics.get("candidate_diagnostics"), dict) else {}
+        candidate_data_failed_count = sum(
+            1
+            for item in candidate_diagnostics.values()
+            if isinstance(item, dict) and _as_str(item.get("status")).lower() == "data_failed"
+        )
+        readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), dict) else {}
+        data_failed_count = max(
+            _scanner_int(providers.get("missing_data_symbol_count")),
+            _scanner_int(summary.get("data_failed_count") or summary.get("dataFailedCount")),
+            _scanner_int(coverage.get("data_failed_count") or coverage.get("dataFailedCount")),
+            candidate_data_failed_count,
+            max(
+                0,
+                _scanner_int(readiness.get("failedCount")) - _scanner_int(readiness.get("errorCount")),
+            ) if "errorCount" in readiness else 0,
+        )
+        readiness_error_count = _scanner_int(readiness.get("errorCount"))
+        skipped_count = _scanner_int(coverage.get("excluded_total"))
+        projection = _scanner_status_projection(
+            run_detail=run_detail,
+            raw_status=status_text,
+            evaluated_count=evaluated_count,
+            selected_count=selected_count,
+            data_failed_count=data_failed_count,
+            provider_failure_count=provider_failure_count,
+            readiness_error_count=readiness_error_count,
+        )
+        scanner_status = projection["status"]
+        execution_failed = scanner_status == "failed"
+        step_statuses = {
+            "load_universe": "success",
+            "run_screen": "failed" if execution_failed else (scanner_status if scanner_status in {"empty", "data_failed", "partial"} else "success"),
+            "save_scan_result": "skipped" if execution_failed else "success",
+        }
         duration_ms = int(max(0.0, (finished_at - started_at).total_seconds() * 1000))
         selected = run_detail.get("selected") if isinstance(run_detail.get("selected"), list) else run_detail.get("shortlist")
         top_symbol = None
@@ -1480,6 +1575,12 @@ class ExecutionLogService:
         )
         source_provider_summary = " / ".join(provider_list[:5]) or _as_str(run_detail.get("source_summary")) or None
         error_message = _masked_message(failure.get("message") or run_detail.get("failure_reason"))
+        completion_event_name = {
+            "failed": "ScannerRunFailed",
+            "data_failed": "ScannerRunDataFailed",
+            "empty": "ScannerRunEmpty",
+            "partial": "ScannerRunPartial",
+        }.get(scanner_status, "ScannerRunCompleted")
         lifecycle_metadata = _sanitize_metadata({
             "route": "/scanner",
             "endpoint": "/api/v1/scanner/run",
@@ -1503,13 +1604,14 @@ class ExecutionLogService:
             "sourceProviderSummary": source_provider_summary,
             "sourceSummary": run_detail.get("source_summary"),
             "errorMessage": error_message,
+            **projection,
         })
         business_event = {
             "id": session_id,
             "event": f"Scanner: {profile_label}",
             "category": "scanner",
             "type": "scan_run",
-            "status": "partial" if provider_failure_count else status_text,
+            "status": scanner_status,
             "summary": f"扫描器运行：{profile_label}",
             "subject": profile_label,
             "symbol": None,
@@ -1526,13 +1628,13 @@ class ExecutionLogService:
             "startedAt": started_at.isoformat(),
             "finishedAt": finished_at.isoformat(),
             "durationMs": duration_ms,
-            "stepCount": 3 if failed_run else 4,
-            "successStepCount": 1 if failed_run else 4,
-            "failedStepCount": 1 if failed_run else 0,
-            "skippedStepCount": 0,
+            "stepCount": len(step_statuses),
+            "successStepCount": sum(1 for value in step_statuses.values() if value == "success"),
+            "failedStepCount": sum(1 for value in step_statuses.values() if value == "failed"),
+            "skippedStepCount": sum(1 for value in step_statuses.values() if value == "skipped"),
             "unknownStepCount": 0,
             "metadata": _sanitize_metadata({
-                "eventNames": ["ScannerRunStarted", "ScannerRunFailed" if failed_run else "ScannerRunCompleted"],
+                "eventNames": ["ScannerRunStarted", completion_event_name],
                 "universeCount": universe_count,
                 "evaluatedCount": evaluated_count,
                 "selectedCount": selected_count,
@@ -1545,6 +1647,7 @@ class ExecutionLogService:
                 "providersUsed": provider_list,
                 "providerFailureCount": provider_failure_count,
                 "sourceProviderSummary": source_provider_summary,
+                **projection,
             }),
         }
         summary = self._merge_summary(
@@ -1556,7 +1659,7 @@ class ExecutionLogService:
                     "profile": run_detail.get("profile"),
                     "profile_label": run_detail.get("profile_label"),
                     "trigger_mode": run_detail.get("trigger_mode"),
-                    "status": run_detail.get("status"),
+                    "status": scanner_status,
                     "shortlist_count": run_detail.get("shortlist_size"),
                     "coverage_summary": coverage_summary,
                     "coverage": coverage,
@@ -1607,28 +1710,28 @@ class ExecutionLogService:
             },
             event_at=started_at,
         )
-        completion_event_name = "ScannerRunFailed" if failed_run else "ScannerRunCompleted"
+        completion_level = _level_from_status(scanner_status)
         self.db.append_execution_log_event(
             session_id=session_id,
             phase="scanner",
             step=completion_event_name,
             target=profile_label,
-            status="failed" if failed_run else "completed",
+            status=scanner_status,
             truth_level="actual",
             message=error_message or coverage_summary,
             detail={
-                "level": "ERROR" if failed_run else "INFO",
+                "level": completion_level,
                 "category": "scanner",
                 "event_name": completion_event_name,
-                "action": "scanner_run_failed" if failed_run else "scanner_run_completed",
-                "outcome": "failed" if failed_run else "ok",
+                "action": f"scanner_run_{scanner_status}",
+                "outcome": _outcome_from_status(scanner_status),
                 **lifecycle_metadata,
             },
             event_at=finished_at,
         )
         for step_name, label, metadata in [
             ("load_universe", "加载股票池", {"universeCount": universe_count}),
-            ("run_screen", "执行扫描", {"evaluatedCount": evaluated_count, "selectedCount": selected_count}),
+            ("run_screen", "执行扫描", {"evaluatedCount": evaluated_count, "selectedCount": selected_count, "dataFailedCount": data_failed_count}),
             ("save_scan_result", "保存扫描结果", {"scannerRunId": run_detail.get("id")}),
         ]:
             self._append_business_step(
@@ -1637,7 +1740,7 @@ class ExecutionLogService:
                 name=step_name,
                 label=label,
                 category="compute" if step_name != "save_scan_result" else "database",
-                status="failed" if failed_run and step_name == "run_screen" else ("skipped" if failed_run and step_name == "save_scan_result" else "success"),
+                status=step_statuses[step_name],
                 critical=step_name != "save_scan_result",
                 metadata=metadata,
                 started_at=started_at,
@@ -4321,7 +4424,7 @@ class ExecutionLogService:
     @staticmethod
     def _is_warning_business_event(item: Dict[str, Any]) -> bool:
         status = _as_str(item.get("status")).lower()
-        return status in {"partial", "warning", "timeout", "timed_out", "timeout_unknown"}
+        return status in {"partial", "warning", "empty", "data_failed", "timeout", "timed_out", "timeout_unknown"}
 
     @staticmethod
     def _is_slow_business_event(item: Dict[str, Any]) -> bool:

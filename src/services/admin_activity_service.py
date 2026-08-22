@@ -31,6 +31,10 @@ def _status(value: Any) -> str:
         return "success"
     if text in {"partial", "partial_success"}:
         return "partial"
+    if text == "empty":
+        return "empty"
+    if text in {"data_failed", "data-failed"}:
+        return "data_failed"
     if text in {"failed", "failure", "error", "invalid_response", "empty_result", "timed_out", "timeout"}:
         return "failed"
     if text in {"running", "started", "in_progress"}:
@@ -50,6 +54,8 @@ def _outcome(status: str, source_value: Any = None) -> str:
         return "ok"
     if status == "partial":
         return "partial"
+    if status in {"empty", "data_failed"}:
+        return "warning"
     if status == "failed":
         return "failed"
     if status == "skipped":
