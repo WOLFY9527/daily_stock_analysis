@@ -4802,9 +4802,11 @@ class MarketOverviewService:
             "error": None,
             "fallback_used": True,
             "fallbackUsed": True,
-            "isFallback": True,
-            "freshness": "fallback",
+            "isFallback": False,
+            "isUnavailable": True,
+            "freshness": "unavailable",
             "source": source,
+            "sourceType": "missing",
             "sourceLabel": self._source_label(source),
         }
 
@@ -4831,7 +4833,7 @@ class MarketOverviewService:
             "error": "crypto provider unavailable",
             "fallback_used": True,
             "fallbackUsed": True,
-            "isFallback": True,
+            "isFallback": False,
             "isUnavailable": True,
             "isRefreshing": True,
             "freshness": "unavailable",

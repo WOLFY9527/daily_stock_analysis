@@ -254,8 +254,9 @@ def test_shared_temperature_input_snapshot_keeps_fallback_stale_and_unavailable_
         {
             "source": "unavailable",
             "sourceLabel": "不可用",
-            "freshness": "fallback",
-            "isFallback": True,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isUnavailable": True,
             "items": [],
         }
     )
@@ -268,8 +269,9 @@ def test_shared_temperature_input_snapshot_keeps_fallback_stale_and_unavailable_
     assert snapshot["fx"]["items"][0]["freshness"] == "stale"
     assert snapshot["fx"]["items"][0]["isStale"] is True
     assert snapshot["crypto"]["source"] == "unavailable"
-    assert snapshot["crypto"]["freshness"] == "fallback"
-    assert snapshot["crypto"]["isFallback"] is True
+    assert snapshot["crypto"]["freshness"] == "unavailable"
+    assert snapshot["crypto"]["isFallback"] is False
+    assert snapshot["crypto"]["isUnavailable"] is True
 
 
 def test_failed_input_build_does_not_poison_future_refresh() -> None:
@@ -339,10 +341,16 @@ def test_temperature_input_builder_uses_internal_snapshots_without_public_wrappe
     for public_mock in public_mocks:
         assert public_mock.call_count == 0
     assert set(inputs) >= {"indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"}
-    assert inputs["rates"]["freshness"] == "fallback"
+    assert inputs["rates"]["source"] == "unavailable"
+    assert inputs["rates"]["freshness"] == "unavailable"
+    assert inputs["rates"]["isFallback"] is False
+    assert inputs["rates"]["isUnavailable"] is True
+    assert inputs["rates"]["asOf"] is None
+    assert all(item["value"] is None for item in inputs["rates"]["items"])
+    assert all(item["asOf"] is None for item in inputs["rates"]["items"])
     assert inputs["crypto"]["source"] == "unavailable"
     assert inputs["crypto"]["freshness"] == "unavailable"
-    assert inputs["crypto"]["isFallback"] is True
+    assert inputs["crypto"]["isFallback"] is False
     assert inputs["crypto"]["isUnavailable"] is True
     assert {
         str(item["symbol"]): item["value"]

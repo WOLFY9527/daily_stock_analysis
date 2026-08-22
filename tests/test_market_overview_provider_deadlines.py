@@ -459,9 +459,15 @@ def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(mo
 
     assert alternative_calls == 0
     assert payload["source"] == "unavailable"
-    assert payload["freshness"] not in {"live", "fresh"}
-    assert payload["isFallback"] is True
+    assert payload["freshness"] == "unavailable"
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
     assert payload["providerHealth"]["status"] == "unavailable"
+
+    raw_fallback = service._fallback_market_snapshot(service.MARKET_SENTIMENT_CACHE_KEY, "unavailable")
+    assert raw_fallback["freshness"] == "unavailable"
+    assert raw_fallback["isFallback"] is False
+    assert raw_fallback["isUnavailable"] is True
 
 
 def test_sentiment_snapshot_passes_remaining_deadline_to_transports(monkeypatch: pytest.MonkeyPatch) -> None:

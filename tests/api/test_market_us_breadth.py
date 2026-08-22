@@ -319,7 +319,8 @@ def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
     assert payload["source"] == "unavailable"
     assert payload["sourceType"] == "missing"
     assert payload["freshness"] == "unavailable"
-    assert payload["isFallback"] is True
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
     assert payload["sourceAuthorityAllowed"] is False
     assert payload["scoreContributionAllowed"] is False
     assert payload["sourceAuthorityReason"] == "authorized_us_market_breadth_feed_not_configured"

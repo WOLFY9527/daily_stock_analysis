@@ -1866,15 +1866,26 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
             panel["sourceLabel"] = "实时数据"
             panel["fallbackUsed"] = False
             panel["isFallback"] = False
-            panel["freshness"] = "live"
+            panel["isUnavailable"] = False
+            panel["freshness"] = "delayed"
+            panel["asOf"] = "2026-08-20T12:00:00+00:00"
             for idx, item in enumerate(panel.get("items", [])):
                 if idx != 0:
                     continue
-                item["source"] = source
-                item["sourceLabel"] = "实时数据"
-                item["fallbackUsed"] = False
-                item["isFallback"] = False
-                item["freshness"] = "live"
+                item.update(
+                    {
+                        "source": source,
+                        "sourceLabel": "测试行情样本",
+                        "freshness": "delayed",
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "value": 100.0,
+                        "price": 100.0,
+                        "change": 0.5,
+                        "changePercent": 0.5,
+                        "asOf": "2026-08-20T12:00:00+00:00",
+                    }
+                )
 
         with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
             payload = service.get_market_temperature()

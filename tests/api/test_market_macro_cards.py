@@ -195,23 +195,31 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
     def test_rates_endpoint_returns_us_and_cn_groups(self) -> None:
         payload = market.get_rates()
 
-        self.assertTrue(payload["source"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertTrue(payload["isUnavailable"])
+        self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["updatedAt"])
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertIn("US10Y", symbols)
         self.assertIn("CN10Y", symbols)
-        self.assertIn("explanation", payload)
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
+        self.assertTrue(all(item["asOf"] is None for item in payload["items"]))
 
     def test_fx_commodities_endpoint_returns_fx_and_commodities(self) -> None:
         payload = market.get_fx_commodities()
 
-        self.assertTrue(payload["source"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertTrue(payload["isUnavailable"])
+        self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["updatedAt"])
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertIn("DXY", symbols)
         self.assertIn("USDCNH", symbols)
         self.assertIn("GOLD", symbols)
-        self.assertIn("explanation", payload)
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
+        self.assertTrue(all(item["asOf"] is None for item in payload["items"]))
 
     def test_macro_card_fallbacks_are_not_empty_when_provider_fails(self) -> None:
         service = MarketOverviewService()
@@ -226,9 +234,15 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
                 with patch.object(service, fetcher_name, side_effect=RuntimeError("provider down")):
                     payload = getter()
 
-                self.assertEqual(payload["source"], "fallback")
+                self.assertEqual(payload["source"], "unavailable")
                 self.assertTrue(payload["fallbackUsed"])
+                self.assertFalse(payload["isFallback"])
+                self.assertTrue(payload["isUnavailable"])
                 self.assertTrue(payload["items"])
+                self.assertTrue(all(item["value"] is None for item in payload["items"]))
+                self.assertTrue(all(item["changePercent"] is None for item in payload["items"]))
+                self.assertTrue(all(item["trend"] == [] for item in payload["items"]))
+                self.assertTrue(all(item["isUnavailable"] is True for item in payload["items"]))
 
     def test_volatility_api_payload_omits_official_overlay_failure_details_for_vix(self) -> None:
         failure = OfficialMacroTransportError(

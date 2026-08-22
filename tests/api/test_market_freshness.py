@@ -130,11 +130,15 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertEqual(payload["providerHealth"]["status"], "partial")
         self.assertNotIn(payload["providerHealth"]["status"], {"live", "cache"})
         live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
-        fallback_item = next(item for item in payload["items"] if item["source"] == "fallback")
+        unavailable_item = next(item for item in payload["items"] if item["source"] == "unavailable")
         self.assertEqual(live_item["sourceLabel"], "新浪财经")
         self.assertFalse(live_item["isFallback"])
-        self.assertEqual(fallback_item["freshness"], "fallback")
-        self.assertTrue(fallback_item["isFallback"])
+        self.assertEqual(unavailable_item["freshness"], "unavailable")
+        self.assertTrue(unavailable_item["isUnavailable"])
+        self.assertFalse(unavailable_item["isFallback"])
+        self.assertIsNone(unavailable_item["value"])
+        self.assertIsNone(unavailable_item["changePercent"])
+        self.assertEqual(unavailable_item["trend"], [])
 
     def test_cached_stale_data_is_disclosed_without_live_overwrite(self) -> None:
         service = MarketOverviewService()

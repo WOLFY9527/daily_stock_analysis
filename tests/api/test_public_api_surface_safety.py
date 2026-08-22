@@ -1036,7 +1036,9 @@ def test_hot_public_bucket_allows_safe_market_get_routes_to_serve_fallback_paylo
             "/api/v1/market-overview/macro": 200,
             "/api/v1/market/liquidity-monitor": 200,
         }
-        assert responses["/api/v1/market/rates"].json()["source"] == "fallback"
+        assert responses["/api/v1/market/rates"].json()["source"] == "unavailable"
+        assert responses["/api/v1/market/rates"].json()["isFallback"] is False
+        assert responses["/api/v1/market/rates"].json()["isUnavailable"] is True
         assert responses["/api/v1/market/temperature"].json()["isFallback"] is True
         assert responses["/api/v1/market-overview/macro"].json()["fallbackUsed"] is True
         assert responses["/api/v1/market/liquidity-monitor"].json()["freshness"]["status"] == "fallback"

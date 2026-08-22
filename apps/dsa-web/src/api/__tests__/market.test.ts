@@ -1165,6 +1165,31 @@ describe('market auxiliary runtime contracts', () => {
     await expect(marketModule.marketApi.getCnShortSentiment()).rejects.toThrow('invalid_cn_short_sentiment_contract');
   });
 
+  it('rejects null CN short sentiment metrics under an available observation envelope', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'public',
+        freshness: 'live',
+        updated_at: '2026-07-16T10:00:00Z',
+        sentiment_score: null,
+        summary: 'Observed neutral.',
+        metrics: {
+          limit_up_count: null,
+          limit_down_count: null,
+          failed_limit_up_rate: null,
+          max_consecutive_limit_ups: null,
+          yesterday_limit_up_performance: null,
+          first_board_count: null,
+          second_board_count: null,
+          high_board_count: null,
+          twenty_cm_limit_up_count: null,
+        },
+      },
+    });
+
+    await expect(marketModule.marketApi.getCnShortSentiment()).rejects.toThrow('invalid_cn_short_sentiment_contract');
+  });
+
   it('fails closed shell-only optimistic regime read models and preserves complete product-ready contracts', async () => {
     const completeProductReady = {
       consumer_safe: true,

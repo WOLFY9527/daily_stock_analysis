@@ -138,7 +138,7 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertLess(elapsed, 0.5)
         self.assertTrue(payload["items"])
         self.assertEqual(payload["freshness"], "unavailable")
-        self.assertTrue(payload["isFallback"])
+        self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["isUnavailable"])
         self.assertTrue(payload["isRefreshing"])
@@ -228,7 +228,7 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertTrue({"BTC", "ETH", "BNB"}.issubset(symbols))
         self.assertEqual(payload["freshness"], "unavailable")
-        self.assertTrue(payload["isFallback"])
+        self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["isUnavailable"])
         self.assertNotEqual(payload["freshness"], "live")

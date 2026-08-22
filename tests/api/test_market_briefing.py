@@ -22,6 +22,25 @@ FORBIDDEN_ADVICE_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
     re.IGNORECASE,
 )
+FIXTURE_AS_OF = "2026-08-20T12:00:00+00:00"
+
+
+def _mark_real_item(item: dict, source: str, *, value: float, change_percent: float) -> None:
+    item.update(
+        {
+            "source": source,
+            "sourceType": "public_api",
+            "sourceLabel": "测试行情样本",
+            "freshness": "delayed",
+            "isFallback": False,
+            "isUnavailable": False,
+            "value": value,
+            "price": value,
+            "change": change_percent,
+            "changePercent": change_percent,
+            "asOf": FIXTURE_AS_OF,
+        }
+    )
 
 
 def _json_response_payload(response):
@@ -29,27 +48,28 @@ def _json_response_payload(response):
     return json.loads(response.body.decode("utf-8"))
 
 
-def _mark_live_items(panel: dict, source: str) -> None:
+def _mark_delayed_items(panel: dict, source: str) -> None:
     panel["source"] = source
+    panel["sourceType"] = "public_api"
     panel["sourceLabel"] = "实时数据"
     panel["fallbackUsed"] = False
     panel["isFallback"] = False
-    panel["freshness"] = "live"
+    panel["isUnavailable"] = False
+    panel["freshness"] = "delayed"
+    panel["asOf"] = FIXTURE_AS_OF
     for item in panel.get("items", []):
-        item["source"] = source
-        item["sourceLabel"] = "实时数据"
-        item["fallbackUsed"] = False
-        item["isFallback"] = False
-        item["freshness"] = "live"
+        _mark_real_item(item, source, value=100.0, change_percent=0.5)
 
 
-def _replace_crypto_with_live_fixture(inputs: dict) -> None:
+def _replace_crypto_with_delayed_fixture(inputs: dict) -> None:
     inputs["crypto"] = {
         "source": "binance",
-        "sourceLabel": "实时数据",
+        "sourceLabel": "测试行情样本",
         "fallbackUsed": False,
         "isFallback": False,
-        "freshness": "live",
+        "isUnavailable": False,
+        "freshness": "delayed",
+        "asOf": FIXTURE_AS_OF,
         "items": [
             {
                 "symbol": "BTC",
@@ -60,10 +80,12 @@ def _replace_crypto_with_live_fixture(inputs: dict) -> None:
                 "changePercent": 1.2,
                 "source": "binance",
                 "sourceType": "exchange_public",
-                "sourceLabel": "实时数据",
-                "freshness": "live",
+                "sourceLabel": "测试行情样本",
+                "freshness": "delayed",
                 "fallbackUsed": False,
                 "isFallback": False,
+                "isUnavailable": False,
+                "asOf": FIXTURE_AS_OF,
             },
             {
                 "symbol": "ETH",
@@ -74,10 +96,12 @@ def _replace_crypto_with_live_fixture(inputs: dict) -> None:
                 "changePercent": 0.4,
                 "source": "binance",
                 "sourceType": "exchange_public",
-                "sourceLabel": "实时数据",
-                "freshness": "live",
+                "sourceLabel": "测试行情样本",
+                "freshness": "delayed",
                 "fallbackUsed": False,
                 "isFallback": False,
+                "isUnavailable": False,
+                "asOf": FIXTURE_AS_OF,
             },
             {
                 "symbol": "BNB",
@@ -88,10 +112,12 @@ def _replace_crypto_with_live_fixture(inputs: dict) -> None:
                 "changePercent": -0.2,
                 "source": "binance",
                 "sourceType": "exchange_public",
-                "sourceLabel": "实时数据",
-                "freshness": "live",
+                "sourceLabel": "测试行情样本",
+                "freshness": "delayed",
                 "fallbackUsed": False,
                 "isFallback": False,
+                "isUnavailable": False,
+                "asOf": FIXTURE_AS_OF,
             },
         ],
     }
@@ -227,15 +253,13 @@ class MarketBriefingApiTestCase(unittest.TestCase):
             panel["sourceLabel"] = "实时数据"
             panel["fallbackUsed"] = False
             panel["isFallback"] = False
-            panel["freshness"] = "live"
+            panel["isUnavailable"] = False
+            panel["freshness"] = "delayed"
+            panel["asOf"] = FIXTURE_AS_OF
             for idx, item in enumerate(panel.get("items", [])):
                 if idx != 0:
                     continue
-                item["source"] = source
-                item["sourceLabel"] = "实时数据"
-                item["fallbackUsed"] = False
-                item["isFallback"] = False
-                item["freshness"] = "live"
+                _mark_real_item(item, source, value=100.0, change_percent=0.5)
 
         with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
             payload = service.get_market_briefing()
@@ -269,9 +293,33 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         service = MarketOverviewService()
         inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
 
-        for key, source in (("indices", "sina"), ("rates", "sina")):
-            _mark_live_items(inputs[key], source)
-        _replace_crypto_with_live_fixture(inputs)
+        for key, source in (("indices", "sina"), ("rates", "sina"), ("futures", "sina")):
+            _mark_delayed_items(inputs[key], source)
+        _replace_crypto_with_delayed_fixture(inputs)
+        inputs["sentiment"] = {
+            "source": "alternative_me",
+            "sourceLabel": "测试行情样本",
+            "fallbackUsed": False,
+            "isFallback": False,
+            "isUnavailable": False,
+            "freshness": "delayed",
+            "asOf": FIXTURE_AS_OF,
+            "items": [
+                {
+                    "symbol": "FGI",
+                    "value": 70.0,
+                    "price": 70.0,
+                    "change": 1.0,
+                    "changePercent": 1.0,
+                    "source": "alternative_me",
+                    "sourceLabel": "测试行情样本",
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isUnavailable": False,
+                    "asOf": FIXTURE_AS_OF,
+                }
+            ],
+        }
 
         inputs["fx"]["source"] = "fallback"
         inputs["fx"]["sourceLabel"] = "备用数据"
@@ -334,6 +382,12 @@ class MarketBriefingApiTestCase(unittest.TestCase):
                 "sourceType": "official_public",
                 "freshness": "live",
                 "isFallback": False,
+                "isUnavailable": False,
+                "value": 4107.51,
+                "price": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "asOf": FIXTURE_AS_OF,
             }
         )
         inputs["futures"]["items"][0].update(
@@ -342,6 +396,12 @@ class MarketBriefingApiTestCase(unittest.TestCase):
                 "sourceType": "unofficial_proxy",
                 "freshness": "delayed",
                 "isFallback": False,
+                "isUnavailable": False,
+                "value": 18320.0,
+                "price": 18320.0,
+                "change": 0.4,
+                "changePercent": 0.4,
+                "asOf": FIXTURE_AS_OF,
             }
         )
         inputs["crypto"]["items"][0].update(
@@ -355,6 +415,7 @@ class MarketBriefingApiTestCase(unittest.TestCase):
                 "price": 70000.0,
                 "change": 1.2,
                 "changePercent": 1.2,
+                "asOf": FIXTURE_AS_OF,
             }
         )
 

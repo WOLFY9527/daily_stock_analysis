@@ -3185,6 +3185,11 @@ export function isCnShortSentimentContract(value: unknown): value is CnShortSent
     return false;
   }
   const metrics = value.metrics;
+  const hasMissingMetric = value.sentimentScore === null
+    || CN_SHORT_SENTIMENT_METRIC_KEYS.some((key) => metrics[key] === null);
+  if (hasMissingMetric && (value.isUnavailable !== true || value.freshness !== 'unavailable')) {
+    return false;
+  }
   return CN_SHORT_SENTIMENT_METRIC_KEYS.every((key) => (
     isFiniteMarketContractNumberOrNull(metrics[key])
   ));

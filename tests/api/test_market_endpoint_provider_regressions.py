@@ -38,7 +38,7 @@ def _assert_bounded_non_live(
     payload: dict,
     elapsed: float,
     *,
-    expected_freshness: tuple[str, ...] = ("fallback", "stale"),
+    expected_freshness: tuple[str, ...] = ("unavailable", "stale"),
 ) -> None:
     assert elapsed < 0.35
     assert payload["freshness"] in expected_freshness
@@ -127,7 +127,7 @@ def test_market_overview_macro_endpoint_returns_fallback_quickly_when_official_m
     assert payload["isUnavailable"] is True
     assert payload["freshness"] == "unavailable"
     assert all(item["value"] is None for item in payload["items"])
-    assert all(item["change_pct"] is None for item in payload["items"])
+    assert all(item.get("changePercent") is None for item in payload["items"])
     assert all(item["trend"] == [] for item in payload["items"])
     assert all(item["isUnavailable"] is True for item in payload["items"])
     _assert_bounded_non_live(payload, elapsed, expected_freshness=("unavailable",))
@@ -149,10 +149,15 @@ def test_market_fx_commodities_endpoint_returns_fallback_quickly_when_proxy_hang
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["source"] == "fallback"
-    assert payload["isFallback"] is True
+    assert payload["source"] == "unavailable"
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
     assert payload["items"]
-    _assert_bounded_non_live(payload, elapsed)
+    assert all(item["value"] is None for item in payload["items"])
+    assert all(item["changePercent"] is None for item in payload["items"])
+    assert all(item["trend"] == [] for item in payload["items"])
+    assert all(item["isUnavailable"] is True for item in payload["items"])
+    _assert_bounded_non_live(payload, elapsed, expected_freshness=("unavailable",))
 
 
 def test_market_futures_endpoint_returns_fallback_quickly_when_proxy_hangs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,10 +176,15 @@ def test_market_futures_endpoint_returns_fallback_quickly_when_proxy_hangs(monke
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["source"] == "fallback"
-    assert payload["isFallback"] is True
+    assert payload["source"] == "unavailable"
+    assert payload["isFallback"] is False
+    assert payload["isUnavailable"] is True
     assert payload["items"]
-    _assert_bounded_non_live(payload, elapsed)
+    assert all(item["value"] is None for item in payload["items"])
+    assert all(item["changePercent"] is None for item in payload["items"])
+    assert all(item["trend"] == [] for item in payload["items"])
+    assert all(item["isUnavailable"] is True for item in payload["items"])
+    _assert_bounded_non_live(payload, elapsed, expected_freshness=("unavailable",))
 
 
 def test_market_temperature_endpoint_returns_fallback_quickly_when_inputs_hang(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,7 +206,7 @@ def test_market_temperature_endpoint_returns_fallback_quickly_when_inputs_hang(m
     assert payload["source"] == "fallback"
     assert payload["isFallback"] is True
     assert payload["scores"]["overall"]["label"] == "数据不足"
-    _assert_bounded_non_live(payload, elapsed)
+    _assert_bounded_non_live(payload, elapsed, expected_freshness=("fallback",))
 
 
 def test_market_briefing_endpoint_returns_fallback_quickly_when_inputs_hang(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -218,4 +228,4 @@ def test_market_briefing_endpoint_returns_fallback_quickly_when_inputs_hang(monk
     assert payload["source"] == "fallback"
     assert payload["isFallback"] is True
     assert payload["items"]
-    _assert_bounded_non_live(payload, elapsed)
+    _assert_bounded_non_live(payload, elapsed, expected_freshness=("fallback",))
