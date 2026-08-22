@@ -1546,7 +1546,10 @@ class ExecutionLogService:
                 _scanner_int(readiness.get("failedCount")) - _scanner_int(readiness.get("errorCount")),
             ) if "errorCount" in readiness else 0,
         )
-        readiness_error_count = _scanner_int(readiness.get("errorCount"))
+        readiness_error_count = max(
+            _scanner_int(readiness.get("errorCount")),
+            _scanner_int(summary.get("error_count") or summary.get("errorCount")),
+        )
         skipped_count = _scanner_int(coverage.get("excluded_total"))
         projection = _scanner_status_projection(
             run_detail=run_detail,
