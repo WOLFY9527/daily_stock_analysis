@@ -1322,6 +1322,14 @@ class AdminLogsApiTestCase(unittest.TestCase):
                 "partial",
                 "ScannerRunPartial",
             ),
+            (
+                "summary-error",
+                0,
+                0,
+                {"summary": {"data_failed_count": 0, "error_count": 3}},
+                "partial",
+                "ScannerRunPartial",
+            ),
             ("partial", 12, 2, {"provider_diagnostics": {"missing_data_symbol_count": 1}}, "partial", "ScannerRunPartial"),
         ]
         for index, (label, evaluated, selected, diagnostics, expected_status, event_name) in enumerate(cases, start=100):
@@ -1337,8 +1345,8 @@ class AdminLogsApiTestCase(unittest.TestCase):
                     "universe_size": max(evaluated, selected, 3),
                     "evaluated_size": evaluated,
                     "shortlist_size": selected,
-                    "summary": {"data_failed_count": 0},
-                    "diagnostics": diagnostics,
+                    "summary": diagnostics.get("summary", {"data_failed_count": 0}),
+                    "diagnostics": {key: value for key, value in diagnostics.items() if key != "summary"},
                 },
                 actor={"user_id": "user-1", "actor_type": "user"},
             )
