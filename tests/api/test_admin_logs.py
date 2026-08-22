@@ -1265,7 +1265,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
                         "provider_diagnostics": {
                             "providers_used": ["local_db", "yfinance"],
                             "provider_failure_count": 0,
-                            "missing_data_symbol_count": 2,
+                            "missing_data_symbol_count": 0,
                         },
                     },
                 },
@@ -1289,6 +1289,72 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(completed.detail["topSymbol"], "NVDA")
         self.assertEqual(scanner_tab.total, 1)
         self.assertEqual(global_default.total, 0)
+
+        cases = [
+            ("empty", 12, 0, {}, "empty", "ScannerRunEmpty"),
+            (
+                "data-failed",
+                0,
+                0,
+                {
+                    "candidate_diagnostics": {
+                        "AAPL": {"status": "data_failed"},
+                        "MSFT": {"status": "data_failed"},
+                        "NVDA": {"status": "data_failed"},
+                    },
+                },
+                "data_failed",
+                "ScannerRunDataFailed",
+            ),
+            (
+                "readiness-data-failed",
+                0,
+                0,
+                {"dataReadiness": {"state": "blocked", "failedCount": 3, "errorCount": 0}},
+                "data_failed",
+                "ScannerRunDataFailed",
+            ),
+            (
+                "readiness-error",
+                0,
+                0,
+                {"dataReadiness": {"state": "blocked", "failedCount": 3, "errorCount": 3}},
+                "partial",
+                "ScannerRunPartial",
+            ),
+            ("partial", 12, 2, {"provider_diagnostics": {"missing_data_symbol_count": 1}}, "partial", "ScannerRunPartial"),
+        ]
+        for index, (label, evaluated, selected, diagnostics, expected_status, event_name) in enumerate(cases, start=100):
+            session_id = service.record_scanner_run(
+                run_detail={
+                    "id": index,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": f"{label} scanner",
+                    "status": "completed",
+                    "run_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "universe_size": max(evaluated, selected, 3),
+                    "evaluated_size": evaluated,
+                    "shortlist_size": selected,
+                    "summary": {"data_failed_count": 0},
+                    "diagnostics": diagnostics,
+                },
+                actor={"user_id": "user-1", "actor_type": "user"},
+            )
+            session_detail = admin_logs.get_execution_log_session_detail(session_id, _=_admin_user())
+            completion = next(event for event in session_detail.events if event.event_name == event_name)
+            self.assertEqual(session_detail.overall_status, expected_status)
+            self.assertEqual(completion.detail["status"], expected_status)
+            self.assertEqual(completion.detail["usefulResult"], selected > 0)
+            self.assertEqual(completion.detail["evaluationPerformed"], evaluated > 0)
+            self.assertNotEqual(completion.level, "INFO")
+            if expected_status == "data_failed":
+                screen_step = next(
+                    step for step in service.get_business_event_detail(session_id)["steps"]
+                    if step["name"] == "run_screen"
+                )
+                self.assertEqual(screen_step["status"], "data_failed")
 
     def test_failed_scanner_run_records_failed_lifecycle_event(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

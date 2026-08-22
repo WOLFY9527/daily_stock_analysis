@@ -54,7 +54,7 @@ class AdminActivityEvent(_AdminActivityModel):
     family: str
     action: str
     entity: AdminActivityEntity
-    status: Literal["success", "failed", "partial", "running", "skipped", "cancelled", "unknown"] = "unknown"
+    status: Literal["success", "failed", "partial", "empty", "data_failed", "running", "skipped", "cancelled", "unknown"] = "unknown"
     outcome: Literal["ok", "warning", "failed", "timeout", "partial", "unknown"] = "unknown"
     request_id_hash: Optional[str] = Field(default=None, alias="requestIdHash")
     session_id_hash: Optional[str] = Field(default=None, alias="sessionIdHash")
