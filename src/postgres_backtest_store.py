@@ -55,7 +55,7 @@ _PHASE_E_INDEXES = {
 }
 _ANALYSIS_EVAL_SHADOW_OFFSET = 1_000_000_000_000
 _RULE_DETERMINISTIC_SHADOW_OFFSET = 2_000_000_000_000
-_RULE_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+_RULE_TERMINAL_STATUSES = {"completed", "blocked", "failed", "cancelled"}
 
 
 def phase_e_shadow_run_id(run_type: str, legacy_run_id: int) -> int:

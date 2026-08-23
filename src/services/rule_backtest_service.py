@@ -70,7 +70,8 @@ from src.storage import (
 logger = logging.getLogger(__name__)
 _UNSET = object()
 _CONFIRMATION_REQUIRED_ERROR = "请先确认解析结果后再运行规则回测。"
-TERMINAL_RULE_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+BLOCKED_RESULT_STATUS_MESSAGE = "回测未完成有效计算，无法显示研究结果。"
+TERMINAL_RULE_RUN_STATUSES = frozenset({"completed", "blocked", "failed", "cancelled"})
 CANCELLABLE_RULE_RUN_STATUSES = frozenset({"queued", "parsing", "running", "summarizing"})
 SUBMITTED_RULE_RUN_CLAIM_STATUSES = frozenset({"queued", "parsing"})
 RULE_BACKTEST_STUCK_AFTER_SECONDS = 6 * 60 * 60
@@ -448,12 +449,38 @@ BACKTEST_RESEARCH_ARTIFACT_METRIC_KEY_MAP: Dict[str, str] = {
 
 BACKTEST_RESEARCH_ARTIFACT_BLOCKED_REASONS = frozenset(
     {
+        "calculation_unavailable",
+        "data_disabled",
         "missing_cache",
+        "missing_benchmark",
         "insufficient_history",
         "insufficient_data",
+        "invalid_price_data",
+        "missing_adjustments",
         "no_samples",
+        "no_bars_in_range",
         "provider_missing",
+        "provider_unavailable",
         "no_bars",
+        "stored_data_integrity_unavailable",
+    }
+)
+
+LEGACY_BLOCKED_RUN_REASONS = frozenset(
+    {
+        "calculation_unavailable",
+        "data_disabled",
+        "insufficient_data",
+        "insufficient_history",
+        "invalid_price_data",
+        "missing_adjustments",
+        "missing_benchmark",
+        "no_bars",
+        "no_bars_in_range",
+        "no_data",
+        "provider_missing",
+        "provider_unavailable",
+        "stored_data_integrity_unavailable",
     }
 )
 
@@ -4733,6 +4760,7 @@ class RuleBacktestService:
             metrics=metrics,
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
+            blocked_execution=True,
             warnings=parsed.ambiguities,
         )
 
@@ -4831,7 +4859,7 @@ class RuleBacktestService:
         run_at = datetime.now()
         normalized_start_date, normalized_end_date = self._normalize_date_range(start_date=start_date, end_date=end_date)
         blocked_execution = bool(getattr(result, "blocked_execution", False))
-        stored_status = "failed" if blocked_execution else "completed"
+        stored_status = "blocked" if blocked_execution else "completed"
         status_message = result.no_result_message if blocked_execution else "规则回测已完成，可查看交易明细与执行假设。"
         strategy_hash = hashlib.sha256(strategy_text.encode("utf-8")).hexdigest()
         warnings = result.warnings or []
@@ -5264,6 +5292,86 @@ class RuleBacktestService:
     def _normalize_run_status(status: Optional[str]) -> str:
         return str(status or "").strip().lower()
 
+    @classmethod
+    def _project_status_history(
+        cls,
+        status_history: Sequence[Dict[str, Any]],
+        *,
+        effective_status: str,
+        message: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        projected = [dict(item or {}) for item in list(status_history or []) if isinstance(item, dict)]
+        if effective_status == "blocked" and projected:
+            latest = projected[-1]
+            latest["status"] = "blocked"
+            latest["message"] = message or BLOCKED_RESULT_STATUS_MESSAGE
+        return projected
+
+    @classmethod
+    def _effective_run_status(
+        cls,
+        row: RuleBacktestRun,
+        *,
+        summary: Optional[Dict[str, Any]] = None,
+        metrics: Optional[Dict[str, Any]] = None,
+        equity_curve: Optional[Sequence[Any]] = None,
+        data_quality: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Project persisted status without treating an uncalculated legacy row as success."""
+        normalized_status = cls._normalize_run_status(getattr(row, "status", None))
+        if normalized_status != "completed":
+            return normalized_status
+
+        stored_summary = dict(summary or {}) if isinstance(summary, dict) else None
+        if stored_summary is None:
+            stored_summary = cls._load_summary_payload(getattr(row, "summary_json", None))
+        stored_metrics = (
+            dict(metrics or {})
+            if isinstance(metrics, dict)
+            else dict(stored_summary.get("metrics") or {})
+            if isinstance(stored_summary.get("metrics"), dict)
+            else {}
+        )
+        quality = (
+            dict(data_quality or {})
+            if isinstance(data_quality, dict)
+            else dict(stored_summary.get("data_quality") or {})
+            if isinstance(stored_summary.get("data_quality"), dict)
+            else {}
+        )
+        reason = cls._normalize_run_status(
+            stored_summary.get("no_result_reason") or getattr(row, "no_result_reason", None)
+        )
+        if reason in LEGACY_BLOCKED_RUN_REASONS or reason.startswith("historical_ohlcv_"):
+            return "blocked"
+        bars_used = stored_metrics.get("bars_used")
+        bar_count = quality.get("bar_count")
+        try:
+            has_positive_bars = int(bars_used or 0) > 0 or int(bar_count or 0) > 0
+        except (TypeError, ValueError):
+            has_positive_bars = False
+        curve_present = bool(equity_curve) or bool(
+            (stored_summary.get("visualization") or {}).get("audit_rows")
+            if isinstance(stored_summary.get("visualization"), dict)
+            else False
+        )
+        final_equity = stored_metrics.get("final_equity", getattr(row, "final_equity", None))
+        total_return = stored_metrics.get("total_return_pct", getattr(row, "total_return_pct", None))
+        trade_count = stored_metrics.get("trade_count", getattr(row, "trade_count", None))
+        try:
+            has_trades = int(trade_count or 0) > 0
+        except (TypeError, ValueError):
+            has_trades = False
+        has_calculation_evidence = (
+            final_equity is not None and (has_positive_bars or curve_present)
+        ) or (
+            has_trades and total_return is not None
+        )
+        if has_calculation_evidence:
+            return "completed"
+        # A completed row without any calculation evidence is not safe to expose as success.
+        return "blocked"
+
     @staticmethod
     def _normalize_compare_run_ids(run_ids: List[int]) -> List[int]:
         normalized_ids: List[int] = []
@@ -5294,6 +5402,8 @@ class RuleBacktestService:
             "status": status or str(run_payload.get("status") or ""),
             "reason": "run_not_completed",
             "message": "Only completed runs are comparable in the stored-first compare foundation.",
+            "no_result_reason": run_payload.get("no_result_reason"),
+            "no_result_message": run_payload.get("no_result_message"),
         }
 
     @staticmethod
@@ -6747,10 +6857,20 @@ class RuleBacktestService:
         readiness_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         visualization = summary.get("visualization") if isinstance(summary.get("visualization"), dict) else {}
+        effective_status = RuleBacktestService._effective_run_status(row, summary=summary)
+        effective_no_result_reason = summary.get("no_result_reason") or row.no_result_reason
+        effective_no_result_message = summary.get("no_result_message") or row.no_result_message
+        if effective_status == "blocked":
+            effective_no_result_message = effective_no_result_message or BLOCKED_RESULT_STATUS_MESSAGE
+        status_history = RuleBacktestService._project_status_history(
+            list(summary.get("status_history") or []),
+            effective_status=effective_status,
+            message=effective_no_result_message,
+        )
         data_sufficiency = assess_backtest_data_sufficiency(
             {
-                "status": row.status,
-                "no_result_reason": row.no_result_reason,
+                "status": effective_status,
+                "no_result_reason": effective_no_result_reason,
                 "data_quality": summary.get("data_quality") if isinstance(summary.get("data_quality"), dict) else {},
                 "benchmark_summary": (
                     visualization.get("benchmark_summary")
@@ -6764,15 +6884,30 @@ class RuleBacktestService:
         payload = {
             "id": int(row.id),
             "code": str(row.code),
-            "status": str(row.status),
-            "status_message": summary.get("status_message"),
-            "status_history": list(summary.get("status_history") or []),
-            "run_timing": dict(summary.get("run_timing") or {}),
-            "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
+            "status": effective_status,
+            "status_message": effective_no_result_message if effective_status == "blocked" else summary.get("status_message"),
+            "status_history": status_history,
+            "run_timing": RuleBacktestService._build_run_timing_payload(
+                current_status=effective_status,
+                status_history=status_history,
+                run_at=row.run_at,
+                completed_at=row.completed_at,
+            ),
+            "run_diagnostics": RuleBacktestService._build_run_diagnostics_payload(
+                current_status=effective_status,
+                status_history=status_history,
+                status_message=(
+                    effective_no_result_message
+                    if effective_status == "blocked"
+                    else summary.get("status_message")
+                ),
+                no_result_reason=effective_no_result_reason,
+                no_result_message=effective_no_result_message,
+            ),
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
-            "no_result_reason": row.no_result_reason,
-            "no_result_message": row.no_result_message,
+            "no_result_reason": effective_no_result_reason,
+            "no_result_message": effective_no_result_message,
             "trade_count": int(row.trade_count or 0),
             "parsed_confidence": row.parsed_confidence,
             "needs_confirmation": bool(row.needs_confirmation),
@@ -7140,11 +7275,11 @@ class RuleBacktestService:
         metrics: Optional[Dict[str, Any]],
     ) -> Optional[str]:
         normalized_status = str(status or "").strip().lower()
-        if normalized_status and normalized_status not in {"completed"}:
-            return normalized_status
         normalized_reason = str(no_result_reason or "").strip().lower()
         if normalized_reason in BACKTEST_RESEARCH_ARTIFACT_BLOCKED_REASONS:
             return normalized_reason
+        if normalized_status and normalized_status not in {"completed"}:
+            return normalized_status
         quality = dict(data_quality or {}) if isinstance(data_quality, dict) else {}
         sufficiency = dict(data_sufficiency or {}) if isinstance(data_sufficiency, dict) else {}
         for reason in list(sufficiency.get("blocked_reasons") or []) + list(sufficiency.get("reason_codes") or []):
@@ -11569,8 +11704,8 @@ class RuleBacktestService:
                 audit_rows=list(stored_visualization.get("audit_rows") or []),
                 source="summary.visualization.audit_rows",
             )
-        resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason", row.no_result_reason)
-        resolved_payload["no_result_message"] = stored_payload.get("no_result_message", row.no_result_message)
+        resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason") or row.no_result_reason
+        resolved_payload["no_result_message"] = stored_payload.get("no_result_message") or row.no_result_message
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)
         resolved_payload["status_message"] = stored_payload.get("status_message")
         resolved_payload["status_history"] = list(stored_payload.get("status_history") or [])
@@ -11988,6 +12123,39 @@ class RuleBacktestService:
             execution_trace_completeness=execution_trace_completeness,
             execution_trace_missing_fields=execution_trace_missing_fields,
         )
+        effective_status = self._effective_run_status(
+            row,
+            summary=summary,
+            metrics=metrics,
+            equity_curve=equity_curve,
+            data_quality=data_quality,
+        )
+        effective_no_result_reason = summary.get("no_result_reason") or row.no_result_reason
+        effective_no_result_message = summary.get("no_result_message") or row.no_result_message
+        if effective_status == "blocked":
+            effective_no_result_message = effective_no_result_message or BLOCKED_RESULT_STATUS_MESSAGE
+        projected_status_history = self._project_status_history(
+            list(summary.get("status_history") or []),
+            effective_status=effective_status,
+            message=effective_no_result_message,
+        )
+        summary["status_history"] = projected_status_history
+        if effective_status == "blocked":
+            summary["status_message"] = effective_no_result_message
+            summary["no_result_message"] = effective_no_result_message
+        summary["run_timing"] = self._build_run_timing_payload(
+            current_status=effective_status,
+            status_history=projected_status_history,
+            run_at=row.run_at,
+            completed_at=row.completed_at,
+        )
+        summary["run_diagnostics"] = self._build_run_diagnostics_payload(
+            current_status=effective_status,
+            status_history=projected_status_history,
+            status_message=summary.get("status_message"),
+            no_result_reason=effective_no_result_reason,
+            no_result_message=effective_no_result_message,
+        )
         trade_rows_present = trade_rows_present_hint
         if trade_rows_present is None:
             trade_rows_present = bool(trade_rows)
@@ -12015,8 +12183,8 @@ class RuleBacktestService:
         )
         data_sufficiency = assess_backtest_data_sufficiency(
             {
-                "status": row.status,
-                "no_result_reason": row.no_result_reason,
+                "status": effective_status,
+                "no_result_reason": effective_no_result_reason,
                 "data_quality": data_quality,
                 "benchmark_summary": benchmark_summary,
                 "factor_inputs": summary.get("factor_inputs") or summary.get("factorInputs"),
@@ -12030,9 +12198,9 @@ class RuleBacktestService:
             code=row.code,
             strategy_hash=row.strategy_hash,
             parsed_strategy=parsed_strategy or {},
-            status=row.status,
-            no_result_reason=row.no_result_reason,
-            no_result_message=row.no_result_message,
+            status=effective_status,
+            no_result_reason=effective_no_result_reason,
+            no_result_message=effective_no_result_message,
             request_payload=request if isinstance(request, dict) else {},
             metrics=metrics,
             data_quality=data_quality,
@@ -12068,13 +12236,13 @@ class RuleBacktestService:
             "warnings": warnings,
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
-            "status": row.status,
+            "status": effective_status,
             "status_message": summary.get("status_message"),
             "status_history": list(summary.get("status_history") or []),
             "run_timing": dict(summary.get("run_timing") or {}),
             "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
-            "no_result_reason": row.no_result_reason,
-            "no_result_message": row.no_result_message,
+            "no_result_reason": effective_no_result_reason,
+            "no_result_message": effective_no_result_message,
             "trade_count": metrics.get("trade_count"),
             "win_count": metrics.get("win_count"),
             "loss_count": metrics.get("loss_count"),

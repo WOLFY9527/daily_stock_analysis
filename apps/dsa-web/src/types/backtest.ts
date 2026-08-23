@@ -947,8 +947,13 @@ export interface RuleBacktestCompareRunBenchmark {
 }
 
 export interface RuleBacktestCompareUnavailableRun {
-  runId: number;
+  id: number;
+  code: string;
+  status: string;
   reason: string;
+  message?: string | null;
+  noResultReason?: string | null;
+  noResultMessage?: string | null;
 }
 
 export interface RuleBacktestCompareRunItem {

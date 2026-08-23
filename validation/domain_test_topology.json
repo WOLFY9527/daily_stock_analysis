@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8288,
-      "sha256": "6836bc4c4c9ec72e3437aa6b3de2683df6bfd4ed420b62a28ba004272d2315a6"
+      "count": 8295,
+      "sha256": "07dc03e9fb4d829d32bedea82c1dbf7ee0d1fb6d353c88e6335f331b4bcb3f41"
     },
     "tests": [
       {
@@ -35264,6 +35264,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_blocked_result_data_sufficiency_never_reports_sufficient",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_bounded_parameter_grid_internal_helper_delegates_to_pure_runner_without_side_effects",
         "domain": "backtest",
         "baseline": true
@@ -35442,6 +35447,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_builds_same_family_parameter_comparison",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_excludes_legacy_completed_without_calculation_evidence",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_marks_partial_and_unavailable_market_code_metadata",
@@ -35752,6 +35762,26 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_history_reads_prefer_stored_summary_metrics_over_row_columns",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_blocked_projection_closes_nonterminal_status_history",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_blocked_projection_replaces_stale_success_messages",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_completed_without_calculation_evidence_projects_blocked",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_null_summary_preserves_row_no_result_reason",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_local_us_float_history_is_not_hydrated_into_relational_storage",
@@ -36220,6 +36250,11 @@
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_valid_empty_equity_curve_remains_authoritative_empty_artifact",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_valid_zero_trade_calculation_remains_completed",
         "domain": "backtest",
         "baseline": false
       },

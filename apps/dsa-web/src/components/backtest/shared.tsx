@@ -21,7 +21,7 @@ import type {
   RuleBacktestRunResponse,
 } from '../../types/backtest';
 
-const TERMINAL_RULE_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL_RULE_STATUSES = new Set(['completed', 'blocked', 'failed', 'cancelled']);
 const CANCELLABLE_RULE_STATUSES = new Set(['queued', 'parsing', 'running', 'summarizing']);
 
 type BacktestLanguage = 'zh' | 'en';
@@ -312,6 +312,7 @@ export function getRuleRunStatusDescription(status?: string, language: BacktestL
 function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized === 'completed') return 'success';
+  if (normalized === 'blocked') return 'warning';
   if (normalized === 'failed') return 'danger';
   if (normalized === 'summarizing') return 'info';
   if (normalized === 'cancelled') return 'warning';

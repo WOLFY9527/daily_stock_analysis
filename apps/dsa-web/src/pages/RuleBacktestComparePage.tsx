@@ -43,6 +43,7 @@ import type {
   RuleBacktestCompareResponse,
   RuleBacktestCompareRobustnessDimension,
   RuleBacktestCompareRunItem,
+  RuleBacktestCompareUnavailableRun,
 } from '../types/backtest';
 
 const COMPARE_METRIC_LABELS: Record<string, string> = {
@@ -123,8 +124,10 @@ function formatRunCountLabel(runIds: number[]): string {
   return runIds.length ? `${runIds.length} 条运行` : '--';
 }
 
-function formatUnavailableRunReason(reason?: string | null): string {
-  const normalized = String(reason || '').trim().toLowerCase();
+function formatUnavailableRunReason(item: RuleBacktestCompareUnavailableRun): string {
+  const message = String(item.noResultMessage || '').trim();
+  if (message) return message;
+  const normalized = String(item.noResultReason || item.reason || '').trim().toLowerCase();
   if (!normalized) return '该运行暂不可用于比较。';
   if (normalized.includes('missing') || normalized.includes('not_found')) return '部分运行结果暂不可用。';
   if (normalized.includes('status') || normalized.includes('completed')) return '部分运行尚未生成可比较结果。';
@@ -1482,7 +1485,7 @@ const RuleBacktestComparePage: React.FC = () => {
                     <Banner
                       tone="warning"
                       title="存在不可用运行"
-                      body={response.unavailableRuns.map((item) => `#${item.runId}: ${formatUnavailableRunReason(item.reason)}`).join(' | ')}
+                      body={response.unavailableRuns.map((item) => `#${item.id}: ${formatUnavailableRunReason(item)}`).join(' | ')}
                     />
                   ) : null}
                 </section>

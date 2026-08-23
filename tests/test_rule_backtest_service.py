@@ -22,6 +22,7 @@ from data_provider.base import attach_stock_daily_close_tokens
 from src.core.rule_backtest_engine import ParsedStrategy, RuleBacktestEngine, RuleBacktestParser
 from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
+from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services import rule_backtest_service as rule_backtest_service_module
 from src.services.rule_backtest_support_exports import (
     build_execution_assumptions_fingerprint,
@@ -2106,7 +2107,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 confirmed=True,
             )
 
-        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["status"], "blocked")
         self.assertEqual(response["no_result_reason"], "insufficient_history")
         self.assertEqual(response["trade_count"], 0)
         self.assertEqual(response["data_quality"]["bar_count"], 0)
@@ -2667,11 +2668,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(any(warning["code"] == "benchmark_data_missing" for warning in response["data_quality"]["warnings"]))
         self._assert_public_backtest_text_is_analytical(json.dumps(response, ensure_ascii=False, sort_keys=True))
         artifact = response["research_artifact"]
-        self.assertIsNotNone(artifact)
-        self.assertEqual(artifact["benchmarkAvailability"]["state"], "benchmark_missing")
-        self.assertNotIn("totalReturnPct", artifact["metrics"])
-        self.assertNotIn("benchmarkReturnPct", artifact["metrics"])
-        self.assertNotIn("excessReturnVsBenchmarkPct", artifact["metrics"])
+        self.assertIsNone(artifact)
+        self.assertEqual(response["research_artifact_availability"]["state"], "blocked")
+        self.assertEqual(response["research_artifact_availability"]["reasonCode"], "missing_benchmark")
 
     def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         self._allow_market_history_fetch()
@@ -5102,7 +5101,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             )
 
         engine_run.assert_not_called()
-        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["status"], "blocked")
         self.assertEqual(response["no_result_reason"], "insufficient_history")
         self.assertIsNone(response["total_return_pct"])
         self.assertIsNone(response["max_drawdown_pct"])
@@ -5122,6 +5121,190 @@ class RuleBacktestTestCase(unittest.TestCase):
         serialized = json.dumps(response, ensure_ascii=False).lower()
         for forbidden in ("apikey", "token", "credential", "traceid", "requestid", "cachekey", "traceback"):
             self.assertNotIn(forbidden, serialized)
+
+    def test_legacy_completed_without_calculation_evidence_projects_blocked(self) -> None:
+        row = SimpleNamespace(
+            status="completed",
+            summary_json=json.dumps(
+                {
+                    "metrics": {
+                        "final_equity": 100000.0,
+                        "total_return_pct": 0.0,
+                        "trade_count": 0,
+                        "bars_used": 0,
+                    },
+                    "data_quality": {"bar_count": 0},
+                }
+            ),
+            no_result_reason=None,
+            final_equity=100000.0,
+            total_return_pct=0.0,
+            trade_count=0,
+        )
+
+        self.assertEqual(RuleBacktestService._effective_run_status(row), "blocked")
+
+    def test_legacy_blocked_projection_replaces_stale_success_messages(self) -> None:
+        service = RuleBacktestService(self.db)
+        stale_success_message = "规则回测已完成，可查看交易明细与执行假设。"
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            created = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        row = service.repo.get_run(created["id"])
+        assert row is not None
+        summary = json.loads(row.summary_json)
+        summary.update(
+            {
+                "status_message": stale_success_message,
+                "status_history": [
+                    {"status": "queued", "at": "2026-05-03T08:00:00"},
+                    {"status": "completed", "at": "2026-05-03T08:01:00", "message": stale_success_message},
+                ],
+                "metrics": {"trade_count": 0, "bars_used": 0},
+                "data_quality": {"bar_count": 0},
+            }
+        )
+        service.repo.update_run(
+            created["id"],
+            status="completed",
+            no_result_reason=None,
+            no_result_message=None,
+            trade_count=0,
+            total_return_pct=None,
+            final_equity=None,
+            summary_json=service._serialize_json(summary),
+        )
+        run_id = int(created["id"])
+
+        detail = service.get_run(run_id)
+        status = service.get_run_status(run_id)
+
+        self.assertIsNotNone(detail)
+        self.assertIsNotNone(status)
+        assert detail is not None
+        assert status is not None
+        expected_message = "回测未完成有效计算，无法显示研究结果。"
+        self.assertEqual(detail["status"], "blocked")
+        self.assertEqual(detail["status_message"], expected_message)
+        self.assertEqual(detail["summary"]["status_message"], expected_message)
+        self.assertEqual(detail["summary"]["no_result_message"], expected_message)
+        self.assertEqual(detail["status_history"][-1]["status"], "blocked")
+        self.assertEqual(detail["status_history"][-1]["message"], expected_message)
+        self.assertEqual(status["status"], "blocked")
+        self.assertEqual(status["status_message"], expected_message)
+        self.assertEqual(status["status_history"][-1]["message"], expected_message)
+        self.assertNotEqual(detail["status_message"], stale_success_message)
+
+    def test_legacy_blocked_projection_closes_nonterminal_status_history(self) -> None:
+        expected_message = "回测未完成有效计算，无法显示研究结果。"
+        projected = RuleBacktestService._project_status_history(
+            [
+                {"status": "queued", "at": "2026-05-03T08:00:00"},
+                {"status": "summarizing", "at": "2026-05-03T08:01:00"},
+            ],
+            effective_status="blocked",
+            message=expected_message,
+        )
+
+        self.assertEqual(projected[-1]["status"], "blocked")
+        self.assertEqual(projected[-1]["message"], expected_message)
+        diagnostics = RuleBacktestService._build_run_diagnostics_payload(
+            current_status="blocked",
+            status_history=projected,
+            status_message=expected_message,
+            no_result_reason="insufficient_history",
+            no_result_message=expected_message,
+        )
+        self.assertEqual(diagnostics["current_status"], "blocked")
+        self.assertEqual(diagnostics["terminal_status"], "blocked")
+
+    def test_valid_zero_trade_calculation_remains_completed(self) -> None:
+        row = SimpleNamespace(
+            status="completed",
+            summary_json=json.dumps(
+                {
+                    "no_result_reason": "no_entry_signals",
+                    "metrics": {
+                        "final_equity": 100000.0,
+                        "total_return_pct": 0.0,
+                        "trade_count": 0,
+                        "bars_used": 24,
+                    },
+                    "data_quality": {"bar_count": 24},
+                }
+            ),
+            no_result_reason="no_entry_signals",
+            final_equity=100000.0,
+            total_return_pct=0.0,
+            trade_count=0,
+        )
+
+        self.assertEqual(RuleBacktestService._effective_run_status(row), "completed")
+
+    def test_blocked_result_data_sufficiency_never_reports_sufficient(self) -> None:
+        for reason in ("invalid_price_data", "no_bars_in_range"):
+            with self.subTest(reason=reason):
+                payload = assess_backtest_data_sufficiency(
+                    {
+                        "status": "blocked",
+                        "no_result_reason": reason,
+                        "data_quality": {"bar_count": 24},
+                    }
+                )
+
+                self.assertNotEqual(payload["status"], "sufficient")
+                self.assertEqual(payload["calculation_state"], "not_available")
+                self.assertEqual(payload["metric_policy"], "do_not_emit_performance_metrics")
+                self.assertIn("calculation_unavailable", payload["blocked_reasons"])
+                self.assertEqual(
+                    RuleBacktestService._research_artifact_blocked_reason(
+                        status="blocked",
+                        no_result_reason=reason,
+                        data_quality={"bar_count": 24},
+                        data_sufficiency=payload,
+                        metrics={},
+                    ),
+                    reason,
+                )
+
+    def test_legacy_null_summary_preserves_row_no_result_reason(self) -> None:
+        service = RuleBacktestService(self.db)
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["no_result_reason"] = None
+        summary["no_result_message"] = None
+        service.repo.update_run(
+            response["id"],
+            summary_json=service._serialize_json(summary),
+            status="completed",
+            no_result_reason="insufficient_history",
+            no_result_message="legacy history unavailable",
+        )
+
+        detail = service.get_run(response["id"])
+
+        assert detail is not None
+        self.assertEqual(detail["status"], "blocked")
+        self.assertEqual(detail["no_result_reason"], "insufficient_history")
+        self.assertEqual(detail["no_result_message"], "legacy history unavailable")
+        self.assertEqual(detail["summary"]["no_result_reason"], "insufficient_history")
+        self.assertEqual(detail["research_artifact_availability"]["reasonCode"], "insufficient_history")
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)
@@ -5521,6 +5704,65 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["comparison_summary"]["baseline"]["run_id"], int(first["id"]))
 
+    def test_compare_runs_excludes_legacy_completed_without_calculation_evidence(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        blocked = RuleBacktestRun(
+            code="600519",
+            strategy_text="legacy unavailable run",
+            parsed_strategy_json="{}",
+            strategy_hash="legacy-blocked",
+            status="completed",
+            no_result_reason="insufficient_history",
+            no_result_message="历史行情不足，无法执行该策略回测。",
+            run_at=datetime(2026, 5, 3, 8, 0, 0),
+            completed_at=datetime(2026, 5, 3, 8, 1, 0),
+            trade_count=0,
+            total_return_pct=0.0,
+            final_equity=100000.0,
+            summary_json=json.dumps(
+                {
+                    "metrics": {
+                        "trade_count": 0,
+                        "bars_used": 0,
+                        "final_equity": 100000.0,
+                        "total_return_pct": 0.0,
+                    },
+                    "data_quality": {"bar_count": 0},
+                }
+            ),
+        )
+        with self.db.get_session() as session:
+            session.add(blocked)
+            session.commit()
+            blocked_id = int(blocked.id)
+
+        payload = service.compare_runs([int(first["id"]), blocked_id, int(second["id"])])
+
+        self.assertEqual(payload["comparable_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual([item["id"] for item in payload["unavailable_runs"]], [blocked_id])
+        self.assertEqual(payload["unavailable_runs"][0]["status"], "blocked")
+        self.assertEqual(payload["unavailable_runs"][0]["reason"], "run_not_completed")
+        self.assertEqual(payload["unavailable_runs"][0]["no_result_reason"], "insufficient_history")
+        self.assertEqual(
+            payload["unavailable_runs"][0]["no_result_message"],
+            "历史行情不足，无法执行该策略回测。",
+        )
+
     def test_compare_runs_rejects_requests_without_two_completed_runs(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -5718,13 +5960,18 @@ class RuleBacktestTestCase(unittest.TestCase):
     def test_compare_runs_adds_disjoint_period_comparison_summary(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+        self._seed_history(
+            "600519",
+            [Decimal("12.4") + (Decimal("0.1") * index) for index in range(5)],
+            start=date(2024, 1, 25),
+        )
 
         with patch.object(service, "_get_llm_adapter", return_value=None):
             first_parsed = service.parse_strategy(
                 strategy_text,
                 code="600519",
                 start_date="2024-01-01",
-                end_date="2024-01-08",
+                end_date="2024-01-12",
                 initial_capital=100000.0,
             )
             first = service.run_backtest(
@@ -5732,7 +5979,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 strategy_text=strategy_text,
                 parsed_strategy=first_parsed,
                 start_date="2024-01-01",
-                end_date="2024-01-08",
+                end_date="2024-01-12",
                 lookback_bars=20,
                 benchmark_mode="same_symbol_buy_and_hold",
                 confirmed=True,
@@ -5740,16 +5987,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             second_parsed = service.parse_strategy(
                 strategy_text,
                 code="600519",
-                start_date="2024-01-15",
-                end_date="2024-01-20",
+                start_date="2024-01-19",
+                end_date="2024-01-29",
                 initial_capital=100000.0,
             )
             second = service.run_backtest(
                 code="600519",
                 strategy_text=strategy_text,
                 parsed_strategy=second_parsed,
-                start_date="2024-01-15",
-                end_date="2024-01-20",
+                start_date="2024-01-19",
+                end_date="2024-01-29",
                 lookback_bars=20,
                 benchmark_mode="same_symbol_buy_and_hold",
                 confirmed=True,
@@ -5843,6 +6090,11 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_compare_runs_builds_same_family_parameter_comparison(self) -> None:
         service = RuleBacktestService(self.db)
+        self._seed_history(
+            "600519",
+            [Decimal("8.0") + (Decimal("0.1") * index) for index in range(20)],
+            start=date(2024, 1, 25),
+        )
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service,
@@ -5853,14 +6105,14 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "5日均线上穿20日均线买入，下穿卖出",
                 code="600519",
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 initial_capital=100000.0,
             )
             second_parsed = service.parse_strategy(
                 "10日均线上穿30日均线买入，下穿卖出",
                 code="600519",
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 initial_capital=100000.0,
             )
             first = service.run_backtest(
@@ -5868,7 +6120,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 strategy_text="5日均线上穿20日均线买入，下穿卖出",
                 parsed_strategy=first_parsed,
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -5877,7 +6129,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 strategy_text="10日均线上穿30日均线买入，下穿卖出",
                 parsed_strategy=second_parsed,
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -6142,6 +6394,11 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_compare_runs_parameter_comparison_marks_different_families(self) -> None:
         service = RuleBacktestService(self.db)
+        self._seed_history(
+            "600519",
+            [Decimal("8.0") + (Decimal("0.1") * index) for index in range(20)],
+            start=date(2024, 1, 25),
+        )
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service,
@@ -6155,11 +6412,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                     "5日均线上穿20日均线买入，下穿卖出",
                     code="600519",
                     start_date="2024-01-01",
-                    end_date="2024-01-24",
+                    end_date="2024-02-13",
                     initial_capital=100000.0,
                 ),
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -6170,11 +6427,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                     "MACD金叉买入，死叉卖出",
                     code="600519",
                     start_date="2024-01-01",
-                    end_date="2024-01-24",
+                    end_date="2024-02-13",
                     initial_capital=100000.0,
                 ),
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -6193,6 +6450,11 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_compare_runs_parameter_comparison_marks_partial_missing_keys(self) -> None:
         service = RuleBacktestService(self.db)
+        self._seed_history(
+            "600519",
+            [Decimal("8.0") + (Decimal("0.1") * index) for index in range(20)],
+            start=date(2024, 1, 25),
+        )
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service,
@@ -6206,11 +6468,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                     "5日均线上穿20日均线买入，下穿卖出",
                     code="600519",
                     start_date="2024-01-01",
-                    end_date="2024-01-24",
+                    end_date="2024-02-13",
                     initial_capital=100000.0,
                 ),
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -6221,11 +6483,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                     "10日均线上穿30日均线买入，下穿卖出",
                     code="600519",
                     start_date="2024-01-01",
-                    end_date="2024-01-24",
+                    end_date="2024-02-13",
                     initial_capital=100000.0,
                 ),
                 start_date="2024-01-01",
-                end_date="2024-01-24",
+                end_date="2024-02-13",
                 lookback_bars=20,
                 confirmed=True,
             )
@@ -6319,7 +6581,7 @@ class RuleBacktestTestCase(unittest.TestCase):
     def test_compare_runs_adds_same_market_different_code_market_code_comparison(self) -> None:
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
-        second_payload = self._compare_run_payload(run_id=202, code="000001")
+        second_payload = self._compare_run_payload(run_id=202, code="000002")
         rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
@@ -8773,8 +9035,8 @@ class RuleBacktestTestCase(unittest.TestCase):
             submitted = service.submit_backtest(
                 code="600519",
                 strategy_text=strategy_text,
-                start_date="2024-01-08",
-                end_date="2024-01-18",
+                start_date="2024-01-01",
+                end_date="2024-01-24",
                 lookback_bars=20,
                 fee_bps=2.5,
                 slippage_bps=1.25,
@@ -8794,11 +9056,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["status"], "completed")
         self.assertGreaterEqual(len(detail["status_history"]), 3)
         self.assertEqual(detail["summary"]["request"]["lookback_bars"], 20)
-        self.assertEqual(detail["summary"]["request"]["start_date"], "2024-01-08")
-        self.assertEqual(detail["summary"]["request"]["end_date"], "2024-01-18")
+        self.assertEqual(detail["summary"]["request"]["start_date"], "2024-01-01")
+        self.assertEqual(detail["summary"]["request"]["end_date"], "2024-01-24")
         self.assertEqual(detail["summary"]["request"]["confirmed"], True)
-        self.assertEqual(detail["start_date"], "2024-01-08")
-        self.assertEqual(detail["end_date"], "2024-01-18")
+        self.assertEqual(detail["start_date"], "2024-01-01")
+        self.assertEqual(detail["end_date"], "2024-01-24")
         self.assertIn("execution_assumptions", detail["summary"])
         statuses = [item.get("status") for item in detail["status_history"]]
         self.assertIn("running", statuses)
