@@ -1315,6 +1315,14 @@ class AdminLogsApiTestCase(unittest.TestCase):
                 "ScannerRunDataFailed",
             ),
             (
+                "readiness-only-data-failed",
+                0,
+                0,
+                {"dataReadiness": {"state": "blocked", "failedCount": 3}},
+                "data_failed",
+                "ScannerRunDataFailed",
+            ),
+            (
                 "readiness-error",
                 0,
                 0,

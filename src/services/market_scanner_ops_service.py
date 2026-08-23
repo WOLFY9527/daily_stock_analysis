@@ -104,14 +104,30 @@ class MarketScannerOperationsService:
             and getattr(self.config, "trading_day_check_enabled", True)
             and not self._is_trading_day(resolved_profile.market)
         ):
-            return {
+            now = datetime.now().isoformat()
+            detail = {
                 "status": "skipped",
                 "market": resolved_profile.market,
                 "profile": resolved_profile.key,
                 "profile_label": resolved_profile.label,
                 "watchlist_date": watchlist_date,
+                "trigger_mode": "scheduled",
+                "request_source": "scheduler",
+                "source_summary": "scanner=skipped",
+                "run_at": now,
+                "completed_at": now,
+                "diagnostics": {
+                    "operation": {
+                        "trigger_mode": "scheduled",
+                        "request_source": "scheduler",
+                        "watchlist_date": watchlist_date,
+                    },
+                    "reason_code": "non_trading_day",
+                },
                 "message": "今日为非交易日，已跳过盘前扫描。",
             }
+            self._record_scanner_observability(detail, trigger_mode="scheduled")
+            return detail
 
         return self._run_scan_workflow(
             market=resolved_profile.market,
@@ -432,13 +448,18 @@ class MarketScannerOperationsService:
         *,
         trigger_mode: str,
     ) -> None:
-        if not isinstance(detail, dict) or not detail.get("id"):
+        if not isinstance(detail, dict) or (not detail.get("id") and detail.get("status") not in {"skipped", "cancelled"}):
             return
         session_kind = "admin_action" if _trigger_scope(trigger_mode) == OWNERSHIP_SCOPE_SYSTEM else "user_activity"
         try:
+            actor = (
+                {"actor_type": "system", "role": "system"}
+                if _trigger_scope(trigger_mode) == OWNERSHIP_SCOPE_SYSTEM
+                else self.actor
+            )
             self.execution_logs.record_scanner_run(
                 run_detail=detail,
-                actor=self.actor,
+                actor=actor,
                 session_kind=session_kind,
             )
         except Exception as exc:

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
-import AdminLogsPage from '../AdminLogsPage';
+import AdminLogsPage, { businessEventSeverity, summarizeScannerEvents } from '../AdminLogsPage';
 
 const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, listOperatorIssueRollup, getIncidentTimeline, capabilityState } = vi.hoisted(() => ({
   listBusinessEvents: vi.fn(),
@@ -682,6 +682,44 @@ describe('AdminLogsPage', () => {
     });
     getIncidentTimeline.mockResolvedValue(incidentTimelinePayload);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('keeps scanner terminal truth degraded in severity and summary counts', async () => {
+    const scannerEvents = ['success', 'empty', 'data_failed', 'unavailable', 'cancelled', 'failed'].map((status, index) => ({
+      ...businessEvents[4],
+      id: `scanner-status-${status}`,
+      event: `Scanner ${status}`,
+      status,
+      startedAt: `2026-04-30T11:0${index}:00Z`,
+    }));
+
+    const summary = summarizeScannerEvents(scannerEvents);
+    expect(summary.success).toBe(1);
+    expect(summary.degraded).toBe(4);
+    expect(summary.failed).toBe(1);
+    expect(summary.latestIssue?.status).toBe('empty');
+    expect(['empty', 'data_failed', 'unavailable', 'cancelled'].map((status) => businessEventSeverity({ ...scannerEvents[0], status }))).toEqual([
+      'degraded',
+      'degraded',
+      'degraded',
+      'degraded',
+    ]);
+
+    listBusinessEvents.mockResolvedValue({
+      total: scannerEvents.length,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      items: scannerEvents,
+      healthSummary: null,
+    });
+    render(<AdminLogsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
+
+    const scannerPanel = await screen.findByTestId('admin-logs-scanner-summary');
+    expect(scannerPanel).toHaveTextContent('成功 / 降级 / 失败');
+    expect(scannerPanel).toHaveTextContent('1 / 4 / 1');
+    expect(scannerPanel).toHaveTextContent('空结果、数据失败、不可用和跳过均保留为降级');
   });
 
   it('fails closed without ops log capability and does not fetch admin log data', () => {
@@ -1560,7 +1598,7 @@ describe('AdminLogsPage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'scanner', minLevel: 'INFO' })));
     expect(await screen.findByTestId('admin-logs-scanner-summary')).toHaveTextContent('最近一次扫描');
-    expect(screen.getByTestId('admin-logs-scanner-summary')).toHaveTextContent('包含 INFO 生命周期记录');
+    expect(screen.getByTestId('admin-logs-scanner-summary')).toHaveTextContent('空结果、数据失败、不可用和跳过均保留为降级');
 
     fireEvent.click(screen.getByRole('tab', { name: '回测' }));
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'backtest' })));

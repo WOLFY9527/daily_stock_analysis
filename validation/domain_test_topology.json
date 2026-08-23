@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8288,
-      "sha256": "6836bc4c4c9ec72e3437aa6b3de2683df6bfd4ed420b62a28ba004272d2315a6"
+      "count": 8290,
+      "sha256": "1af340fa211b1de14b923f760ddf1601591a1082988b0790b8e02b4f7da5b128"
     },
     "tests": [
       {
@@ -16624,6 +16624,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_execution_log_service.py::ExecutionLogServiceTestCase::test_summarize_business_events_keeps_unavailable_and_cancelled_degraded",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_export_filter.py::test_sanitize_markdown_export_removes_legacy_full_report_advice_phrases",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -24052,6 +24057,11 @@
         "id": "tests/test_market_scanner_ops_service.py::MarketScannerOperationsServiceTestCase::test_runtime_failure_persists_structured_diagnostics",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_ops_service.py::MarketScannerOperationsServiceTestCase::test_scheduled_non_trading_day_skip_is_recorded_for_admin_observability",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_ops_service.py::MarketScannerOperationsServiceTestCase::test_scheduled_run_resolves_us_profile_from_config",

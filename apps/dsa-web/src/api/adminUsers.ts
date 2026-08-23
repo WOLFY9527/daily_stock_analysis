@@ -3,7 +3,7 @@ import { toCamelCase } from './utils';
 
 export type AdminPasswordState = 'set' | 'unset' | 'unknown';
 export type AdminSessionStatus = 'active' | 'expired' | 'revoked';
-export type AdminActivityStatus = 'success' | 'failed' | 'partial' | 'empty' | 'data_failed' | 'running' | 'skipped' | 'cancelled' | 'unknown';
+export type AdminActivityStatus = 'success' | 'failed' | 'partial' | 'empty' | 'data_failed' | 'running' | 'skipped' | 'cancelled' | 'unavailable' | 'unknown';
 export type AdminActivityOutcome = 'ok' | 'warning' | 'failed' | 'timeout' | 'partial' | 'unknown';
 
 export interface AdminSessionSummaryCounts {

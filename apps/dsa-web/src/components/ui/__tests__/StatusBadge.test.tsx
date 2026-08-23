@@ -46,6 +46,15 @@ describe('StatusBadge', () => {
     expect(getStatusLabel('partial')).toBe('部分失败');
   });
 
+  it('keeps scanner data and availability failures distinct from generic unknown', () => {
+    expect(normalizeStatus('empty')).toBe('empty');
+    expect(getStatusLabel('empty')).toBe('无候选');
+    expect(normalizeStatus('data_failed')).toBe('data_failed');
+    expect(getStatusLabel('data_failed')).toBe('数据失败');
+    expect(normalizeStatus('unavailable')).toBe('unavailable');
+    expect(getStatusLabel('unavailable')).toBe('暂不可用');
+  });
+
   it('maps unknown to 未确认', () => {
     expect(normalizeStatus('unknown')).toBe('unknown');
     expect(getStatusLabel('unknown')).toBe('未确认');

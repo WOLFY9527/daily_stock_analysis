@@ -331,6 +331,16 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(summary["status"], "healthy")
         self.assertEqual(summary["top_recent_errors"], [])
 
+    def test_summarize_business_events_keeps_unavailable_and_cancelled_degraded(self) -> None:
+        summary = ExecutionLogService.summarize_business_events([
+            {"id": "unavailable", "category": "scanner", "status": "unavailable"},
+            {"id": "cancelled", "category": "scanner", "status": "cancelled"},
+            {"id": "skipped", "category": "scanner", "status": "skipped"},
+        ])
+
+        self.assertEqual(summary["warning_events"], 3)
+        self.assertEqual(summary["status"], "degraded")
+
     def test_list_sessions_filters_by_task_id(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

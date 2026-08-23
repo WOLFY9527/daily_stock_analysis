@@ -92,6 +92,62 @@ class AdminActivityServiceTestCase(unittest.TestCase):
         for item in items:
             self.assertEqual(AdminActivityEvent.model_validate(item).outcome, "warning")
 
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            execution_logs.record_scanner_run(
+                run_detail={
+                    "id": 203,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": "Cancelled scanner",
+                    "status": "cancelled",
+                    "run_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "universe_size": 3,
+                    "evaluated_size": 0,
+                    "shortlist_size": 0,
+                },
+                actor={"user_id": "user-1", "actor_type": "user"},
+            )
+            execution_logs.record_scanner_run(
+                run_detail={
+                    "id": 204,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": "Unavailable scanner",
+                    "status": "unavailable",
+                    "run_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "universe_size": 3,
+                    "evaluated_size": 0,
+                    "shortlist_size": 0,
+                },
+                actor={"user_id": "user-1", "actor_type": "user"},
+            )
+            execution_logs.record_scanner_run(
+                run_detail={
+                    "id": 205,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": "Skipped scanner",
+                    "status": "skipped",
+                    "run_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "universe_size": 0,
+                    "evaluated_size": 0,
+                    "shortlist_size": 0,
+                },
+                actor={"user_id": "user-1", "actor_type": "user"},
+            )
+
+        items, total = AdminActivityService(db_manager=self.db, execution_log_service=execution_logs).list_activity(
+            target_user_id="user-1",
+            family="scanner",
+        )
+        self.assertEqual(total, 5)
+        terminal = {item["entity"]["label"]: item for item in items if item["status"] in {"cancelled", "unavailable", "skipped"}}
+        self.assertEqual({item["status"] for item in terminal.values()}, {"cancelled", "unavailable", "skipped"})
+        self.assertTrue(all(item["outcome"] == "warning" for item in terminal.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

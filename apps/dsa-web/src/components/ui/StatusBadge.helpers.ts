@@ -5,6 +5,9 @@ export type UnifiedStatus =
   | 'running'
   | 'pending'
   | 'partial'
+  | 'empty'
+  | 'data_failed'
+  | 'unavailable'
   | 'skipped'
   | 'unknown'
   | 'cancelled'
@@ -88,6 +91,10 @@ export function normalizeStatus(status: string): UnifiedStatus {
     '部分成功',
   ].includes(normalized)) return 'partial';
 
+  if (['data_failed', 'data-failed', '数据失败'].includes(normalized)) return 'data_failed';
+
+  if (['empty', 'empty_result', '无候选', '空结果'].includes(normalized)) return 'empty';
+
   if ([
     'skipped',
     'not_needed',
@@ -119,6 +126,8 @@ export function normalizeStatus(status: string): UnifiedStatus {
     '警告',
   ].includes(normalized)) return 'warning';
 
+  if (['unavailable', 'not_available', '不可用', '暂不可用'].includes(normalized)) return 'unavailable';
+
   if ([
     'info',
     'summarizing',
@@ -149,6 +158,12 @@ export function getStatusLabel(status: string): string {
       return '等待中';
     case 'partial':
       return '部分失败';
+    case 'empty':
+      return '无候选';
+    case 'data_failed':
+      return '数据失败';
+    case 'unavailable':
+      return '暂不可用';
     case 'skipped':
       return '跳过';
     case 'unknown':
@@ -172,7 +187,10 @@ export function getStatusTone(status: string): StatusBadgeTone {
     case 'error':
       return 'danger';
     case 'partial':
+    case 'empty':
     case 'warning':
+    case 'data_failed':
+    case 'unavailable':
     case 'cancelled':
       return 'warning';
     case 'running':

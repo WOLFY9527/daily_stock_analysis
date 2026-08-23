@@ -187,7 +187,7 @@ def _outcome_from_status(status: Any) -> str:
     normalized = _as_str(status).lower()
     if normalized in {"succeeded", "success", "ok", "completed"}:
         return "ok"
-    if normalized in {"empty", "data_failed"}:
+    if normalized in {"empty", "data_failed", "unavailable", "cancelled"}:
         return "warning"
     if normalized in {"partial", "partial_success"}:
         return "partial"
@@ -195,7 +195,9 @@ def _outcome_from_status(status: Any) -> str:
         return "timeout"
     if normalized in {"failed", "error", "empty_result", "invalid_response", "insufficient_fields"}:
         return "failed"
-    if normalized in {"not_configured", "skipped", "skipped_because_previous_succeeded"}:
+    if normalized in {"skipped", "skipped_because_previous_succeeded"}:
+        return "warning"
+    if normalized == "not_configured":
         return "ok"
     if normalized in {"switched_to_fallback", "switched"}:
         return "ok"
@@ -206,7 +208,7 @@ def _severity_from_status(status: Any) -> str:
     outcome = _outcome_from_status(status)
     if outcome == "failed":
         return "error"
-    if outcome in {"partial", "timeout"}:
+    if outcome in {"partial", "timeout", "warning"}:
         return "warning"
     return "info"
 
@@ -224,8 +226,10 @@ def _level_from_status(status: Any) -> str:
         return "ERROR"
     if normalized == "empty":
         return "NOTICE"
-    if normalized == "data_failed":
+    if normalized in {"data_failed", "unavailable"}:
         return "WARNING"
+    if normalized in {"skipped", "cancelled"}:
+        return "NOTICE"
     if normalized in {"partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}:
         return "WARNING"
     return "INFO"
@@ -251,7 +255,7 @@ def _normalize_log_category(value: Any, fallback: str = "system") -> str:
 
 def _normalize_business_status(value: Any) -> str:
     normalized = _as_str(value).lower()
-    if normalized in {"success", "failed", "partial", "running", "skipped", "unknown", "cancelled"}:
+    if normalized in {"success", "failed", "partial", "running", "skipped", "unknown", "cancelled", "unavailable"}:
         return normalized
     if normalized in {"succeeded", "completed", "ok"}:
         return "success"
@@ -282,7 +286,7 @@ def _scanner_status_projection(
     readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), dict) else {}
     data_source_failure_count = data_failed_count + provider_failure_count
     source_failure_count = data_source_failure_count + readiness_error_count
-    if raw_status in {"failed", "cancelled", "skipped", "empty", "data_failed", "partial"}:
+    if raw_status in {"failed", "cancelled", "skipped", "empty", "data_failed", "partial", "unavailable"}:
         status = raw_status
     elif data_source_failure_count and evaluated_count == 0:
         status = "data_failed"
@@ -693,7 +697,7 @@ def normalize_trace_step_status(
             "message": message,
         }
 
-    if status_token in {"partial", "warning", "empty", "data_failed"}:
+    if status_token in {"partial", "warning", "empty", "data_failed", "unavailable", "cancelled"}:
         return {
             "status": status_token,
             "reason": reason or None,
@@ -1536,19 +1540,20 @@ class ExecutionLogService:
             if isinstance(item, dict) and _as_str(item.get("status")).lower() == "data_failed"
         )
         readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), dict) else {}
+        summary_error_count = max(
+            _scanner_int(summary.get("error_count")),
+            _scanner_int(summary.get("errorCount")),
+        )
+        readiness_error_count = max(
+            _scanner_int(readiness.get("errorCount")),
+            summary_error_count,
+        )
         data_failed_count = max(
             _scanner_int(providers.get("missing_data_symbol_count")),
             _scanner_int(summary.get("data_failed_count") or summary.get("dataFailedCount")),
             _scanner_int(coverage.get("data_failed_count") or coverage.get("dataFailedCount")),
             candidate_data_failed_count,
-            max(
-                0,
-                _scanner_int(readiness.get("failedCount")) - _scanner_int(readiness.get("errorCount")),
-            ) if "errorCount" in readiness else 0,
-        )
-        readiness_error_count = max(
-            _scanner_int(readiness.get("errorCount")),
-            _scanner_int(summary.get("error_count") or summary.get("errorCount")),
+            max(0, _scanner_int(readiness.get("failedCount")) - readiness_error_count),
         )
         skipped_count = _scanner_int(coverage.get("excluded_total"))
         projection = _scanner_status_projection(
@@ -1562,10 +1567,17 @@ class ExecutionLogService:
         )
         scanner_status = projection["status"]
         execution_failed = scanner_status == "failed"
+        terminal_without_evaluation = scanner_status in {"cancelled", "skipped", "unavailable"}
         step_statuses = {
-            "load_universe": "success",
-            "run_screen": "failed" if execution_failed else (scanner_status if scanner_status in {"empty", "data_failed", "partial"} else "success"),
-            "save_scan_result": "skipped" if execution_failed else "success",
+            "load_universe": "skipped" if terminal_without_evaluation else "success",
+            "run_screen": (
+                "skipped" if scanner_status in {"cancelled", "skipped"}
+                else "unavailable" if scanner_status == "unavailable"
+                else "failed" if execution_failed
+                else scanner_status if scanner_status in {"empty", "data_failed", "partial"}
+                else "success"
+            ),
+            "save_scan_result": "skipped" if execution_failed or terminal_without_evaluation else "success",
         }
         duration_ms = int(max(0.0, (finished_at - started_at).total_seconds() * 1000))
         selected = run_detail.get("selected") if isinstance(run_detail.get("selected"), list) else run_detail.get("shortlist")
@@ -1577,12 +1589,19 @@ class ExecutionLogService:
             f"Scanned {universe_count} symbols, evaluated {evaluated_count}, shortlisted {selected_count}."
         )
         source_provider_summary = " / ".join(provider_list[:5]) or _as_str(run_detail.get("source_summary")) or None
-        error_message = _masked_message(failure.get("message") or run_detail.get("failure_reason"))
+        error_message = _masked_message(
+            failure.get("message")
+            or run_detail.get("failure_reason")
+            or run_detail.get("message")
+        )
         completion_event_name = {
             "failed": "ScannerRunFailed",
             "data_failed": "ScannerRunDataFailed",
             "empty": "ScannerRunEmpty",
             "partial": "ScannerRunPartial",
+            "skipped": "ScannerRunSkipped",
+            "cancelled": "ScannerRunCancelled",
+            "unavailable": "ScannerRunUnavailable",
         }.get(scanner_status, "ScannerRunCompleted")
         lifecycle_metadata = _sanitize_metadata({
             "route": "/scanner",
@@ -4427,7 +4446,18 @@ class ExecutionLogService:
     @staticmethod
     def _is_warning_business_event(item: Dict[str, Any]) -> bool:
         status = _as_str(item.get("status")).lower()
-        return status in {"partial", "warning", "empty", "data_failed", "timeout", "timed_out", "timeout_unknown"}
+        return status in {
+            "partial",
+            "warning",
+            "empty",
+            "data_failed",
+            "unavailable",
+            "cancelled",
+            "skipped",
+            "timeout",
+            "timed_out",
+            "timeout_unknown",
+        }
 
     @staticmethod
     def _is_slow_business_event(item: Dict[str, Any]) -> bool:

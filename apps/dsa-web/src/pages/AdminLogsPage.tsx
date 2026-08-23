@@ -64,7 +64,7 @@ type IncidentLookupInput = {
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
 const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'scanner', 'backtest', 'trading', 'portfolio', 'scheduler', 'notification', 'api', 'security'];
 const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
-const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
+const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'empty', 'data_failed', 'unavailable', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
 const PAGE_SIZE = 20;
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 const LOGS_TABS: LogsTab[] = ['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'];
@@ -89,7 +89,7 @@ type AdminLogsQueryState = {
 function statusChipVariant(status: UnifiedStatus): TerminalChipVariant {
   if (status === 'success') return 'success';
   if (status === 'failed' || status === 'error' || status === 'cancelled') return 'danger';
-  if (status === 'partial' || status === 'warning') return 'caution';
+  if (status === 'partial' || status === 'empty' || status === 'data_failed' || status === 'unavailable' || status === 'warning') return 'caution';
   if (status === 'running' || status === 'info') return 'info';
   return 'neutral';
 }
@@ -416,6 +416,9 @@ function statusLabel(status: UnifiedStatus, locale: AdminLogsLanguage): string {
     running: 'Running',
     pending: 'Pending',
     partial: 'Partial failure',
+    empty: 'Empty result',
+    data_failed: 'Data failed',
+    unavailable: 'Unavailable',
     skipped: 'Skipped',
     unknown: 'Unknown',
     cancelled: 'Cancelled',
@@ -652,6 +655,9 @@ function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale
     all: { zh: '全部状态', en: 'All status' },
     success: { zh: '成功', en: 'Success' },
     partial: { zh: '部分失败', en: 'Partial failure' },
+    empty: { zh: '无候选', en: 'Empty result' },
+    data_failed: { zh: '数据失败', en: 'Data failed' },
+    unavailable: { zh: '暂不可用', en: 'Unavailable' },
     failed: { zh: '失败', en: 'Failed' },
     skipped: { zh: '跳过', en: 'Skipped' },
     running: { zh: '运行中', en: 'Running' },
@@ -937,7 +943,7 @@ function hasDegradationSignal(value: unknown): boolean {
   return /fallback|degraded|partial|stale|timeout|circuit|unhealthy|fallback_used|回退|降级|部分|超时/i.test(String(value || ''));
 }
 
-function businessEventSeverity(event: BusinessEvent | BusinessEventDetail): EventSeverity {
+export function businessEventSeverity(event: BusinessEvent | BusinessEventDetail): EventSeverity {
   const status = normalizeStatus(event.status);
   if (status === 'failed' || status === 'error') return 'failed';
   const signal = [
@@ -949,8 +955,23 @@ function businessEventSeverity(event: BusinessEvent | BusinessEventDetail): Even
     event.rootCauseSummary,
     event.summary,
   ].join(' ');
-  if (status === 'partial' || status === 'warning' || hasDegradationSignal(signal)) return 'degraded';
+  if (status !== 'success' || hasDegradationSignal(signal)) return 'degraded';
   return 'success';
+}
+
+export function summarizeScannerEvents(events: BusinessEvent[]): {
+  latest: BusinessEvent | null;
+  success: number;
+  degraded: number;
+  failed: number;
+  latestIssue: BusinessEvent | null;
+} {
+  const scannerEvents = events.filter((item) => item.category === 'scanner');
+  const failed = scannerEvents.filter((item) => ['failed', 'error'].includes(normalizeStatus(item.status))).length;
+  const success = scannerEvents.filter((item) => normalizeStatus(item.status) === 'success').length;
+  const degraded = scannerEvents.length - success - failed;
+  const latestIssue = scannerEvents.find((item) => !['success'].includes(normalizeStatus(item.status))) || null;
+  return { latest: scannerEvents[0] || null, success, degraded, failed, latestIssue };
 }
 
 function rawEventSeverity(detail: ExecutionLogSessionDetail): EventSeverity {
@@ -2031,14 +2052,7 @@ const AdminLogsPage: React.FC = () => {
     if (activeTab === 'raw') return summary?.healthSummary || fallback;
     return businessHealth || fallback;
   })();
-  const scannerSummary = (() => {
-    const scannerEvents = businessEvents.filter((item) => item.category === 'scanner');
-    const latest = scannerEvents[0] || null;
-    const failed = scannerEvents.filter((item) => ['failed', 'error'].includes(normalizeStatus(item.status))).length;
-    const success = scannerEvents.filter((item) => normalizeStatus(item.status) === 'success').length;
-    const latestError = scannerEvents.find((item) => ['failed', 'error'].includes(normalizeStatus(item.status)));
-    return { latest, failed, success, latestError };
-  })();
+  const scannerSummary = summarizeScannerEvents(businessEvents);
   const topCategory = healthSummary.failuresByCategory?.[0];
   const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
   const currentStorageBytes = storageBytes(storageSummary);
@@ -2655,15 +2669,15 @@ const AdminLogsPage: React.FC = () => {
                 valueClassName="truncate text-sm font-semibold tracking-normal"
               />
               <TerminalMetric
-                label={locale === 'zh' ? '成功 / 失败' : 'Success / failed'}
-                value={`${scannerSummary.success} / ${scannerSummary.failed}`}
-                subvalue={locale === 'zh' ? '包含 INFO 生命周期记录' : 'Includes INFO lifecycle records'}
+                label={locale === 'zh' ? '成功 / 降级 / 失败' : 'Success / degraded / failed'}
+                value={`${scannerSummary.success} / ${scannerSummary.degraded} / ${scannerSummary.failed}`}
+                subvalue={locale === 'zh' ? '空结果、数据失败、不可用和跳过均保留为降级' : 'Empty, data-failed, unavailable, and skipped runs remain degraded'}
                 valueClassName="text-base"
               />
               <TerminalMetric
                 label={locale === 'zh' ? '最近错误' : 'Latest error'}
-                value={friendlyRawStatusLabel(scannerSummary.latestError?.errorSummary || scannerSummary.latestError?.reason, locale)}
-                subvalue={text(scannerSummary.latestError?.event, locale === 'zh' ? '暂无失败扫描' : 'No failed scan')}
+                value={friendlyRawStatusLabel(scannerSummary.latestIssue?.errorSummary || scannerSummary.latestIssue?.reason, locale)}
+                subvalue={text(scannerSummary.latestIssue?.event, locale === 'zh' ? '暂无异常扫描' : 'No degraded or failed scan')}
                 valueClassName="truncate text-sm font-semibold tracking-normal"
               />
               <TerminalMetric

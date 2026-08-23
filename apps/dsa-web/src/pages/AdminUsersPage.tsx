@@ -109,6 +109,8 @@ const ACTIVITY_STATUS_OPTIONS = [
   { value: 'data_failed', label: '数据失败' },
   { value: 'running', label: '运行中' },
   { value: 'skipped', label: '跳过' },
+  { value: 'cancelled', label: '取消' },
+  { value: 'unavailable', label: '暂不可用' },
   { value: 'unknown', label: '未知' },
 ];
 
@@ -158,6 +160,7 @@ function statusLabel(value?: string | null): string {
   if (normalized === 'partial') return '部分';
   if (normalized === 'empty') return '无候选';
   if (normalized === 'data_failed') return '数据失败';
+  if (normalized === 'unavailable') return '暂不可用';
   if (normalized === 'running') return '运行中';
   if (normalized === 'skipped') return '跳过';
   if (normalized === 'cancelled') return '取消';
@@ -185,7 +188,7 @@ function statusChipVariant(value?: string | null): TerminalChipVariant {
   const normalized = String(value || '').toLowerCase();
   if (['active', 'success', 'ok'].includes(normalized)) return 'success';
   if (['failed', 'revoked', 'inactive'].includes(normalized)) return 'danger';
-  if (['partial', 'empty', 'data_failed', 'warning', 'expired', 'timeout'].includes(normalized)) return 'caution';
+  if (['partial', 'empty', 'data_failed', 'unavailable', 'warning', 'expired', 'timeout', 'cancelled'].includes(normalized)) return 'caution';
   return 'neutral';
 }
 

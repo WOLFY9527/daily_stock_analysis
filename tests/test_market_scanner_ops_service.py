@@ -403,6 +403,25 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(status["today_watchlist"]["id"], scheduled["id"])
         self.assertEqual(status["dataReadiness"]["state"], "ready")
 
+    def test_scheduled_non_trading_day_skip_is_recorded_for_admin_observability(self) -> None:
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+            actor={"actor_type": "admin", "role": "admin", "user_id": "manual-admin"},
+        )
+        with patch.object(ops_service, "_is_trading_day", return_value=False), patch.object(
+            ops_service.execution_logs,
+            "record_scanner_run",
+        ) as record_scanner_run:
+            detail = ops_service.run_scheduled_scan(force_run=False)
+
+        self.assertEqual(detail["status"], "skipped")
+        record_scanner_run.assert_called_once()
+        self.assertEqual(record_scanner_run.call_args.kwargs["run_detail"]["status"], "skipped")
+        self.assertEqual(record_scanner_run.call_args.kwargs["actor"], {"actor_type": "system", "role": "system"})
+        self.assertEqual(record_scanner_run.call_args.kwargs["session_kind"], "admin_action")
+
     def test_notification_success_is_recorded_on_scheduled_run(self) -> None:
         notifier = FakeNotifier(available=True, send_result=True)
         ops_service = MarketScannerOperationsService(
