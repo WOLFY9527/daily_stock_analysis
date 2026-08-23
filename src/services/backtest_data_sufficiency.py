@@ -19,12 +19,21 @@ SUFFICIENCY_STATUSES = frozenset(
         "missing_adjustments",
         "missing_benchmark",
         "missing_factor_inputs",
+        "calculation_unavailable",
         "stale_data",
         "provider_missing",
         "entitlement_required",
     }
 )
-_BLOCKING_STATUSES = frozenset({"insufficient_history", "missing_benchmark", "provider_missing", "entitlement_required"})
+_BLOCKING_STATUSES = frozenset(
+    {
+        "insufficient_history",
+        "missing_benchmark",
+        "provider_missing",
+        "entitlement_required",
+        "calculation_unavailable",
+    }
+)
 _ENTITLEMENT_TOKENS = ("entitlement", "unauthorized", "forbidden", "permission", "redisplay")
 _GENERIC_OHLCV_READINESS_KEYS = frozenset(
     {
@@ -116,6 +125,7 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
         )
     )
     no_result_reason = _text(source.get("no_result_reason")).lower()
+    run_status = _text(source.get("status")).lower()
     blocked: list[str] = []
     degraded: list[str] = []
 
@@ -128,6 +138,9 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
         bar_count is not None and bar_count <= 0 and no_result_reason
     ):
         blocked.append("insufficient_history")
+
+    if run_status == "blocked" and not blocked:
+        blocked.append("calculation_unavailable")
 
     _apply_ohlcv_readiness(
         ohlcv_readiness,
@@ -449,6 +462,7 @@ def _primary_status(*, blocked: Sequence[str], degraded: Sequence[str]) -> str:
         "missing_benchmark",
         "missing_adjustments",
         "missing_factor_inputs",
+        "calculation_unavailable",
     ):
         if status in blocked or status in degraded:
             return status

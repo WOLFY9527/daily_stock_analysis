@@ -281,6 +281,7 @@ function clampRatio(value: number | null): number {
 
 function getRunStatusTone(status?: string | null): 'positive' | 'negative' | 'accent' | 'default' {
   if (status === 'completed') return 'positive';
+  if (status === 'blocked') return 'negative';
   if (status === 'failed' || status === 'cancelled') return 'negative';
   if (status === 'running' || status === 'parsing' || status === 'summarizing') return 'accent';
   return 'default';
@@ -1025,7 +1026,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [compareRunIds.length, compareWorkbenchRunIds, navigate, run]);
 
   const handleSavePreset = useCallback(() => {
-    if (!run) return;
+    if (!run || run.status !== 'completed') return;
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
     if (!name || !name.trim()) return;
@@ -1182,6 +1183,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 tone="success"
                 title={resultPage('statusCard.completedTitle')}
                 body={resultPage('statusCard.completedBody')}
+              />
+            </div>
+          ) : null}
+          {run.status === 'blocked' ? (
+            <div>
+              <Banner
+                tone="warning"
+                title={resultPage('statusCard.blockedTitle')}
+                body={resultPage('statusCard.blockedBody')}
               />
             </div>
           ) : null}
@@ -1495,9 +1505,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     >
                       {resultPage('hero.rerunSameParameters')}
                     </Button>
-                    <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-                      {resultPage('hero.savePreset')}
-                    </Button>
+                    {run.status === 'completed' ? (
+                      <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                        {resultPage('hero.savePreset')}
+                      </Button>
+                    ) : null}
                     <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
                       {resultPage('hero.refreshResult')}
                     </Button>
@@ -1676,7 +1688,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     {resultPage('hero.rerunSameParameters')}
                   </Button>
                 ) : null}
-                {run ? (
+                {run?.status === 'completed' ? (
                   <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
                     {resultPage('hero.savePreset')}
                   </Button>
@@ -1704,7 +1716,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
           {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
 
-          {run && normalized && run.status !== 'completed' ? (
+          {run && normalized && !isRuleRunTerminal(run.status) ? (
             <section className="backtest-display-section" data-testid="deterministic-result-page-pending-visualization">
               <ConsoleBoard>
                 <div className="backtest-result-page__mobile-containment p-3 md:p-4">

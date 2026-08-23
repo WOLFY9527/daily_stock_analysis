@@ -59,7 +59,15 @@ describe('RuleBacktestComparePage', () => {
       resolvedRunIds: [101, 202],
       comparableRunIds: [101, 202],
       missingRunIds: [],
-      unavailableRuns: [],
+      unavailableRuns: [{
+        id: 303,
+        code: '600519',
+        status: 'blocked',
+        reason: 'run_not_completed',
+        message: 'Only completed runs are comparable in the stored-first compare foundation.',
+        noResultReason: 'insufficient_history',
+        noResultMessage: '历史行情不足，无法执行该策略回测。',
+      }],
       fieldGroups: ['market_code_comparison', 'period_comparison', 'comparison_summary'],
       marketCodeComparison: {
         baselineRunId: 101,
@@ -451,6 +459,8 @@ describe('RuleBacktestComparePage', () => {
     expect(pageShell.querySelector('.workspace-page--backtest')).toBeNull();
     expect(pageShell.closest('main')).not.toHaveClass('py-4');
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
+    expect(await screen.findByText('存在不可用运行')).toBeInTheDocument();
+    expect(screen.getByText('#303: 历史行情不足，无法执行该策略回测。')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '比较摘要' })).toHaveAttribute('href', '#compare-summary');
     expect(screen.getByRole('link', { name: '指标条带' })).toHaveAttribute('href', '#compare-chart-strip');

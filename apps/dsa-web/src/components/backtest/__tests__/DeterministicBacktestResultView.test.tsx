@@ -298,4 +298,31 @@ describe('DeterministicBacktestResultView', () => {
     expect(screen.getByText('回测窗口内没有触发任何入场信号。')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
+
+  it('renders blocked runs as terminal unavailable states instead of pending results', () => {
+    render(<DeterministicBacktestResultView run={makeViewerRun({
+      status: 'blocked',
+      statusMessage: '回测未完成有效计算，无法显示研究结果。',
+      statusHistory: [{ status: 'blocked', at: '2026-05-10T08:03:00Z' }],
+      auditRows: [],
+      equityCurve: [],
+      dailyReturnSeries: [],
+      exposureCurve: [],
+      benchmarkCurve: [],
+      buyAndHoldCurve: [],
+      totalReturnPct: null,
+      annualizedReturnPct: null,
+      winRatePct: null,
+      maxDrawdownPct: null,
+      sharpeRatio: null,
+      finalEquity: null,
+      noResultReason: 'insufficient_history',
+      noResultMessage: '回测未完成有效计算，无法显示研究结果。',
+    })} />);
+
+    expect(screen.getByTestId('deterministic-result-blocked-state')).toBeInTheDocument();
+    expect(screen.getByText('回测未完成有效计算')).toBeInTheDocument();
+    expect(screen.queryByText('结果生成中')).not.toBeInTheDocument();
+    expect(screen.queryByText('正在整理结果')).not.toBeInTheDocument();
+  });
 });

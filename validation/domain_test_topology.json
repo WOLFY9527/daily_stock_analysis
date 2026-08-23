@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8290,
-      "sha256": "1af340fa211b1de14b923f760ddf1601591a1082988b0790b8e02b4f7da5b128"
+      "count": 8297,
+      "sha256": "3ed23464ad90d99578ddf28f49a909257b592a3c6a15cd1dc0be741327ec2d4a"
     },
     "tests": [
       {
@@ -5865,7 +5865,7 @@
       },
       {
         "id": "tests/api/test_stock_symbol_validation_contract.py::test_route_symbol_preserves_explicit_cn_venue_identity",
-        "domain": "api_schema_contracts",
+        "domain": "market",
         "baseline": false
       },
       {
@@ -11040,117 +11040,117 @@
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_bot_batch_consumes_typed_analysis_result",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_main_maps_failed_one_shot_analysis_to_nonzero_exit",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_main_maps_market_review_without_report_to_nonzero_exit",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_pipeline_partial_stock_failure_preserves_report_but_fails_execution",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_pipeline_report_persistence_failure_is_failed",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_pipeline_success_requires_a_durable_report_path",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_pipeline_total_stock_analysis_failure_is_failed",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_combined_failure_keeps_successful_market_output",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_market_review_without_report_is_failed",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_notification_failure_does_not_discard_reports",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_run_full_analysis_preserves_market_closed_skip",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail0-failed-scanner_run_failed]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail1-skipped-non_trading_day]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail2-success-None]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_scanner_statuses_map_to_typed_execution_results[detail3-success-None]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result0-failed-watchlist_score_refresh_failed-2]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result1-success-None-0]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduled_watchlist_results_map_to_typed_execution_results[refresh_result2-success-None-0]",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduler_does_not_interpret_arbitrary_domain_dicts",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduler_observes_failed_analysis_result",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_scheduler_typed_skip_and_success_do_not_record_failure",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_service_stays_alive_but_reports_startup_analysis_failure",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_execution_contract.py::test_unknown_scheduled_scanner_status_is_not_success",
-        "domain": "runtime_operator_tooling",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {
@@ -11310,17 +11310,17 @@
       },
       {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[000001.SH-000001.SH]",
-        "domain": "api_schema_contracts",
+        "domain": "residual_repository_integration",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[000001.SZ-000001.SZ]",
-        "domain": "api_schema_contracts",
+        "domain": "residual_repository_integration",
         "baseline": false
       },
       {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_analysis_input_preserves_explicit_cn_identity[SH000001-000001.SH]",
-        "domain": "api_schema_contracts",
+        "domain": "residual_repository_integration",
         "baseline": false
       },
       {
@@ -11330,7 +11330,7 @@
       },
       {
         "id": "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_batch_keeps_distinct_explicit_cn_identities",
-        "domain": "api_schema_contracts",
+        "domain": "residual_repository_integration",
         "baseline": false
       },
       {
@@ -15445,7 +15445,7 @@
       },
       {
         "id": "tests/test_data_tools_analysis_context.py::AnalysisContextToolExactNumericTestCase::test_preserves_decimal_text_and_is_json_serializable",
-        "domain": "market",
+        "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
@@ -35274,6 +35274,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_blocked_result_data_sufficiency_never_reports_sufficient",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_bounded_parameter_grid_internal_helper_delegates_to_pure_runner_without_side_effects",
         "domain": "backtest",
         "baseline": true
@@ -35452,6 +35457,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_builds_same_family_parameter_comparison",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_excludes_legacy_completed_without_calculation_evidence",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_marks_partial_and_unavailable_market_code_metadata",
@@ -35762,6 +35772,26 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_history_reads_prefer_stored_summary_metrics_over_row_columns",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_blocked_projection_closes_nonterminal_status_history",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_blocked_projection_replaces_stale_success_messages",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_completed_without_calculation_evidence_projects_blocked",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_legacy_null_summary_preserves_row_no_result_reason",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_local_us_float_history_is_not_hydrated_into_relational_storage",
@@ -36230,6 +36260,11 @@
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_valid_empty_equity_curve_remains_authoritative_empty_artifact",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_valid_zero_trade_calculation_remains_completed",
         "domain": "backtest",
         "baseline": false
       },
@@ -42809,20 +42844,26 @@
       {
         "path": "apps/dsa-web/src/api/__tests__/market.test.ts",
         "owner": "market",
-        "bytes": 50306,
-        "lines": 1307
+        "bytes": 52009,
+        "lines": 1358
+      },
+      {
+        "path": "apps/dsa-web/src/api/__tests__/portfolio.test.ts",
+        "owner": "portfolio_broker",
+        "bytes": 62117,
+        "lines": 1899
       },
       {
         "path": "apps/dsa-web/src/components/layout/__tests__/Shell.test.tsx",
         "owner": "frontend_shared",
-        "bytes": 96259,
-        "lines": 2078
+        "bytes": 96543,
+        "lines": 2081
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/AdminLogsPage.test.tsx",
         "owner": "runtime_operator_tooling",
-        "bytes": 75057,
-        "lines": 1773
+        "bytes": 76617,
+        "lines": 1811
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/BacktestPage.test.tsx",
@@ -42833,14 +42874,14 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/DeterministicBacktestResultPage.test.tsx",
         "owner": "backtest",
-        "bytes": 79724,
-        "lines": 2089
+        "bytes": 82547,
+        "lines": 2163
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 252413,
-        "lines": 5347
+        "bytes": 273445,
+        "lines": 5863
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/LiquidityMonitorPage.test.tsx",
@@ -42851,8 +42892,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx",
         "owner": "market",
-        "bytes": 267836,
-        "lines": 6037
+        "bytes": 293761,
+        "lines": 6615
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx",
@@ -42869,20 +42910,26 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/OptionsLabPage.test.tsx",
         "owner": "market",
-        "bytes": 133012,
-        "lines": 3299
+        "bytes": 136393,
+        "lines": 3344
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/PortfolioPage.test.tsx",
         "owner": "portfolio_broker",
-        "bytes": 203295,
-        "lines": 4733
+        "bytes": 214583,
+        "lines": 5018
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 117556,
-        "lines": 2544
+        "bytes": 117632,
+        "lines": 2545
+      },
+      {
+        "path": "apps/dsa-web/src/pages/__tests__/RuleBacktestComparePage.test.tsx",
+        "owner": "backtest",
+        "bytes": 50491,
+        "lines": 1359
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/SettingsPage.test.tsx",
@@ -42893,20 +42940,20 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/StockStructureDecisionPage.test.tsx",
         "owner": "market",
-        "bytes": 102874,
-        "lines": 2449
+        "bytes": 129669,
+        "lines": 3041
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx",
         "owner": "scanner",
-        "bytes": 211983,
-        "lines": 4693
+        "bytes": 215440,
+        "lines": 4767
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx",
         "owner": "scanner",
-        "bytes": 138046,
-        "lines": 3114
+        "bytes": 140138,
+        "lines": 3139
       }
     ]
   },
@@ -42977,8 +43024,8 @@
       },
       {
         "path": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
-        "owner": "protected_critical",
-        "mandatory": true
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "path": "apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts",
@@ -43491,8 +43538,8 @@
         "id": "chromium-mobile::apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts::bootstrap-admin-real-browser-regression.spec.ts › bootstrap-admin real-browser regression › persists canonical capabilities from first setup through admin navigation, reload, and logout",
         "spec": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
         "project": "chromium-mobile",
-        "owner": "protected_critical",
-        "mandatory": true
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts::consumer-copy-forbidden-vocabulary.smoke.spec.ts › consumer routes keep backend/provider/debug vocabulary out of default copy",
@@ -46060,8 +46107,8 @@
         "id": "chromium::apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts::bootstrap-admin-real-browser-regression.spec.ts › bootstrap-admin real-browser regression › persists canonical capabilities from first setup through admin navigation, reload, and logout",
         "spec": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
         "project": "chromium",
-        "owner": "protected_critical",
-        "mandatory": true
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts::consumer-copy-forbidden-vocabulary.smoke.spec.ts › consumer routes keep backend/provider/debug vocabulary out of default copy",

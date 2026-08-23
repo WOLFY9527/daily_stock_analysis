@@ -31,7 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FAKE_PARQUET_ENV = "BACKTEST_SMOKE_FAKE_PARQUET"
 ASYNC_DELAY_ENV = "BACKTEST_SMOKE_ASYNC_DELAY_MS"
 DISABLE_LLM_ENV = "BACKTEST_SMOKE_DISABLE_LLM"
-TERMINAL_RULE_RUN_STATUSES = {"completed", "failed", "cancelled"}
+TERMINAL_RULE_RUN_STATUSES = {"completed", "blocked", "failed", "cancelled"}
 
 
 @dataclass

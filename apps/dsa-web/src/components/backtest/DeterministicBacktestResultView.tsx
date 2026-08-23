@@ -112,13 +112,16 @@ function ResultStatePanel({
 }) {
   const { language } = useI18n();
   const isCompleted = run.status === 'completed';
+  const isBlocked = run.status === 'blocked';
   const hasRows = normalized.rows.length > 0;
   const noEntryMessage = isCanonicalNoEntrySignalMessage(run.noResultMessage)
     ? bt(language, 'resultPage.noEntrySignal')
     : null;
   const title = isCompleted
     ? (language === 'en' ? 'No simulation result to visualize' : '暂无可视化结果')
-    : (language === 'en' ? 'Simulation result pending' : '结果生成中');
+    : isBlocked
+      ? bt(language, 'resultPage.statusCard.blockedTitle')
+      : (language === 'en' ? 'Simulation result pending' : '结果生成中');
   const body = isCompleted
     ? (
       noEntryMessage
@@ -127,11 +130,13 @@ function ResultStatePanel({
         ? 'This run finished without a displayable equity, drawdown, or risk summary.'
         : '本次研究回测完成后，未生成可展示的权益、回撤或风险摘要。')
     )
-    : (
+    : isBlocked
+      ? bt(language, 'resultPage.statusCard.blockedBody')
+      : (
       language === 'en'
         ? 'Assembling results'
         : '正在整理结果'
-    );
+      );
   const chips = [
     { key: 'status', label: language === 'en' ? 'Status' : '状态', value: String(run.status || '--') },
     { key: 'rows', label: language === 'en' ? 'Visible rows' : '可视行数', value: String(normalized.viewerMeta.rowCount || 0) },
@@ -143,7 +148,11 @@ function ResultStatePanel({
   return (
     <section
       className="backtest-display-section"
-      data-testid={isCompleted ? 'deterministic-result-empty-state' : 'deterministic-result-pending-state'}
+      data-testid={isCompleted
+        ? 'deterministic-result-empty-state'
+        : isBlocked
+          ? 'deterministic-result-blocked-state'
+          : 'deterministic-result-pending-state'}
     >
       <div className="backtest-void-workspace">
         <div className="backtest-void-workspace__chart-card min-h-[320px] border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-5 py-6">

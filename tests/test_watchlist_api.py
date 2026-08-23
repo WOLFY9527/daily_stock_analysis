@@ -1718,6 +1718,20 @@ class WatchlistApiTestCase(unittest.TestCase):
             max_drawdown_pct=-8.2,
             summary_json='{"metrics":{"sharpe_ratio":1.34}}',
         )
+        legacy_unavailable = RuleBacktestRun(
+            owner_id="user-1",
+            code="WULF",
+            strategy_text="历史数据不可用的旧回测",
+            parsed_strategy_json="{}",
+            strategy_hash="legacy-unavailable",
+            status="completed",
+            run_at=datetime(2026, 5, 3, 8, 0, 0),
+            completed_at=datetime(2026, 5, 3, 8, 1, 0),
+            trade_count=0,
+            total_return_pct=0.0,
+            final_equity=100000.0,
+            summary_json='{"metrics":{"trade_count":0,"bars_used":0,"final_equity":100000.0,"total_return_pct":0.0},"data_quality":{"bar_count":0}}',
+        )
         failed = RuleBacktestRun(
             owner_id="user-1",
             code="WULF",
@@ -1731,7 +1745,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             total_return_pct=99.0,
         )
         with self.db.get_session() as session:
-            session.add_all([older, latest, failed])
+            session.add_all([older, latest, legacy_unavailable, failed])
             session.commit()
             latest_id = latest.id
 

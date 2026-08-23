@@ -906,6 +906,8 @@ class RuleBacktestCompareUnavailableRun(BaseModel):
     status: str
     reason: str
     message: Optional[str] = None
+    no_result_reason: Optional[str] = None
+    no_result_message: Optional[str] = None
 
 
 class RuleBacktestCompareRunItem(BaseModel):

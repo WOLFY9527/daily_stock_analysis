@@ -2408,7 +2408,17 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "resolved_run_ids": [101, 202],
             "comparable_run_ids": [101, 202],
             "missing_run_ids": [999],
-            "unavailable_runs": [],
+            "unavailable_runs": [
+                {
+                    "id": 303,
+                    "code": "600519",
+                    "status": "blocked",
+                    "reason": "run_not_completed",
+                    "message": "Only completed runs are comparable in the stored-first compare foundation.",
+                    "no_result_reason": "insufficient_history",
+                    "no_result_message": "历史行情不足，无法执行该策略回测。",
+                }
+            ],
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
             "market_code_comparison": {
                 "baseline_run_id": 101,
@@ -2909,6 +2919,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["comparison_source"], "stored_rule_backtest_runs")
         self.assertEqual(payload["read_mode"], "stored_first")
         self.assertEqual(payload["missing_run_ids"], [999])
+        self.assertEqual(payload["unavailable_runs"][0]["id"], 303)
+        self.assertEqual(payload["unavailable_runs"][0]["no_result_reason"], "insufficient_history")
+        self.assertEqual(
+            payload["unavailable_runs"][0]["no_result_message"],
+            "历史行情不足，无法执行该策略回测。",
+        )
         self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
         self.assertEqual(payload["market_code_comparison"]["relationship"], "same_code")
         self.assertEqual(payload["market_code_comparison"]["state"], "direct")

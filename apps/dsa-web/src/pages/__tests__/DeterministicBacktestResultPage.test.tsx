@@ -547,6 +547,80 @@ describe('DeterministicBacktestResultPage', () => {
     expect(getRuleBacktestRun).toHaveBeenCalledTimes(2);
   }, 10000);
 
+  it('treats blocked runs as terminal and keeps them out of the result workspace', async () => {
+    const queuedRun = makeResultRun({
+      status: 'queued',
+      completedAt: null,
+      statusMessage: '策略已提交，等待开始执行。',
+      statusHistory: [{ status: 'queued', at: '2026-04-07T08:00:00Z' }],
+      auditRows: [],
+      equityCurve: [],
+      executionTrace: null,
+    });
+    const blockedRun = makeResultRun({
+      status: 'blocked',
+      completedAt: '2026-04-07T08:00:30Z',
+      statusMessage: '没有可用于回测的历史行情数据。',
+      statusHistory: [
+        { status: 'queued', at: '2026-04-07T08:00:00Z' },
+        { status: 'blocked', at: '2026-04-07T08:00:30Z' },
+      ],
+      noResultReason: 'insufficient_history',
+      noResultMessage: '没有可用于回测的历史行情数据。',
+      auditRows: [],
+      equityCurve: [],
+      executionTrace: null,
+    });
+
+    getRuleBacktestRun
+      .mockResolvedValueOnce(queuedRun)
+      .mockResolvedValueOnce(blockedRun);
+    getRuleBacktestRunStatus.mockResolvedValueOnce({
+      id: 99,
+      code: 'ORCL',
+      status: 'blocked',
+      statusMessage: blockedRun.statusMessage,
+      statusHistory: blockedRun.statusHistory,
+      runAt: queuedRun.runAt,
+      completedAt: blockedRun.completedAt,
+      noResultReason: blockedRun.noResultReason,
+      noResultMessage: blockedRun.noResultMessage,
+      tradeCount: 0,
+      parsedConfidence: 0.97,
+      needsConfirmation: false,
+    });
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [blockedRun],
+    });
+
+    vi.useFakeTimers();
+    renderResultPage();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText('页面正在自动跟踪状态')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1800);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('回测未完成有效计算')).toBeInTheDocument();
+    expect(screen.queryByText('页面正在自动跟踪状态')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-result-page-pending-visualization')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-backtest-result-view')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-result-page-console-hero')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-result-page-tabs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存为预设' })).not.toBeInTheDocument();
+    expect(getRuleBacktestRunStatus).toHaveBeenCalledTimes(1);
+  }, 10000);
+
   it('lazy-loads inactive audit tabs without delaying the initial overview path', async () => {
     const currentRun = makeResultRun({ id: 99, runAt: '2026-04-07T08:00:00Z' });
 

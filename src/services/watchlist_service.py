@@ -18,6 +18,7 @@ from src.services._persisted_json import decode_persisted_json
 from src.services.market_scanner_candidate_evidence import scanner_candidate_score_evidence_is_complete
 from src.services.product_read_model import PRODUCT_READ_MODEL_CONTRACT_VERSION, normalize_product_state
 from src.services.reason_code_vocabulary import classify_reason_code
+from src.services.rule_backtest_service import RuleBacktestService
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.services.symbol_research_packet_service import build_symbol_research_packet_from_parts as build_symbol_research_packet
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
@@ -1364,6 +1365,8 @@ class WatchlistService:
             ).scalars().all()
         latest: Dict[str, RuleBacktestRun] = {}
         for row in rows:
+            if RuleBacktestService._effective_run_status(row) != "completed":
+                continue
             canonical_symbol = storage_to_canonical.get(str(row.code or "").strip().upper())
             if canonical_symbol is not None and canonical_symbol not in latest:
                 latest[canonical_symbol] = row

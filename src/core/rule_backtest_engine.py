@@ -486,6 +486,7 @@ class RuleBacktestResult:
     audit_ledger: List[RuleBacktestAuditRow] = field(default_factory=list)
     no_result_reason: Optional[str] = None
     no_result_message: Optional[str] = None
+    blocked_execution: bool = False
     warnings: List[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -503,6 +504,7 @@ class RuleBacktestResult:
             "audit_ledger": [row.to_dict() for row in self.audit_ledger],
             "no_result_reason": self.no_result_reason,
             "no_result_message": self.no_result_message,
+            "blocked_execution": self.blocked_execution,
             "warnings": self.warnings or [],
         }
 
@@ -1440,6 +1442,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="insufficient_history",
                 no_result_message="没有可用于回测的历史行情数据。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -1454,6 +1457,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="invalid_price_data",
                 no_result_message="历史行情存在缺失收盘价，无法执行规则回测。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -1473,6 +1477,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="no_bars_in_range",
                 no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                blocked_execution=True,
                 warnings=[],
             )
         warmup_cache = self._build_indicator_cache(ordered_bars[:], parsed_strategy)
@@ -1881,6 +1886,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="insufficient_history",
                 no_result_message="没有可用于回测的历史行情数据。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -1895,6 +1901,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="invalid_price_data",
                 no_result_message="历史行情存在缺失收盘价，无法执行规则回测。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -1914,6 +1921,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="no_bars_in_range",
                 no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -2433,6 +2441,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="insufficient_history",
                 no_result_message="没有可用于回测的历史行情数据。",
+                blocked_execution=True,
                 warnings=[],
             )
 
@@ -2452,6 +2461,7 @@ class RuleBacktestEngine:
                 metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="no_bars_in_range",
                 no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                blocked_execution=True,
                 warnings=[],
             )
 
