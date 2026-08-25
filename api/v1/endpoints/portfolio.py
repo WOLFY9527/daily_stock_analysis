@@ -1598,10 +1598,23 @@ def _datetime_to_str(value: object) -> Optional[str]:
 def _serialize_history_item(row: object) -> PortfolioHistorySnapshotItem:
     payload = _safe_dict(_parse_json_payload(getattr(row, "payload", None)))
     base_currency = str(getattr(row, "base_currency"))
+    valuation = _safe_dict(payload.get("valuation"))
+    valuation_state = str(valuation.get("state") or "").strip().lower()
+    performance = _safe_dict(payload.get("performance"))
+    performance_state = str(performance.get("calculation_state") or "").strip().lower()
+    valuation_available = valuation_state == "available"
+    performance_available = performance_state == "available"
 
     def base_money(field_name: str):
+        if not valuation_available:
+            return None
+        if field_name in {"realized_pnl", "unrealized_pnl", "fee_total", "tax_total"} and not performance_available:
+            return None
+        stored_value = getattr(row, field_name, None)
+        if stored_value is None:
+            return None
         return round_portfolio_decimal_value(
-            getattr(row, field_name),
+            stored_value,
             kind="money",
             currency=base_currency,
         )

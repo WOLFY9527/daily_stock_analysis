@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -90,13 +91,20 @@ def _record_audit(
 def get_admin_portfolio_summary(
     user_id: str,
     include_inactive: bool = Query(default=False),
+    as_of: Optional[date] = Query(default=None),
+    cost_method: str = Query(default="fifo"),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioSummaryResponse:
     actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
     response = AdminPortfolioSummaryResponse.model_validate(
-        service.get_summary(user_id=normalized_user_id, include_inactive=include_inactive)
+        service.get_summary(
+            user_id=normalized_user_id,
+            include_inactive=include_inactive,
+            as_of=as_of,
+            cost_method=cost_method,
+        )
     )
     _record_audit(
         action="admin_portfolio.summary_viewed",
@@ -104,6 +112,8 @@ def get_admin_portfolio_summary(
         target_user_id=normalized_user_id,
         metadata={
             "include_inactive": bool(include_inactive),
+            "as_of": as_of.isoformat() if as_of else None,
+            "cost_method": cost_method,
             "account_count": response.account_count,
             "active_account_count": response.active_account_count,
         },
@@ -124,12 +134,14 @@ def list_admin_user_holdings(
     include_zero: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=10000),
+    as_of: Optional[date] = Query(default=None),
+    cost_method: str = Query(default="fifo"),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminHoldingListResponse:
     actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
-    items, total = service.list_holdings(
+    items, total, valuation = service.list_holdings(
         user_id=normalized_user_id,
         account_id=account_id,
         symbol=_normalize_symbol(symbol),
@@ -137,6 +149,8 @@ def list_admin_user_holdings(
         include_zero=include_zero,
         limit=limit,
         offset=offset,
+        as_of=as_of,
+        cost_method=cost_method,
     )
     if total < 0:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
@@ -146,7 +160,10 @@ def list_admin_user_holdings(
             "total": total,
             "limit": limit,
             "offset": offset,
+            "as_of": as_of.isoformat() if as_of else None,
+            "cost_method": cost_method,
             "has_more": offset + limit < total,
+            **valuation,
             "limitations": ["raw_broker_payloads_excluded", "raw_broker_refs_masked"],
         }
     )
@@ -226,6 +243,8 @@ def list_admin_user_portfolio_activity(
 def get_admin_portfolio_account_detail(
     user_id: str,
     account_id: int,
+    as_of: Optional[date] = Query(default=None),
+    cost_method: str = Query(default="fifo"),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioAccountDetailResponse:
     actor = _to_admin_actor(current_user)
@@ -233,7 +252,12 @@ def get_admin_portfolio_account_detail(
     if account_id <= 0:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid account_id"})
     service = _service_or_404(normalized_user_id)
-    payload = service.get_account_detail(user_id=normalized_user_id, account_id=account_id)
+    payload = service.get_account_detail(
+        user_id=normalized_user_id,
+        account_id=account_id,
+        as_of=as_of,
+        cost_method=cost_method,
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
     response = AdminPortfolioAccountDetailResponse.model_validate(payload)
@@ -243,6 +267,8 @@ def get_admin_portfolio_account_detail(
         target_user_id=normalized_user_id,
         metadata={
             "account_id": account_id,
+            "as_of": as_of.isoformat() if as_of else None,
+            "cost_method": cost_method,
             "holding_total": response.holdings.total,
             "activity_total": response.activity.total,
             "broker_connection_count": len(response.broker_connections),

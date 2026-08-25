@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8297,
-      "sha256": "3ed23464ad90d99578ddf28f49a909257b592a3c6a15cd1dc0be741327ec2d4a"
+      "count": 8315,
+      "sha256": "70c8a07e525a47fcc654d5020a9217cb37126c192a7837b8ce4c8649f10e0c2c"
     },
     "tests": [
       {
@@ -539,14 +539,29 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_account_detail_does_not_attach_unverified_sync_provenance_to_canonical_valuation",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_account_detail_validates_account_owner_and_excludes_raw_payloads",
         "domain": "portfolio_broker",
         "baseline": true
       },
       {
+        "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_admin_cold_projection_does_not_persist_valuation_cache",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_admin_portfolio_export_redaction_matrix_excludes_raw_payloads_and_secrets",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_admin_projection_matches_member_truth_for_missing_hkd_fx",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_admin_required_for_portfolio_visibility",
@@ -562,6 +577,11 @@
         "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_holdings_are_target_user_only_and_safe",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_member_and_admin_api_agree_on_zero_and_gain_loss_truth",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_missing_target_user_returns_404",
@@ -15459,6 +15479,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_data_tools_portfolio_snapshot.py::TestGetPortfolioSnapshotTool::test_compact_projection_preserves_unavailable_and_partial_totals_as_nonnumeric",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_data_tools_portfolio_snapshot.py::TestGetPortfolioSnapshotTool::test_default_returns_compact_snapshot_and_risk",
         "domain": "portfolio_broker",
         "baseline": true
@@ -29319,6 +29344,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_history_does_not_replay_metadata_less_snapshot_as_numeric_value",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_history_does_not_replay_unavailable_valuation_as_numeric_zero",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_history_preserves_high_scale_stored_base_currency_money_as_decimal_text",
         "domain": "portfolio_broker",
         "baseline": false
@@ -29524,6 +29559,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_snapshot_schema_cannot_reexpose_non_authoritative_numeric_totals",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_snapshot_truth_money_preserves_canonical_decimal_text_and_rejects_float",
         "domain": "portfolio_broker",
         "baseline": false
@@ -29699,6 +29739,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_position_normalization_rejects_missing_valuation_sources_instead_of_zero",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_position_normalization_rounds_derived_market_price_before_strict_parse",
         "domain": "portfolio_broker",
         "baseline": false
@@ -29742,6 +29787,11 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_rejects_duplicate_remote_account_link_on_another_portfolio_account",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_rejects_missing_account_valuation_sources_instead_of_zero",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_requires_explicit_account_ref_when_session_has_multiple_accounts",
@@ -30079,17 +30129,32 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_drawdown_missing_fx_is_unavailable_instead_of_using_partial_history",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_drawdown_unitization_preserves_high_scale_snapshot_cash_flow",
         "domain": "portfolio_broker",
         "baseline": false
       },
       {
-        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_fx_fallback_caps_confidence_without_changing_risk_values",
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_missing_fx_preserves_risk_unavailability_without_fabricating_exposure",
         "domain": "portfolio_broker",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_risk_blocks_preserve_high_scale_snapshot_money_and_prices",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_risk_projection_rejects_available_performance_for_partial_valuation",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_risk_projection_rejects_metadata_less_valuation_and_null_total_equity",
         "domain": "portfolio_broker",
         "baseline": false
       },
@@ -30479,6 +30544,21 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_available_performance_with_missing_component_becomes_unavailable",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_closed_position_missing_fx_keeps_realized_pnl_unavailable",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_corrupt_sync_and_cache_valuation_inputs_never_become_numeric_zero",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_deposits_and_withdrawals_are_return_and_drawdown_neutral",
         "domain": "portfolio_broker",
         "baseline": false
@@ -30505,6 +30585,16 @@
       },
       {
         "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_return_is_unavailable_without_positive_denominator",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_snapshot_analytics_preserves_missing_native_exposure_as_none",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_valuation_truth_does_not_inherit_unavailable_performance_coverage",
         "domain": "portfolio_broker",
         "baseline": false
       },
@@ -41813,6 +41903,7 @@
       "tests/test_options_event_calendar_authority.py::test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only",
       "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_build_us_realtime_snapshot_df_uses_market_trade_date",
       "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails",
+      "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_fx_fallback_caps_confidence_without_changing_risk_values",
       "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_contract]",
@@ -42916,8 +43007,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/PortfolioPage.test.tsx",
         "owner": "portfolio_broker",
-        "bytes": 214583,
-        "lines": 5018
+        "bytes": 219592,
+        "lines": 5162
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx",

@@ -99,6 +99,20 @@ def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False,
     """Shrink portfolio snapshot payload for default tool responses."""
     if not isinstance(snapshot, dict):
         return {}
+    truth = snapshot.get("portfolio_truth") if isinstance(snapshot.get("portfolio_truth"), dict) else {}
+    aggregate_authoritative = str(truth.get("value_semantics") or "") == "authoritative_total"
+    valuation_fields = ("total_equity", "total_market_value", "total_cash")
+    performance_fields = ("realized_pnl", "unrealized_pnl")
+
+    def account_money(account: dict, field_name: str) -> object:
+        valuation = account.get("valuation") if isinstance(account.get("valuation"), dict) else {}
+        performance = account.get("performance") if isinstance(account.get("performance"), dict) else {}
+        if field_name in valuation_fields and str(valuation.get("state") or "unavailable") != "available":
+            return None
+        if field_name in performance_fields and str(performance.get("calculation_state") or "unavailable") != "available":
+            return None
+        return account.get(field_name)
+
     compact_accounts = []
     for account in snapshot.get("accounts", []) or []:
         if not isinstance(account, dict):
@@ -114,11 +128,11 @@ def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False,
             "account_name": account.get("account_name"),
             "market": account.get("market"),
             "base_currency": account.get("base_currency"),
-            "total_equity": account.get("total_equity"),
-            "total_market_value": account.get("total_market_value"),
-            "total_cash": account.get("total_cash"),
-            "realized_pnl": account.get("realized_pnl"),
-            "unrealized_pnl": account.get("unrealized_pnl"),
+            "total_equity": account_money(account, "total_equity"),
+            "total_market_value": account_money(account, "total_market_value"),
+            "total_cash": account_money(account, "total_cash"),
+            "realized_pnl": account_money(account, "realized_pnl"),
+            "unrealized_pnl": account_money(account, "unrealized_pnl"),
             "fx_stale": account.get("fx_stale"),
         }
         if include_positions:
@@ -133,11 +147,11 @@ def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False,
         "cost_method": snapshot.get("cost_method"),
         "currency": snapshot.get("currency"),
         "account_count": snapshot.get("account_count"),
-        "total_cash": snapshot.get("total_cash"),
-        "total_market_value": snapshot.get("total_market_value"),
-        "total_equity": snapshot.get("total_equity"),
-        "realized_pnl": snapshot.get("realized_pnl"),
-        "unrealized_pnl": snapshot.get("unrealized_pnl"),
+        "total_cash": snapshot.get("total_cash") if aggregate_authoritative else None,
+        "total_market_value": snapshot.get("total_market_value") if aggregate_authoritative else None,
+        "total_equity": snapshot.get("total_equity") if aggregate_authoritative else None,
+        "realized_pnl": snapshot.get("realized_pnl") if aggregate_authoritative else None,
+        "unrealized_pnl": snapshot.get("unrealized_pnl") if aggregate_authoritative else None,
         "fx_stale": snapshot.get("fx_stale"),
         "portfolio_truth": snapshot.get("portfolio_truth"),
         "accounts": compact_accounts,
@@ -148,6 +162,8 @@ def _compact_portfolio_risk(risk: dict, top_n: int = 10) -> dict:
     """Shrink portfolio risk payload for tool responses."""
     if not isinstance(risk, dict):
         return {}
+    truth = risk.get("portfolio_truth") if isinstance(risk.get("portfolio_truth"), dict) else {}
+    aggregate_authoritative = str(truth.get("value_semantics") or "") == "authoritative_total"
     concentration = risk.get("concentration", {}) or {}
     top_positions = list(concentration.get("top_positions") or [])
     top_positions = sorted(
@@ -155,6 +171,18 @@ def _compact_portfolio_risk(risk: dict, top_n: int = 10) -> dict:
         key=lambda item: float((item or {}).get("weight_pct") or 0.0),
         reverse=True,
     )[:top_n]
+    if not aggregate_authoritative:
+        top_positions = [
+            {
+                **item,
+                "market_value_base": None,
+                "weight_pct": None,
+                "is_alert": None,
+            }
+            if isinstance(item, dict)
+            else item
+            for item in top_positions
+        ]
     stop_loss = risk.get("stop_loss", {}) or {}
     stop_items = list(stop_loss.get("items") or [])
     stop_items = sorted(
@@ -167,16 +195,17 @@ def _compact_portfolio_risk(risk: dict, top_n: int = 10) -> dict:
         "as_of": risk.get("as_of"),
         "currency": risk.get("currency"),
         "cost_method": risk.get("cost_method"),
+        "portfolio_truth": risk.get("portfolio_truth"),
         "thresholds": risk.get("thresholds", {}),
         "concentration": {
-            "alert": concentration.get("alert", False),
-            "top_weight_pct": concentration.get("top_weight_pct"),
+            "alert": concentration.get("alert") if aggregate_authoritative else None,
+            "top_weight_pct": concentration.get("top_weight_pct") if aggregate_authoritative else None,
             "top_positions": top_positions,
         },
         "drawdown": {
-            "alert": drawdown.get("alert", False),
-            "max_drawdown_pct": drawdown.get("max_drawdown_pct"),
-            "current_drawdown_pct": drawdown.get("current_drawdown_pct"),
+            "alert": drawdown.get("alert") if aggregate_authoritative else None,
+            "max_drawdown_pct": drawdown.get("max_drawdown_pct") if aggregate_authoritative else None,
+            "current_drawdown_pct": drawdown.get("current_drawdown_pct") if aggregate_authoritative else None,
             "fx_stale": drawdown.get("fx_stale", False),
         },
         "stop_loss": {

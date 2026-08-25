@@ -13,10 +13,13 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pandas as pd
 
 from src.config import Config
+from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import PortfolioService
 from src.storage import DatabaseManager
@@ -173,7 +176,7 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         self.assertIn("holdingsLineage", report["riskDiagnostics"])
         self.assertIn("confidenceCap", report)
 
-    def test_fx_fallback_caps_confidence_without_changing_risk_values(self) -> None:
+    def test_missing_fx_preserves_risk_unavailability_without_fabricating_exposure(self) -> None:
         account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
         aid = account["id"]
         self.service.record_cash_ledger(
@@ -205,7 +208,13 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         position = snapshot["accounts"][0]["positions"][0]
         self.assertEqual(position["market_value_native"], 100.0)
         self.assertEqual(position["display_fx_status"], "unavailable")
-        self.assertEqual(report["concentration"]["top_positions"][0]["market_value_base"], 0.0)
+        self.assertEqual(report["portfolio_truth"]["value_semantics"], "unavailable")
+        self.assertIsNone(report["concentration"]["top_positions"][0]["market_value_base"])
+        self.assertIsNone(report["concentration"]["top_positions"][0]["weight_pct"])
+        self.assertIsNone(report["concentration"]["top_weight_pct"])
+        self.assertIsNone(report["sector_concentration"]["top_weight_pct"])
+        self.assertIsNone(report["account_attribution"]["top_accounts"][0]["total_equity_base"])
+        self.assertIsNone(report["drawdown"]["max_drawdown_pct"])
         self.assertEqual(report["availability"]["valuation"]["state"], "unavailable")
         self.assertEqual(report["fxFreshnessState"], "unavailable")
         self.assertLessEqual(report["confidenceCap"]["value"], 40)
@@ -321,6 +330,7 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
                 fx_stale=False,
                 payload=json.dumps(
                     {
+                        "valuation": {"state": "available"},
                         "performance": {
                             "contract_version": "portfolio_performance_v1",
                             "calculation_state": "available",
@@ -352,6 +362,115 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         self.assertEqual(drawdown["series_points"], 2)
         self.assertEqual(drawdown["max_drawdown_pct"], 25.0)
         self.assertEqual(drawdown["current_drawdown_pct"], 25.0)
+
+    def test_drawdown_missing_fx_is_unavailable_instead_of_using_partial_history(self) -> None:
+        rows = [
+            SimpleNamespace(
+                snapshot_date=date(2026, 5, 10),
+                base_currency="USD",
+                total_equity=Decimal("100"),
+                fx_stale=False,
+            ),
+            SimpleNamespace(
+                snapshot_date=date(2026, 5, 11),
+                base_currency="USD",
+                total_equity=Decimal("80"),
+                fx_stale=False,
+            ),
+        ]
+        with (
+            patch.object(
+                self.risk_service.repo,
+                "list_daily_snapshots_for_risk",
+                return_value=rows,
+            ),
+            patch.object(
+                self.risk_service.portfolio_service,
+                "convert_amount_exact",
+                side_effect=[
+                    (Decimal("700"), False, "direct"),
+                    (Decimal("0"), False, "missing_rate"),
+                ],
+            ),
+        ):
+            drawdown = self.risk_service._build_drawdown(
+                account_id=None,
+                as_of_date=date(2026, 5, 11),
+                cost_method="fifo",
+                threshold_pct=10.0,
+                lookback_days=180,
+                report_currency="CNY",
+            )
+
+        self.assertEqual(drawdown["series_points"], 1)
+        self.assertIsNone(drawdown["max_drawdown_pct"])
+        self.assertIsNone(drawdown["current_drawdown_pct"])
+        self.assertIsNone(drawdown["alert"])
+        self.assertFalse(drawdown["fx_stale"])
+        self.assertEqual(drawdown["calculation_status"], "unavailable")
+        self.assertEqual(drawdown["unavailable_reason"], "missing_fx_rate")
+
+    def test_risk_projection_rejects_available_performance_for_partial_valuation(self) -> None:
+        account = self.service.create_account(
+            name="Partial drawdown",
+            broker="Demo",
+            market="hk",
+            base_currency="CNY",
+        )
+        account_id = int(account["id"])
+        self.service.repo.upsert_daily_snapshot(
+            account_id=account_id,
+            snapshot_date=date(2026, 5, 10),
+            cost_method="fifo",
+            base_currency="CNY",
+            total_cash=Decimal("0"),
+            total_market_value=Decimal("0"),
+            total_equity=Decimal("0"),
+            unrealized_pnl=Decimal("0"),
+            realized_pnl=Decimal("0"),
+            fee_total=Decimal("0"),
+            tax_total=Decimal("0"),
+            fx_stale=False,
+            payload=json.dumps(
+                {
+                    "valuation": {"state": "partial", "value_semantics": "covered_subtotal"},
+                    "performance": {
+                        "contract_version": "portfolio_performance_v1",
+                        "calculation_state": "available",
+                        "cash_flows": {"net": "0.00"},
+                    },
+                }
+            ),
+        )
+
+        projections = self.service.repo.list_daily_snapshots_for_risk(
+            as_of=date(2026, 5, 10),
+            cost_method="fifo",
+            account_id=account_id,
+            owner_id=self.service.owner_id,
+        )
+
+        self.assertEqual(projections, [])
+
+    def test_risk_projection_rejects_metadata_less_valuation_and_null_total_equity(self) -> None:
+        row = SimpleNamespace(
+            account_id=1,
+            snapshot_date=date(2026, 5, 11),
+            base_currency="USD",
+            total_equity=None,
+            fx_stale=False,
+            payload=json.dumps(
+                {
+                    "performance": {
+                        "contract_version": "portfolio_performance_v1",
+                        "calculation_state": "available",
+                        "cash_flows": {"net": "0.00"},
+                    }
+                }
+            ),
+        )
+
+        self.assertIsNone(PortfolioRepository._risk_snapshot_projection(row))
 
 
 if __name__ == "__main__":

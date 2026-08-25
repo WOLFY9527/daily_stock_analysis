@@ -375,8 +375,8 @@ class PortfolioPositionItem(BaseModel):
     is_price_fallback: Optional[bool] = None
     price_fallback_reason: Optional[str] = None
     valuation_confidence: Optional[float] = None
-    market_value_base: Decimal
-    unrealized_pnl_base: Decimal
+    market_value_base: Optional[PortfolioTransportDecimal] = None
+    unrealized_pnl_base: Optional[PortfolioTransportDecimal] = None
     valuation_currency: str
     cost_basis_native: Optional[Decimal] = None
     market_value_native: Optional[Decimal] = None
@@ -386,6 +386,8 @@ class PortfolioPositionItem(BaseModel):
     display_unrealized_pnl: Optional[Decimal] = None
     display_currency: Optional[str] = None
     display_fx_status: Optional[Literal["live", "stale", "unavailable"]] = None
+    valuation_status: Optional[Literal["available", "stale", "unavailable"]] = None
+    valuation_unavailable_reason: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -428,13 +430,13 @@ class PortfolioAccountSnapshot(BaseModel):
     base_currency: str
     as_of: str
     cost_method: str
-    total_cash: Decimal
-    total_market_value: Decimal
-    total_equity: Decimal
-    realized_pnl: Decimal
-    unrealized_pnl: Decimal
-    fee_total: Decimal
-    tax_total: Decimal
+    total_cash: Optional[PortfolioTransportDecimal] = None
+    total_market_value: Optional[PortfolioTransportDecimal] = None
+    total_equity: Optional[PortfolioTransportDecimal] = None
+    realized_pnl: Optional[PortfolioTransportDecimal] = None
+    unrealized_pnl: Optional[PortfolioTransportDecimal] = None
+    fee_total: Optional[PortfolioTransportDecimal] = None
+    tax_total: Optional[PortfolioTransportDecimal] = None
     fx_stale: bool
     data_status: Optional[
         Literal[
@@ -474,8 +476,8 @@ class PortfolioAccountSnapshot(BaseModel):
 class PortfolioMarketBreakdownItem(BaseModel):
     market: str
     position_count: int
-    total_market_value: Decimal
-    weight_pct: float
+    total_market_value: Optional[PortfolioTransportDecimal] = None
+    weight_pct: Optional[float] = None
 
 
 class PortfolioFxRateItem(BaseModel):
@@ -505,7 +507,7 @@ class PortfolioFxRateItem(BaseModel):
 
 
 class PortfolioPnlMetric(BaseModel):
-    amount: Decimal
+    amount: Optional[PortfolioTransportDecimal] = None
     amount_display: Optional[str] = None
     percent: Optional[float] = None
     currency: str
@@ -534,10 +536,10 @@ class PortfolioPnlSummary(BaseModel):
 class PortfolioExposureItem(BaseModel):
     key: str
     label: str
-    market_value: Decimal
-    display_value: Decimal
+    market_value: Optional[PortfolioTransportDecimal] = None
+    display_value: Optional[PortfolioTransportDecimal] = None
     display_currency: str
-    percent: float
+    percent: Optional[float] = None
     fx_status: Literal["live", "stale", "unavailable"] = "live"
     native_value: Optional[Decimal] = None
     native_currency: Optional[str] = None
@@ -721,13 +723,13 @@ class PortfolioSnapshotResponse(BaseModel):
     cost_method: str
     currency: str
     account_count: int
-    total_cash: Decimal
-    total_market_value: Decimal
-    total_equity: Decimal
-    realized_pnl: Decimal
-    unrealized_pnl: Decimal
-    fee_total: Decimal
-    tax_total: Decimal
+    total_cash: Optional[PortfolioTransportDecimal] = None
+    total_market_value: Optional[PortfolioTransportDecimal] = None
+    total_equity: Optional[PortfolioTransportDecimal] = None
+    realized_pnl: Optional[PortfolioTransportDecimal] = None
+    unrealized_pnl: Optional[PortfolioTransportDecimal] = None
+    fee_total: Optional[PortfolioTransportDecimal] = None
+    tax_total: Optional[PortfolioTransportDecimal] = None
     fx_stale: bool
     portfolio_truth: PortfolioTruth
     data_status: Optional[
@@ -783,6 +785,49 @@ class PortfolioSnapshotResponse(BaseModel):
                 payload[field_name] = parse_portfolio_decimal(
                     payload[field_name], kind="money", currency=payload.get("currency")
                 )
+        portfolio_truth = payload.get("portfolio_truth")
+        if isinstance(portfolio_truth, dict) and portfolio_truth.get("value_semantics") != "authoritative_total":
+            for field_name in (
+                "total_cash",
+                "total_market_value",
+                "total_equity",
+                "realized_pnl",
+                "unrealized_pnl",
+                "fee_total",
+                "tax_total",
+            ):
+                payload[field_name] = None
+
+        accounts = payload.get("accounts")
+        if isinstance(accounts, list):
+            projected_accounts = []
+            for account in accounts:
+                if not isinstance(account, dict):
+                    projected_accounts.append(account)
+                    continue
+                account_payload = dict(account)
+                availability = account_payload.get("availability")
+                availability = availability if isinstance(availability, dict) else {}
+                valuation = account_payload.get("valuation")
+                valuation = valuation if isinstance(valuation, dict) else {}
+                valuation_state = valuation.get("state")
+                if valuation_state is None and isinstance(availability.get("valuation"), dict):
+                    valuation_state = availability["valuation"].get("state")
+                if valuation_state is not None and str(valuation_state).lower() != "available":
+                    for field_name in ("total_cash", "total_market_value", "total_equity"):
+                        account_payload[field_name] = None
+
+                performance = account_payload.get("performance")
+                performance = performance if isinstance(performance, dict) else {}
+                performance_state = performance.get("calculation_state")
+                if performance_state is None and isinstance(availability.get("performance"), dict):
+                    performance_state = availability["performance"].get("calculation_state")
+                if performance_state is not None and str(performance_state).lower() != "available":
+                    for field_name in ("realized_pnl", "unrealized_pnl", "fee_total", "tax_total"):
+                        account_payload[field_name] = None
+                projected_accounts.append(account_payload)
+            payload["accounts"] = projected_accounts
+
         market_breakdown = payload.get("market_breakdown")
         if isinstance(market_breakdown, list):
             payload["market_breakdown"] = [
@@ -816,13 +861,13 @@ class PortfolioHistorySnapshotItem(BaseModel):
     snapshot_date: str
     cost_method: str
     base_currency: str
-    total_cash: Decimal
-    total_market_value: Decimal
-    total_equity: Decimal
-    realized_pnl: Decimal
-    unrealized_pnl: Decimal
-    fee_total: Decimal
-    tax_total: Decimal
+    total_cash: Optional[PortfolioTransportDecimal] = None
+    total_market_value: Optional[PortfolioTransportDecimal] = None
+    total_equity: Optional[PortfolioTransportDecimal] = None
+    realized_pnl: Optional[PortfolioTransportDecimal] = None
+    unrealized_pnl: Optional[PortfolioTransportDecimal] = None
+    fee_total: Optional[PortfolioTransportDecimal] = None
+    tax_total: Optional[PortfolioTransportDecimal] = None
     fx_stale: bool
     valuation_lineage: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
@@ -1143,6 +1188,7 @@ class PortfolioRiskResponse(BaseModel):
     account_id: Optional[int] = None
     cost_method: str
     currency: str
+    portfolio_truth: PortfolioTruth
     data_status: Optional[
         Literal[
             "no_account",

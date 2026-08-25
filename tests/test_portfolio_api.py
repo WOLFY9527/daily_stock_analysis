@@ -392,7 +392,12 @@ class PortfolioApiTestCase(unittest.TestCase):
                     fee_total=high_value,
                     tax_total=high_value,
                     fx_stale=False,
-                    payload="{}",
+                    payload=json.dumps(
+                        {
+                            "valuation": {"state": "available"},
+                            "performance": {"calculation_state": "available"},
+                        }
+                    ),
                 )
             )
             session.commit()
@@ -413,6 +418,101 @@ class PortfolioApiTestCase(unittest.TestCase):
             "tax_total",
         ):
             self.assertEqual(item[field_name], "1234567890123456.12")
+
+    def test_history_does_not_replay_unavailable_valuation_as_numeric_zero(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Unavailable History", "broker": "Demo", "market": "hk", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        with self.db.get_session() as session:
+            session.add(
+                PortfolioDailySnapshot(
+                    account_id=account_id,
+                    snapshot_date=date(2026, 1, 3),
+                    cost_method="fifo",
+                    base_currency="CNY",
+                    total_cash=Decimal("0"),
+                    total_market_value=Decimal("0"),
+                    total_equity=Decimal("0"),
+                    unrealized_pnl=Decimal("0"),
+                    realized_pnl=Decimal("0"),
+                    fee_total=Decimal("0"),
+                    tax_total=Decimal("0"),
+                    fx_stale=False,
+                    payload=json.dumps(
+                        {
+                            "valuation": {"state": "unavailable", "value_semantics": "covered_subtotal"},
+                            "performance": {"calculation_state": "unavailable"},
+                        }
+                    ),
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/portfolio/history",
+            params={"account_id": account_id, "date_from": "2026-01-03", "date_to": "2026-01-03"},
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(item[field_name], field_name)
+
+    def test_history_does_not_replay_metadata_less_snapshot_as_numeric_value(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Unverified History", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        with self.db.get_session() as session:
+            session.add(
+                PortfolioDailySnapshot(
+                    account_id=account_id,
+                    snapshot_date=date(2026, 1, 4),
+                    cost_method="fifo",
+                    base_currency="USD",
+                    total_cash=Decimal("1000"),
+                    total_market_value=Decimal("2000"),
+                    total_equity=Decimal("0"),
+                    unrealized_pnl=Decimal("100"),
+                    realized_pnl=Decimal("20"),
+                    fee_total=Decimal("1"),
+                    tax_total=Decimal("0"),
+                    fx_stale=False,
+                    payload="{}",
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/portfolio/history",
+            params={"account_id": account_id, "date_from": "2026-01-04", "date_to": "2026-01-04"},
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(item[field_name], field_name)
 
     def test_snapshot_api_preserves_performance_and_partial_valuation_contracts(self) -> None:
         service = PortfolioService()
@@ -449,6 +549,16 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["availability"]["valuation"]["state"], "unavailable")
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(payload[field_name])
         self.assertEqual(
             payload["portfolio_truth"],
             {
@@ -473,11 +583,31 @@ class PortfolioApiTestCase(unittest.TestCase):
             ],
         )
         position = payload["accounts"][0]["positions"][0]
+        account_snapshot = payload["accounts"][0]
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(account_snapshot[field_name])
         self.assertEqual(position["market_value_native"], "1234567890123456.12")
         self.assertEqual(position["display_fx_status"], "unavailable")
+        self.assertIsNone(payload["analytics"]["pnl"]["total"]["amount"])
+        self.assertIsNone(payload["analytics"]["exposure"]["by_symbol"][0]["market_value"])
+        self.assertIsNone(payload["analytics"]["exposure"]["by_symbol"][0]["display_value"])
+        self.assertIsNone(payload["analytics"]["exposure"]["by_symbol"][0]["percent"])
         performance = payload["portfolio_attribution"]["performance"]
         self.assertEqual(performance["calculation_state"], "unavailable")
         self.assertEqual(performance["price_basis"], "snapshot_valuation_price_not_executable")
+        self.assertIsNone(payload["portfolio_attribution"]["account_attribution"]["total_equity"])
+        self.assertIsNone(
+            payload["portfolio_attribution"]["account_attribution"]["top_accounts"][0]["total_equity_base"]
+        )
+        self.assertIsNone(payload["portfolio_attribution"]["industry_attribution"]["total_market_value"])
 
     def test_delete_empty_account_archives_and_returns_next_account(self) -> None:
         first_resp = self.client.post(
@@ -911,6 +1041,17 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["portfolio_truth"]["value_semantics"], "covered_subtotal")
         self.assertIsNone(payload["portfolio_truth"]["authoritative_total"])
         self.assertIsNotNone(payload["portfolio_truth"]["covered_subtotal"])
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(payload[field_name])
+        self.assertIsNone(payload["analytics"]["pnl"]["unrealized"]["amount"])
 
     def test_snapshot_and_risk_contract_distinguishes_no_account(self) -> None:
         snapshot_resp = self.client.get(
@@ -1032,11 +1173,11 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(snapshot["data_status"], "provider_unavailable")
         self.assertEqual(snapshot["calculation_status"], "ready")
         self.assertEqual(snapshot["accounts"][0]["data_status"], "provider_unavailable")
-        self.assertTrue(snapshot["availability"]["metrics_ready"])
+        self.assertFalse(snapshot["availability"]["metrics_ready"])
         self.assertEqual(snapshot["availability"]["reason"], "provider_unavailable")
         self.assertEqual(risk["data_status"], "provider_unavailable")
         self.assertEqual(risk["calculation_status"], "ready")
-        self.assertTrue(risk["availability"]["metrics_ready"])
+        self.assertFalse(risk["availability"]["metrics_ready"])
         self.assertEqual(risk["availability"]["reason"], "provider_unavailable")
 
     def test_snapshot_api_exposes_position_price_fallback_metadata(self) -> None:

@@ -1,5 +1,7 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import { parsePortfolioDecimal } from '../utils/portfolioDecimal';
+import type { PortfolioDecimal } from '../types/portfolio';
 
 export type AdminPasswordState = 'set' | 'unset' | 'unknown';
 export type AdminSessionStatus = 'active' | 'expired' | 'revoked';
@@ -133,7 +135,7 @@ export interface AdminActivityResponse {
 }
 
 export interface AdminMoneyAmount {
-  amount: number;
+  amount: PortfolioDecimal | null;
   currency?: string | null;
 }
 
@@ -153,7 +155,8 @@ export interface AdminBrokerSyncSummary {
   connections: number;
   statuses: Record<string, number>;
   lastSyncAt?: string | null;
-  fxStale: boolean;
+  fxStale?: boolean | null;
+  fxFreshnessState?: string | null;
 }
 
 export interface AdminLedgerCounts {
@@ -164,17 +167,34 @@ export interface AdminLedgerCounts {
 
 export interface AdminPortfolioSummaryResponse {
   userId: string;
+  asOf?: string | null;
+  costMethod?: string | null;
   accountCount: number;
   activeAccountCount: number;
+  valuationScope: string;
+  valuationAccountCount: number;
   baseCurrencies: string[];
   accounts: AdminPortfolioAccountItem[];
-  totalCash: AdminMoneyAmount;
-  totalMarketValue: AdminMoneyAmount;
-  totalEquity: AdminMoneyAmount;
-  realizedPnl: AdminMoneyAmount;
-  unrealizedPnl: AdminMoneyAmount;
+  totalCash: AdminMoneyAmount | null;
+  totalMarketValue: AdminMoneyAmount | null;
+  totalEquity: AdminMoneyAmount | null;
+  realizedPnl: AdminMoneyAmount | null;
+  unrealizedPnl: AdminMoneyAmount | null;
   ledgerCounts: AdminLedgerCounts;
   brokerSyncSummary: AdminBrokerSyncSummary;
+  valuationCurrency?: string | null;
+  portfolioTruth: Record<string, unknown>;
+  valuation: Record<string, unknown>;
+  availability: Record<string, unknown>;
+  fxLineage: Record<string, unknown>;
+  valuationSnapshotLineage: Record<string, unknown>;
+  valuationLineage: Record<string, unknown>;
+  dataStatus?: string | null;
+  calculationStatus?: string | null;
+  fxStale: boolean;
+  fxFreshnessState?: string | null;
+  valuationLineageState?: string | null;
+  unvaluedHoldingCount: number;
   limitations: string[];
 }
 
@@ -186,13 +206,17 @@ export interface AdminHoldingItem {
   symbol: string;
   market?: string | null;
   currency?: string | null;
-  quantity: number;
-  avgCost: number;
-  lastPrice: number;
-  marketValueBase: number;
-  unrealizedPnlBase: number;
+  quantity: PortfolioDecimal | null;
+  avgCost: PortfolioDecimal | null;
+  lastPrice: PortfolioDecimal | null;
+  marketValueBase: PortfolioDecimal | null;
+  unrealizedPnlBase: PortfolioDecimal | null;
   valuationCurrency?: string | null;
   fxStatus: string;
+  valuationStatus: string;
+  valuationUnavailableReason?: string | null;
+  displayMarketValue?: PortfolioDecimal | null;
+  displayUnrealizedPnl?: PortfolioDecimal | null;
   updatedAt?: string | null;
 }
 
@@ -202,6 +226,21 @@ export interface AdminHoldingListResponse {
   limit: number;
   offset: number;
   hasMore: boolean;
+  asOf?: string | null;
+  costMethod?: string | null;
+  valuationCurrency?: string | null;
+  portfolioTruth: Record<string, unknown>;
+  valuation: Record<string, unknown>;
+  availability: Record<string, unknown>;
+  fxLineage: Record<string, unknown>;
+  valuationSnapshotLineage: Record<string, unknown>;
+  valuationLineage: Record<string, unknown>;
+  dataStatus?: string | null;
+  calculationStatus?: string | null;
+  fxStale: boolean;
+  fxFreshnessState?: string | null;
+  valuationLineageState?: string | null;
+  unvaluedHoldingCount: number;
   limitations: string[];
 }
 
@@ -243,6 +282,7 @@ export interface AdminPortfolioParams {
   includeZero?: boolean;
   limit?: number;
   offset?: number;
+  costMethod?: string;
 }
 
 export interface AdminSecurityActionRequest {
@@ -315,6 +355,7 @@ const PARAM_ALIASES: Record<string, string> = {
   includeZero: 'include_zero',
   accountId: 'account_id',
   asOf: 'as_of',
+  costMethod: 'cost_method',
   revokeSessions: 'revoke_sessions',
 };
 
@@ -361,24 +402,63 @@ function normalizeActivity(payload: Record<string, unknown>): AdminActivityRespo
   };
 }
 
-const emptyMoney = (): AdminMoneyAmount => ({ amount: 0, currency: null });
 const emptyLedger = (): AdminLedgerCounts => ({ trades: 0, cashEvents: 0, corporateActions: 0 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeAdminDecimal(value: unknown): PortfolioDecimal | null {
+  if (value === null || value === undefined) return null;
+  return parsePortfolioDecimal(value) || null;
+}
+
+function normalizeMoney(value: unknown): AdminMoneyAmount | null {
+  if (!isRecord(value)) return null;
+  return {
+    amount: normalizeAdminDecimal(value.amount),
+    currency: typeof value.currency === 'string' ? value.currency : null,
+  };
+}
 
 function normalizePortfolioSummary(payload: Record<string, unknown>): AdminPortfolioSummaryResponse {
   const normalized = toCamelCase<AdminPortfolioSummaryResponse>(payload);
   return {
     userId: String(normalized.userId || ''),
+    asOf: normalized.asOf || null,
+    costMethod: normalized.costMethod || null,
     accountCount: Number(normalized.accountCount || 0),
     activeAccountCount: Number(normalized.activeAccountCount || 0),
+    valuationScope: typeof normalized.valuationScope === 'string' ? normalized.valuationScope.trim() : '',
+    valuationAccountCount: Number(normalized.valuationAccountCount || 0),
     baseCurrencies: Array.isArray(normalized.baseCurrencies) ? normalized.baseCurrencies : [],
     accounts: Array.isArray(normalized.accounts) ? normalized.accounts : [],
-    totalCash: normalized.totalCash || emptyMoney(),
-    totalMarketValue: normalized.totalMarketValue || emptyMoney(),
-    totalEquity: normalized.totalEquity || emptyMoney(),
-    realizedPnl: normalized.realizedPnl || emptyMoney(),
-    unrealizedPnl: normalized.unrealizedPnl || emptyMoney(),
+    totalCash: normalizeMoney(normalized.totalCash),
+    totalMarketValue: normalizeMoney(normalized.totalMarketValue),
+    totalEquity: normalizeMoney(normalized.totalEquity),
+    realizedPnl: normalizeMoney(normalized.realizedPnl),
+    unrealizedPnl: normalizeMoney(normalized.unrealizedPnl),
     ledgerCounts: normalized.ledgerCounts || emptyLedger(),
-    brokerSyncSummary: normalized.brokerSyncSummary || { connections: 0, statuses: {}, lastSyncAt: null, fxStale: false },
+    brokerSyncSummary: normalized.brokerSyncSummary || {
+      connections: 0,
+      statuses: {},
+      lastSyncAt: null,
+      fxStale: null,
+      fxFreshnessState: null,
+    },
+    valuationCurrency: normalized.valuationCurrency || null,
+    portfolioTruth: normalized.portfolioTruth || {},
+    valuation: normalized.valuation || {},
+    availability: normalized.availability || {},
+    fxLineage: normalized.fxLineage || {},
+    valuationSnapshotLineage: normalized.valuationSnapshotLineage || {},
+    valuationLineage: normalized.valuationLineage || {},
+    dataStatus: normalized.dataStatus || null,
+    calculationStatus: normalized.calculationStatus || null,
+    fxStale: Boolean(normalized.fxStale),
+    fxFreshnessState: normalized.fxFreshnessState || null,
+    valuationLineageState: normalized.valuationLineageState || null,
+    unvaluedHoldingCount: Number(normalized.unvaluedHoldingCount || 0),
     limitations: Array.isArray(normalized.limitations) ? normalized.limitations : [],
   };
 }
@@ -386,11 +466,35 @@ function normalizePortfolioSummary(payload: Record<string, unknown>): AdminPortf
 function normalizeHoldings(payload: Record<string, unknown>): AdminHoldingListResponse {
   const normalized = toCamelCase<AdminHoldingListResponse>(payload);
   return {
-    items: Array.isArray(normalized.items) ? normalized.items : [],
+    items: Array.isArray(normalized.items) ? normalized.items.map((item) => ({
+      ...item,
+      quantity: normalizeAdminDecimal(item.quantity),
+      avgCost: normalizeAdminDecimal(item.avgCost),
+      lastPrice: normalizeAdminDecimal(item.lastPrice),
+      marketValueBase: normalizeAdminDecimal(item.marketValueBase),
+      unrealizedPnlBase: normalizeAdminDecimal(item.unrealizedPnlBase),
+      displayMarketValue: normalizeAdminDecimal(item.displayMarketValue),
+      displayUnrealizedPnl: normalizeAdminDecimal(item.displayUnrealizedPnl),
+    })) : [],
     total: Number(normalized.total || 0),
     limit: Number(normalized.limit || 50),
     offset: Number(normalized.offset || 0),
     hasMore: Boolean(normalized.hasMore),
+    asOf: normalized.asOf || null,
+    costMethod: normalized.costMethod || null,
+    valuationCurrency: normalized.valuationCurrency || null,
+    portfolioTruth: normalized.portfolioTruth || {},
+    valuation: normalized.valuation || {},
+    availability: normalized.availability || {},
+    fxLineage: normalized.fxLineage || {},
+    valuationSnapshotLineage: normalized.valuationSnapshotLineage || {},
+    valuationLineage: normalized.valuationLineage || {},
+    dataStatus: normalized.dataStatus || null,
+    calculationStatus: normalized.calculationStatus || null,
+    fxStale: Boolean(normalized.fxStale),
+    fxFreshnessState: normalized.fxFreshnessState || null,
+    valuationLineageState: normalized.valuationLineageState || null,
+    unvaluedHoldingCount: Number(normalized.unvaluedHoldingCount || 0),
     limitations: Array.isArray(normalized.limitations) ? normalized.limitations : [],
   };
 }

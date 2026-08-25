@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.agent.tools.data_tools import _handle_get_portfolio_snapshot
+from src.agent.tools.data_tools import _compact_portfolio_snapshot, _handle_get_portfolio_snapshot
 
 
 class _FakePortfolioService:
@@ -186,6 +186,52 @@ class TestGetPortfolioSnapshotTool(unittest.TestCase):
         invalid = _handle_get_portfolio_snapshot(as_of="2026/03/15", owner_user_id="user-a")
         self.assertIn("error", invalid)
         self.assertIn("YYYY-MM-DD", invalid["error"])
+
+    def test_compact_projection_preserves_unavailable_and_partial_totals_as_nonnumeric(self) -> None:
+        snapshot = {
+            "as_of": "2026-03-15",
+            "cost_method": "fifo",
+            "currency": "CNY",
+            "account_count": 1,
+            "total_cash": 0.0,
+            "total_market_value": 0.0,
+            "total_equity": 0.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "portfolio_truth": {
+                "state": "valuation_unavailable",
+                "account_state": "holdings_present",
+                "valuation_state": "unavailable",
+                "value_semantics": "unavailable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "accounts": [
+                {
+                    "account_id": 1,
+                    "account_name": "CNY Main",
+                    "base_currency": "CNY",
+                    "total_cash": 0.0,
+                    "total_market_value": 0.0,
+                    "total_equity": 0.0,
+                    "realized_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "valuation": {"state": "unavailable"},
+                    "performance": {"calculation_state": "unavailable"},
+                    "positions": [{"symbol": "AAPL", "market_value_base": None}],
+                }
+            ],
+        }
+
+        compact = _compact_portfolio_snapshot(snapshot)
+
+        for field_name in ("total_cash", "total_market_value", "total_equity", "realized_pnl", "unrealized_pnl"):
+            self.assertIsNone(compact[field_name])
+        account = compact["accounts"][0]
+        for field_name in ("total_cash", "total_market_value", "total_equity", "realized_pnl", "unrealized_pnl"):
+            self.assertIsNone(account[field_name])
 
 
 if __name__ == "__main__":

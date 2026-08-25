@@ -176,8 +176,12 @@
   },
   "portfolio_summary": {
     "userId": "user-1",
+    "asOf": "2026-05-12",
+    "costMethod": "fifo",
     "accountCount": 1,
     "activeAccountCount": 1,
+    "valuationScope": "active_accounts_only",
+    "valuationAccountCount": 1,
     "baseCurrencies": [
       "USD"
     ],
@@ -195,25 +199,52 @@
       }
     ],
     "totalCash": {
-      "amount": 1200.0,
+      "amount": "1200.00",
       "currency": "USD"
     },
     "totalMarketValue": {
-      "amount": 5400.0,
+      "amount": "5400.00",
       "currency": "USD"
     },
     "totalEquity": {
-      "amount": 6600.0,
+      "amount": "6600.00",
       "currency": "USD"
     },
     "realizedPnl": {
-      "amount": 250.0,
+      "amount": "250.00",
       "currency": "USD"
     },
     "unrealizedPnl": {
-      "amount": 480.0,
+      "amount": "480.00",
       "currency": "USD"
     },
+    "valuationCurrency": "USD",
+    "portfolioTruth": {
+      "state": "fully_valued_nonzero",
+      "value_semantics": "authoritative_total"
+    },
+    "valuation": {
+      "state": "available",
+      "value_semantics": "authoritative_total"
+    },
+    "availability": {
+      "status": "ready"
+    },
+    "fxLineage": {
+      "status": "available"
+    },
+    "valuationSnapshotLineage": {
+      "status": "available"
+    },
+    "valuationLineage": {
+      "status": "available"
+    },
+    "dataStatus": "ready",
+    "calculationStatus": "ready",
+    "fxStale": false,
+    "fxFreshnessState": "available",
+    "valuationLineageState": "available",
+    "unvaluedHoldingCount": 0,
     "ledgerCounts": {
       "trades": 8,
       "cashEvents": 3,
@@ -225,7 +256,8 @@
         "ok": 1
       },
       "lastSyncAt": "2026-05-12T08:20:00Z",
-      "fxStale": false
+      "fxStale": null,
+      "fxFreshnessState": null
     },
     "limitations": [
       "Projection is read-only and not an accounting mutation command."
@@ -267,26 +299,26 @@
       "syncedAt": "2026-05-12T08:20:00Z",
       "baseCurrency": "USD",
       "totalCash": {
-        "amount": 1200.0,
+        "amount": null,
         "currency": "USD"
       },
       "totalMarketValue": {
-        "amount": 5400.0,
+        "amount": null,
         "currency": "USD"
       },
       "totalEquity": {
-        "amount": 6600.0,
+        "amount": null,
         "currency": "USD"
       },
       "realizedPnl": {
-        "amount": 250.0,
+        "amount": null,
         "currency": "USD"
       },
       "unrealizedPnl": {
-        "amount": 480.0,
+        "amount": null,
         "currency": "USD"
       },
-      "fxStale": false
+      "fxStale": null
     },
     "holdings": {
       "items": [
@@ -298,13 +330,17 @@
           "symbol": "AAPL",
           "market": "US",
           "currency": "USD",
-          "quantity": 20.0,
-          "avgCost": 240.0,
-          "lastPrice": 264.0,
-          "marketValueBase": 5280.0,
-          "unrealizedPnlBase": 480.0,
+          "quantity": "20",
+          "avgCost": "240.00",
+          "lastPrice": "264.00",
+          "marketValueBase": "5280.00",
+          "unrealizedPnlBase": "480.00",
           "valuationCurrency": "USD",
           "fxStatus": "live",
+          "valuationStatus": "available",
+          "valuationUnavailableReason": null,
+          "displayMarketValue": "5280.00",
+          "displayUnrealizedPnl": "480.00",
           "updatedAt": "2026-05-12T08:20:00Z"
         }
       ],

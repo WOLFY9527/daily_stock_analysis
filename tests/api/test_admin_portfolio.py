@@ -12,9 +12,10 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import event
+from sqlalchemy import event, select
 
 import src.auth as auth
 from api.deps import CurrentUser, get_current_user
@@ -33,9 +34,13 @@ from src.storage import (
     PortfolioCashLedger,
     PortfolioCorporateAction,
     PortfolioDailySnapshot,
+    PortfolioFxRate,
     PortfolioPosition,
+    PortfolioPositionLot,
     PortfolioTrade,
 )
+from src.repositories.portfolio_repo import PortfolioRepository
+from src.services.portfolio_service import PortfolioService
 
 
 def _reset_auth_globals() -> None:
@@ -93,6 +98,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
 
         from api.v1.endpoints import admin_portfolio
+        from api.v1.endpoints import portfolio
 
         self.env_patch = patch.dict(
             os.environ,
@@ -108,6 +114,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         auth._auth_enabled = True
 
         self.app = FastAPI()
+        self.app.include_router(portfolio.router, prefix="/api/v1/portfolio")
         self.app.include_router(admin_portfolio.router, prefix="/api/v1/admin")
         self.client = TestClient(self.app)
         self.now = datetime.now()
@@ -398,6 +405,19 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
 
+    def _as_member(self, user_id: str) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+            user_id=user_id,
+            username=user_id,
+            display_name=user_id,
+            role="user",
+            is_admin=False,
+            is_authenticated=True,
+            transitional=False,
+            auth_enabled=True,
+            session_id=f"{user_id}-session",
+        )
+
     @staticmethod
     def _json_text(response) -> str:
         return json.dumps(response.json(), ensure_ascii=False, sort_keys=True)
@@ -414,6 +434,9 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "connections": self._count(PortfolioBrokerConnection),
             "states": self._count(PortfolioBrokerSyncState),
             "positions": self._count(PortfolioBrokerSyncPosition),
+            "valuation_positions": self._count(PortfolioPosition),
+            "valuation_lots": self._count(PortfolioPositionLot),
+            "daily_snapshots": self._count(PortfolioDailySnapshot),
             "cash": self._count(PortfolioCashLedger),
             "trades": self._count(PortfolioTrade),
             "actions": self._count(PortfolioCorporateAction),
@@ -478,6 +501,66 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         for needle in forbidden:
             self.assertNotIn(needle, text)
 
+    def _seed_parity_account(
+        self,
+        *,
+        user_id: str,
+        symbol: str,
+        close: Decimal,
+    ) -> int:
+        self.db.create_or_update_app_user(
+            user_id=user_id,
+            username=user_id,
+            display_name=user_id,
+            role="user",
+            password_hash=f"pbkdf2:{user_id}-hash",
+            is_active=True,
+        )
+        with self.db.get_session() as session:
+            account = PortfolioAccount(
+                owner_id=user_id,
+                name=f"{user_id} account",
+                broker="Demo",
+                market="us",
+                base_currency="USD",
+                is_active=True,
+            )
+            session.add(account)
+            session.flush()
+            account_id = int(account.id)
+            session.commit()
+
+        service = PortfolioService(repo=PortfolioRepository(self.db), owner_id=user_id)
+        service.record_trade(
+            account_id=account_id,
+            symbol=symbol,
+            trade_date=date(2026, 5, 1),
+            side="buy",
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            market="us",
+            currency="USD",
+        )
+        self.db.save_daily_data(
+            pd.DataFrame(
+                [
+                    {
+                        "date": date(2026, 5, 5),
+                        "open": close,
+                        "high": close,
+                        "low": close,
+                        "close": close,
+                        "volume": 1.0,
+                        "amount": close,
+                        "pct_chg": 0.0,
+                    }
+                ]
+            ),
+            code=symbol,
+            data_source="admin-parity-fixture",
+        )
+        return account_id
+
     def _assert_audit_event(self, action: str) -> None:
         with self.db.get_session() as session:
             rows = (
@@ -519,42 +602,440 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_portfolio_summary_returns_target_user_safe_aggregates_and_audit(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                PortfolioAccount(
+                    owner_id="user-1",
+                    name="Inactive history",
+                    broker="Demo",
+                    market="us",
+                    base_currency="USD",
+                    is_active=False,
+                )
+            )
+            session.commit()
+
         self._as_admin()
         before = self._portfolio_counts()
 
-        response = self.client.get("/api/v1/admin/users/user-1/portfolio-summary")
+        response = self.client.get(
+            "/api/v1/admin/users/user-1/portfolio-summary",
+            params={"as_of": "2026-05-05", "include_inactive": True},
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["userId"], "user-1")
-        self.assertEqual(payload["accountCount"], 1)
+        self.assertEqual(payload["accountCount"], 2)
         self.assertEqual(payload["activeAccountCount"], 1)
+        self.assertEqual(payload["valuationScope"], "active_accounts_only")
+        self.assertEqual(payload["valuationAccountCount"], 1)
+        self.assertIn("inactive_accounts_excluded_from_valuation", payload["limitations"])
         self.assertEqual(payload["ledgerCounts"], {"trades": 1, "cashEvents": 1, "corporateActions": 1})
         self.assertEqual(payload["brokerSyncSummary"]["connections"], 1)
         self.assertEqual(payload["brokerSyncSummary"]["statuses"], {"success": 1})
-        self.assertEqual(payload["totalEquity"]["amount"], 3500.0)
+        self.assertIsNone(payload["brokerSyncSummary"]["fxStale"])
+        self.assertIsNone(payload["brokerSyncSummary"]["fxFreshnessState"])
+        self.assertIsNone(payload["totalEquity"]["amount"])
+        self.assertEqual(payload["totalEquity"]["currency"], "USD")
+        self.assertEqual(payload["portfolioTruth"]["state"], "valuation_partial")
+        self.assertEqual(payload["portfolioTruth"]["value_semantics"], "covered_subtotal")
+        self.assertEqual(payload["portfolioTruth"]["covered_subtotal"], "3500.00")
+        self.assertEqual(payload["availability"]["performance"]["calculation_state"], "unavailable")
+        self.assertEqual(payload["valuation"]["value_semantics"], "covered_subtotal")
         self.assertEqual(self._portfolio_counts(), before)
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.summary_viewed")
 
+    def test_member_and_admin_api_agree_on_zero_and_gain_loss_truth(self) -> None:
+        fixtures = (
+            ("parity-zero", "AAPL", Decimal("100"), "fully_valued_zero", "0.00", "0.00"),
+            ("parity-gain", "MSFT", Decimal("120"), "fully_valued_nonzero", "20.00", "20.00"),
+            ("parity-loss", "GOOG", Decimal("80"), "fully_valued_nonzero", "-20.00", "-20.00"),
+        )
+
+        for user_id, symbol, close, expected_state, expected_equity, expected_unrealized in fixtures:
+            self._seed_parity_account(user_id=user_id, symbol=symbol, close=close)
+            self._as_member(user_id)
+            member_response = self.client.get(
+                "/api/v1/portfolio/snapshot",
+                params={"as_of": "2026-05-05", "cost_method": "fifo"},
+            )
+            self.assertEqual(member_response.status_code, 200)
+            member = member_response.json()
+
+            self._as_admin()
+            admin_response = self.client.get(
+                f"/api/v1/admin/users/{user_id}/portfolio-summary",
+                params={"as_of": "2026-05-05", "cost_method": "fifo"},
+            )
+            self.assertEqual(admin_response.status_code, 200)
+            admin = admin_response.json()
+
+            self.assertEqual(member["portfolio_truth"]["state"], expected_state)
+            self.assertEqual(admin["portfolioTruth"]["state"], member["portfolio_truth"]["state"])
+            self.assertEqual(admin["portfolioTruth"]["value_semantics"], member["portfolio_truth"]["value_semantics"])
+            self.assertEqual(admin["valuationCurrency"], member["currency"])
+            self.assertEqual(admin["fxFreshnessState"], member["fx_lineage"]["status"])
+            self.assertIsNone(admin["brokerSyncSummary"]["fxStale"])
+            self.assertIsNone(admin["brokerSyncSummary"]["fxFreshnessState"])
+            self.assertEqual(admin["totalEquity"]["amount"], expected_equity)
+            self.assertEqual(admin["unrealizedPnl"]["amount"], expected_unrealized)
+            self.assertEqual(admin["totalEquity"]["amount"], member["total_equity"])
+            self.assertEqual(admin["unrealizedPnl"]["amount"], member["unrealized_pnl"])
+            self._assert_safe_json(member_response)
+            self._assert_safe_json(admin_response)
+
     def test_holdings_are_target_user_only_and_safe(self) -> None:
         self._as_admin()
-        response = self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200})
+        original_get_snapshot = PortfolioService.get_portfolio_snapshot
+        snapshot_calls = 0
+
+        def counting_get_snapshot(service, *args, **kwargs):
+            nonlocal snapshot_calls
+            snapshot_calls += 1
+            return original_get_snapshot(service, *args, **kwargs)
+
+        with patch.object(PortfolioService, "get_portfolio_snapshot", new=counting_get_snapshot):
+            response = self.client.get(
+                "/api/v1/admin/users/user-1/holdings",
+                params={"limit": 200, "as_of": "2026-05-05"},
+            )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(snapshot_calls, 1)
         payload = response.json()
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["items"][0]["symbol"], "AAPL")
         self.assertEqual(payload["items"][0]["accountId"], self.account_a_id)
+        self.assertEqual(payload["items"][0]["marketValueBase"], "1800.00")
+        self.assertEqual(payload["items"][0]["unrealizedPnlBase"], "300.00")
+        self.assertEqual(payload["items"][0]["fxStatus"], "live")
+        self.assertEqual(payload["portfolioTruth"]["state"], "valuation_partial")
         self.assertNotIn("MSFT", self._json_text(response))
         self.assertRegex(payload["items"][0]["brokerAccountHandle"], r"^acct_[a-f0-9]{12}$")
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.holdings_viewed")
 
+    def test_admin_projection_matches_member_truth_for_missing_hkd_fx(self) -> None:
+        with self.db.get_session() as session:
+            account = PortfolioAccount(
+                owner_id="user-1",
+                name="Alice HK",
+                broker="Demo",
+                market="hk",
+                base_currency="CNY",
+                is_active=True,
+            )
+            session.add(account)
+            session.flush()
+            account_id = int(account.id)
+            session.add(
+                PortfolioTrade(
+                    account_id=account_id,
+                    trade_uid="hk-missing-fx",
+                    symbol="00700",
+                    market="hk",
+                    currency="HKD",
+                    trade_date=date(2026, 5, 1),
+                    side="buy",
+                    quantity=Decimal("1"),
+                    price=Decimal("300"),
+                    is_active=True,
+                )
+            )
+            session.commit()
+
+        member_snapshot = PortfolioService(
+            repo=PortfolioRepository(self.db),
+            owner_id="user-1",
+        ).get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 5, 5))
+        member_truth = member_snapshot["portfolio_truth"]
+        self.assertEqual(member_truth["state"], "valuation_unavailable")
+
+        member_aggregate = PortfolioService(
+            repo=PortfolioRepository(self.db),
+            owner_id="user-1",
+        ).get_portfolio_snapshot(as_of=date(2026, 5, 5))
+        self._as_admin()
+        summary_response = self.client.get(
+            "/api/v1/admin/users/user-1/portfolio-summary",
+            params={"as_of": "2026-05-05"},
+        )
+        self.assertEqual(summary_response.status_code, 200)
+        summary_payload = summary_response.json()
+        self.assertEqual(summary_payload["portfolioTruth"]["state"], member_aggregate["portfolio_truth"]["state"])
+        self.assertEqual(
+            summary_payload["portfolioTruth"]["value_semantics"],
+            member_aggregate["portfolio_truth"]["value_semantics"],
+        )
+        self.assertEqual(
+            Decimal(summary_payload["portfolioTruth"]["covered_subtotal"]),
+            Decimal(str(member_aggregate["portfolio_truth"]["covered_subtotal"])),
+        )
+        self.assertEqual(summary_payload["valuationCurrency"], member_aggregate["currency"])
+        self.assertEqual(summary_payload["fxFreshnessState"], member_aggregate["fx_lineage"]["status"])
+        for field_name in ("totalCash", "totalMarketValue", "totalEquity", "realizedPnl", "unrealizedPnl"):
+            self.assertIsNone(summary_payload[field_name]["amount"])
+        self._assert_safe_json(summary_response)
+
+        response = self.client.get(
+            "/api/v1/admin/users/user-1/holdings",
+            params={"account_id": account_id, "as_of": "2026-05-05", "limit": 200},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["portfolioTruth"]["state"], member_truth["state"])
+        self.assertEqual(payload["portfolioTruth"]["value_semantics"], member_truth["value_semantics"])
+        self.assertEqual(payload["valuationCurrency"], member_snapshot["currency"])
+        self.assertEqual(payload["fxFreshnessState"], "missing")
+        self.assertEqual(payload["unvaluedHoldingCount"], 1)
+        holding = payload["items"][0]
+        self.assertIsNone(holding["marketValueBase"])
+        self.assertIsNone(holding["unrealizedPnlBase"])
+        self.assertIsNone(holding["displayMarketValue"])
+        self.assertIsNone(holding["displayUnrealizedPnl"])
+        self.assertEqual(holding["fxStatus"], "unavailable")
+        self.assertEqual(holding["valuationStatus"], "unavailable")
+        self.assertEqual(
+            holding["valuationUnavailableReason"],
+            member_snapshot["accounts"][0]["positions"][0]["valuation_unavailable_reason"],
+        )
+        self._assert_safe_json(response)
+        self._assert_audit_event("admin_portfolio.holdings_viewed")
+
+        # Use the existing user-2 USD sync state plus a CNY account so the
+        # aggregate must convert before presenting a single-currency projection.
+        with self.db.get_session() as session:
+            account = PortfolioAccount(
+                owner_id="user-2",
+                name="Bob CNY",
+                broker="Demo",
+                market="us",
+                base_currency="CNY",
+                is_active=True,
+            )
+            session.add(account)
+            session.flush()
+            account_id = int(account.id)
+            connection = PortfolioBrokerConnection(
+                owner_id="user-2",
+                portfolio_account_id=account_id,
+                broker_type="demo",
+                broker_name="Demo",
+                connection_name="Alice Demo",
+                broker_account_ref="DEMO-CNY",
+                import_mode="api",
+                status="active",
+            )
+            session.add(connection)
+            session.flush()
+            session.add(
+                PortfolioBrokerSyncState(
+                    owner_id="user-2",
+                    broker_connection_id=int(connection.id),
+                    portfolio_account_id=account_id,
+                    broker_type="demo",
+                    broker_account_ref="DEMO-CNY",
+                    sync_source="fixture",
+                    sync_status="success",
+                    snapshot_date=date(2026, 5, 5),
+                    synced_at=self.now,
+                    base_currency="CNY",
+                    total_cash=Decimal("0"),
+                    total_market_value=Decimal("792"),
+                    total_equity=Decimal("792"),
+                    realized_pnl=Decimal("0"),
+                    unrealized_pnl=Decimal("72"),
+                    fx_stale=False,
+                )
+            )
+            session.add(
+                PortfolioBrokerSyncPosition(
+                    owner_id="user-2",
+                    broker_connection_id=int(connection.id),
+                    portfolio_account_id=account_id,
+                    broker_position_ref="DEMO-CNY-AAPL",
+                    symbol="AAPL",
+                    market="us",
+                    currency="USD",
+                    quantity=Decimal("1"),
+                    avg_cost=Decimal("100"),
+                    last_price=Decimal("110"),
+                    market_value_base=Decimal("792"),
+                    unrealized_pnl_base=Decimal("72"),
+                    valuation_currency="CNY",
+                )
+            )
+            session.commit()
+
+        PortfolioRepository(self.db).save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 5, 5),
+            rate=Decimal("7.2"),
+            source="reviewed_fixture",
+            is_stale=False,
+        )
+        member_available = PortfolioService(
+            repo=PortfolioRepository(self.db),
+            owner_id="user-2",
+        ).get_portfolio_snapshot(as_of=date(2026, 5, 5))
+        self.assertEqual(member_available["currency"], "CNY")
+        self.assertEqual(member_available["fx_lineage"]["status"], "available")
+        self.assertEqual(member_available["portfolio_truth"]["value_semantics"], "covered_subtotal")
+        self.assertIsNone(member_available["total_equity"])
+        self.assertEqual(member_available["portfolio_truth"]["covered_subtotal"], Decimal("144777.60"))
+        self.assertEqual(member_available["performance"]["calculation_state"], "unavailable")
+
+        available_summary = self.client.get(
+            "/api/v1/admin/users/user-2/portfolio-summary",
+            params={"as_of": "2026-05-05"},
+        )
+        self.assertEqual(available_summary.status_code, 200)
+        available_payload = available_summary.json()
+        self.assertEqual(available_payload["valuationCurrency"], member_available["currency"])
+        self.assertEqual(available_payload["fxFreshnessState"], member_available["fx_lineage"]["status"])
+        self.assertEqual(available_payload["portfolioTruth"]["state"], member_available["portfolio_truth"]["state"])
+        self.assertEqual(available_payload["portfolioTruth"]["covered_subtotal"], "144777.60")
+        self.assertIsNone(available_payload["totalEquity"]["amount"])
+
+        available_holdings = self.client.get(
+            "/api/v1/admin/users/user-2/holdings",
+            params={"account_id": account_id, "as_of": "2026-05-05", "limit": 200},
+        )
+        self.assertEqual(available_holdings.status_code, 200)
+        available_item = available_holdings.json()["items"][0]
+        member_available_item = next(
+            item
+            for account_snapshot in member_available["accounts"]
+            for item in account_snapshot["positions"]
+            if item["symbol"] == available_item["symbol"]
+        )
+        self.assertEqual(available_item["marketValueBase"], "792.00")
+        self.assertEqual(available_item["fxStatus"], member_available_item["display_fx_status"])
+        self.assertEqual(available_item["valuationStatus"], member_available_item["valuation_status"])
+        self.assertEqual(available_item["valuationUnavailableReason"], member_available_item["valuation_unavailable_reason"])
+        self.assertEqual(
+            Decimal(available_item["displayMarketValue"]),
+            Decimal(str(member_available_item["display_market_value"])),
+        )
+        self.assertEqual(
+            Decimal(available_item["displayUnrealizedPnl"]),
+            Decimal(str(member_available_item["display_unrealized_pnl"])),
+        )
+        self.assertEqual(available_item["valuationCurrency"], member_available_item["display_currency"])
+
+        PortfolioRepository(self.db).save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 5, 5),
+            rate=Decimal("7.2"),
+            source="reviewed_fixture",
+            is_stale=True,
+        )
+        with self.db.get_session() as session:
+            fx_row = session.execute(
+                select(PortfolioFxRate).where(
+                    PortfolioFxRate.from_currency == "USD",
+                    PortfolioFxRate.to_currency == "CNY",
+                    PortfolioFxRate.rate_date == date(2026, 5, 5),
+                )
+            ).scalar_one()
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(
+                    PortfolioDailySnapshot.account_id == account_id,
+                    PortfolioDailySnapshot.snapshot_date == date(2026, 5, 5),
+                )
+            ).scalar_one()
+            fx_row.updated_at = snapshot_row.updated_at - timedelta(seconds=1)
+            session.commit()
+        member_stale = PortfolioService(
+            repo=PortfolioRepository(self.db),
+            owner_id="user-2",
+        ).get_portfolio_snapshot(as_of=date(2026, 5, 5))
+        self.assertEqual(member_stale["fx_lineage"]["status"], "stale")
+        stale_summary = self.client.get(
+            "/api/v1/admin/users/user-2/portfolio-summary",
+            params={"as_of": "2026-05-05"},
+        )
+        self.assertEqual(stale_summary.status_code, 200)
+        stale_payload = stale_summary.json()
+        self.assertEqual(stale_payload["fxFreshnessState"], "stale")
+        self.assertEqual(stale_payload["portfolioTruth"]["state"], member_stale["portfolio_truth"]["state"])
+        self.assertIsNone(stale_payload["totalEquity"]["amount"])
+
+        stale_holdings = self.client.get(
+            "/api/v1/admin/users/user-2/holdings",
+            params={"account_id": account_id, "as_of": "2026-05-05", "limit": 200},
+        )
+        self.assertEqual(stale_holdings.status_code, 200)
+        self.assertEqual(stale_holdings.json()["items"][0]["fxStatus"], "stale")
+        self.assertEqual(stale_holdings.json()["items"][0]["valuationStatus"], "stale")
+        self.assertEqual(stale_holdings.json()["items"][0]["valuationUnavailableReason"], "stale_fx")
+
+        all_stale_holdings = self.client.get(
+            "/api/v1/admin/users/user-2/holdings",
+            params={"as_of": "2026-05-05", "limit": 200},
+        )
+        self.assertEqual(all_stale_holdings.status_code, 200)
+        stale_items = [
+            item
+            for item in all_stale_holdings.json()["items"]
+            if item["currency"] == "USD" and item["valuationCurrency"] == "CNY"
+        ]
+        self.assertGreaterEqual(len(stale_items), 1)
+        for item in stale_items:
+            member_stale_item = next(
+                holding
+                for account in member_stale["accounts"]
+                if account["account_id"] == item["accountId"]
+                for holding in account["positions"]
+                if holding["symbol"] == item["symbol"]
+                and holding["currency"] == item["currency"]
+                and holding["display_currency"] == item["valuationCurrency"]
+            )
+            self.assertEqual(item["fxStatus"], "stale")
+            self.assertEqual(item["valuationStatus"], "stale")
+            self.assertEqual(item["valuationUnavailableReason"], "stale_fx")
+            self.assertIsNotNone(item["displayMarketValue"])
+            self.assertIsNotNone(item["displayUnrealizedPnl"])
+            self.assertEqual(item["fxStatus"], member_stale_item["display_fx_status"])
+            self.assertEqual(item["valuationStatus"], member_stale_item["valuation_status"])
+            self.assertEqual(item["valuationUnavailableReason"], member_stale_item["valuation_unavailable_reason"])
+            self.assertEqual(
+                Decimal(item["displayMarketValue"]),
+                Decimal(str(member_stale_item["display_market_value"])),
+            )
+            self.assertEqual(
+                Decimal(item["displayUnrealizedPnl"]),
+                Decimal(str(member_stale_item["display_unrealized_pnl"])),
+            )
+            self.assertEqual(item["valuationCurrency"], member_stale_item["display_currency"])
+
     def test_account_detail_validates_account_owner_and_excludes_raw_payloads(self) -> None:
         self._as_admin()
         wrong_account = self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_b_id}")
         self.assertEqual(wrong_account.status_code, 404)
+
+        with self.db.get_session() as session:
+            inactive = PortfolioAccount(
+                owner_id="user-1",
+                name="Inactive account",
+                broker="Demo",
+                market="us",
+                base_currency="USD",
+                is_active=False,
+            )
+            session.add(inactive)
+            session.flush()
+            inactive_account_id = int(inactive.id)
+            session.commit()
+        inactive_response = self.client.get(
+            f"/api/v1/admin/users/user-1/portfolio/accounts/{inactive_account_id}"
+        )
+        self.assertEqual(inactive_response.status_code, 404)
 
         response = self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}")
         self.assertEqual(response.status_code, 200)
@@ -565,6 +1046,127 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["syncState"]["status"], "success")
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.account_detail_viewed")
+
+    def test_account_detail_does_not_attach_unverified_sync_provenance_to_canonical_valuation(self) -> None:
+        account_id = self._seed_parity_account(
+            user_id="historical-parity",
+            symbol="AAPL",
+            close=Decimal("120"),
+        )
+        with self.db.get_session() as session:
+            connection = PortfolioBrokerConnection(
+                owner_id="historical-parity",
+                portfolio_account_id=account_id,
+                broker_type="demo",
+                broker_name="Demo",
+                connection_name="Newer sync",
+                broker_account_ref="HISTORICAL-PARITY",
+                import_mode="api",
+                status="active",
+            )
+            session.add(connection)
+            session.flush()
+            session.add(
+                PortfolioBrokerSyncState(
+                    owner_id="historical-parity",
+                    broker_connection_id=int(connection.id),
+                    portfolio_account_id=account_id,
+                    broker_type="demo",
+                    broker_account_ref="HISTORICAL-PARITY",
+                    sync_source="fixture",
+                    sync_status="success",
+                    snapshot_date=date(2026, 5, 5),
+                    synced_at=self.now + timedelta(hours=1),
+                    base_currency="USD",
+                    total_cash=Decimal("0"),
+                    total_market_value=Decimal("999"),
+                    total_equity=Decimal("999"),
+                    realized_pnl=Decimal("0"),
+                    unrealized_pnl=Decimal("999"),
+                    fx_stale=False,
+                )
+            )
+            session.add(
+                PortfolioBrokerSyncPosition(
+                    owner_id="historical-parity",
+                    broker_connection_id=int(connection.id),
+                    portfolio_account_id=account_id,
+                    broker_position_ref="SAME-DATE-POSITION",
+                    symbol="AAPL",
+                    market="us",
+                    currency="USD",
+                    quantity=Decimal("1"),
+                    avg_cost=Decimal("100"),
+                    last_price=Decimal("999"),
+                    market_value_base=Decimal("999"),
+                    unrealized_pnl_base=Decimal("899"),
+                    valuation_currency="USD",
+                )
+            )
+            session.commit()
+
+        original_get_snapshot = PortfolioService.get_portfolio_snapshot
+        snapshot_calls = 0
+
+        def counting_get_snapshot(service, *args, **kwargs):
+            nonlocal snapshot_calls
+            snapshot_calls += 1
+            return original_get_snapshot(service, *args, **kwargs)
+
+        self._as_admin()
+        with patch.object(PortfolioService, "get_portfolio_snapshot", new=counting_get_snapshot):
+            response = self.client.get(
+                f"/api/v1/admin/users/historical-parity/portfolio/accounts/{account_id}",
+                params={"as_of": "2026-05-05", "cost_method": "fifo"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(snapshot_calls, 1)
+        payload = response.json()
+        self.assertEqual(payload["asOf"], "2026-05-05")
+        self.assertEqual(payload["portfolioTruth"]["state"], "valuation_partial")
+        self.assertEqual(payload["portfolioTruth"]["value_semantics"], "covered_subtotal")
+        self.assertEqual(payload["portfolioTruth"]["covered_subtotal"], "999.00")
+        self.assertEqual(payload["holdings"]["portfolioTruth"], payload["portfolioTruth"])
+        self.assertEqual(payload["holdings"]["items"][0]["displayMarketValue"], "999.00")
+        self.assertEqual(payload["syncState"]["snapshotDate"], "2026-05-05")
+        for field_name in (
+            "totalCash",
+            "totalMarketValue",
+            "totalEquity",
+            "realizedPnl",
+            "unrealizedPnl",
+        ):
+            self.assertIsNone(payload["syncState"][field_name]["amount"])
+        self.assertIsNone(payload["syncState"]["fxStale"])
+        self._assert_safe_json(response)
+
+    def test_admin_cold_projection_does_not_persist_valuation_cache(self) -> None:
+        with self.db.get_session() as session:
+            account = PortfolioAccount(
+                owner_id="user-1",
+                name="Alice Cold Read",
+                broker="Demo",
+                market="us",
+                base_currency="USD",
+                is_active=True,
+            )
+            session.add(account)
+            session.commit()
+
+        self._as_admin()
+        with patch.object(
+            PortfolioRepository,
+            "replace_positions_lots_and_snapshot",
+            side_effect=AssertionError("admin projection persisted valuation cache"),
+        ):
+            response = self.client.get(
+                "/api/v1/admin/users/user-1/portfolio-summary",
+                params={"as_of": "2026-08-24"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["portfolioTruth"]["state"], "valuation_unavailable")
 
     def test_portfolio_activity_returns_safe_rows_and_does_not_trigger_mutations_or_refresh(self) -> None:
         self._as_admin()

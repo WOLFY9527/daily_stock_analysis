@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from src.config import get_config
 from src.portfolio_exact_numeric import (
+    PortfolioExactNumericError,
     normalize_portfolio_decimal,
     parse_portfolio_decimal,
     round_portfolio_decimal_value,
@@ -85,6 +86,28 @@ _CACHE_SNAPSHOT_PERFORMANCE_MONEY_FIELDS = (
     ("return", ("numerator", "denominator")),
 )
 _CACHE_SNAPSHOT_INDUSTRY_MONEY_FIELD = "market_value_base"
+_PUBLIC_SNAPSHOT_VALUATION_FIELDS = (
+    "total_cash",
+    "total_market_value",
+    "total_equity",
+)
+_PUBLIC_SNAPSHOT_PERFORMANCE_FIELDS = (
+    "realized_pnl",
+    "unrealized_pnl",
+    "fee_total",
+    "tax_total",
+)
+_PUBLIC_ACCOUNT_VALUATION_FIELDS = (
+    "total_cash",
+    "total_market_value",
+    "total_equity",
+)
+_PUBLIC_ACCOUNT_PERFORMANCE_FIELDS = (
+    "realized_pnl",
+    "unrealized_pnl",
+    "fee_total",
+    "tax_total",
+)
 VALID_ACCOUNT_MARKETS = {"cn", "hk", "us", "global"}
 VALID_EVENT_MARKETS = {"cn", "hk", "us"}
 VALID_COST_METHODS = {"fifo", "avg", "futu_diluted", "ths_pnl"}
@@ -97,6 +120,11 @@ PORTFOLIO_FX_REFRESH_DISABLED_REASON = "portfolio_fx_update_disabled"
 FX_STATUS_LIVE = "live"
 FX_STATUS_STALE = "stale"
 FX_STATUS_UNAVAILABLE = "unavailable"
+VALUATION_STATUS_AVAILABLE = "available"
+VALUATION_STATUS_STALE = "stale"
+VALUATION_STATUS_UNAVAILABLE = "unavailable"
+VALUATION_UNAVAILABLE_REASON = "conversion_or_source_valuation_unavailable"
+VALUATION_STALE_REASON = "stale_fx"
 PORTFOLIO_DATA_STATUS_NO_ACCOUNT = "no_account"
 PORTFOLIO_DATA_STATUS_NO_POSITIONS = "no_positions"
 PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE = "provider_unavailable"
@@ -200,6 +228,12 @@ def _cache_snapshot_payload_with_exact_values(
         if _cache_snapshot_position_key(public_position) != _cache_snapshot_position_key(exact_position):
             raise ValueError("cached portfolio position identity does not match exact values")
         cache_position = dict(public_position)
+        # Storage rows stay non-null for exact replay; this marker keeps a missing
+        # valuation from being rehydrated as the internal zero sentinel.
+        cache_position["valuation_unavailable"] = (
+            public_position.get("market_value_base") is None
+            or public_position.get("unrealized_pnl_base") is None
+        )
         for field in _CACHE_SNAPSHOT_EXACT_POSITION_FIELDS:
             exact_value = exact_position.get(field)
             if exact_value is None:
@@ -2996,6 +3030,7 @@ class PortfolioService:
         account_id: Optional[int] = None,
         as_of: Optional[date] = None,
         cost_method: str = "fifo",
+        persist_snapshot_cache: bool = True,
     ) -> Dict[str, Any]:
         as_of_date = as_of or date.today()
         method = self._normalize_cost_method(cost_method)
@@ -3034,6 +3069,7 @@ class PortfolioService:
                 account=account,
                 as_of_date=as_of_date,
                 cost_method=method,
+                fx_rates=account_fx_rates,
             )
             loaded_from_cache = account_snapshot is not None
             if account_snapshot is None:
@@ -3041,6 +3077,7 @@ class PortfolioService:
                     account=account,
                     as_of_date=as_of_date,
                     cost_method=method,
+                    fx_rates=account_fx_rates,
                 )
                 account_lineage = self._build_account_valuation_lineage_sidecar(
                     account_payload=account_snapshot["public"],
@@ -3052,28 +3089,29 @@ class PortfolioService:
                 for key in ("data_status", "calculation_status", "availability"):
                     account_snapshot["payload"][key] = account_snapshot["public"].get(key)
 
-                self.repo.replace_positions_lots_and_snapshot(
-                    account_id=account.id,
-                    snapshot_date=as_of_date,
-                    cost_method=method,
-                    base_currency=account.base_currency,
-                    total_cash=account_snapshot["total_cash"],
-                    total_market_value=account_snapshot["total_market_value"],
-                    total_equity=account_snapshot["total_equity"],
-                    unrealized_pnl=account_snapshot["unrealized_pnl"],
-                    realized_pnl=account_snapshot["realized_pnl"],
-                    fee_total=account_snapshot["fee_total"],
-                    tax_total=account_snapshot["tax_total"],
-                    fx_stale=account_snapshot["fx_stale"],
-                    payload=json.dumps(
-                        account_snapshot["payload"],
-                        ensure_ascii=False,
-                        default=_snapshot_cache_json_default,
-                    ),
-                    positions=account_snapshot["positions_cache"],
-                    lots=account_snapshot["lots_cache"],
-                    valuation_currency=account.base_currency,
-                )
+                if persist_snapshot_cache:
+                    self.repo.replace_positions_lots_and_snapshot(
+                        account_id=account.id,
+                        snapshot_date=as_of_date,
+                        cost_method=method,
+                        base_currency=account.base_currency,
+                        total_cash=account_snapshot["total_cash"],
+                        total_market_value=account_snapshot["total_market_value"],
+                        total_equity=account_snapshot["total_equity"],
+                        unrealized_pnl=account_snapshot["unrealized_pnl"],
+                        realized_pnl=account_snapshot["realized_pnl"],
+                        fee_total=account_snapshot["fee_total"],
+                        tax_total=account_snapshot["tax_total"],
+                        fx_stale=account_snapshot["fx_stale"],
+                        payload=json.dumps(
+                            account_snapshot["payload"],
+                            ensure_ascii=False,
+                            default=_snapshot_cache_json_default,
+                        ),
+                        positions=account_snapshot["positions_cache"],
+                        lots=account_snapshot["lots_cache"],
+                        valuation_currency=account.base_currency,
+                    )
 
             public_snapshot = self._ensure_position_analytics_fields(
                 account_payload=account_snapshot["public"],
@@ -3166,6 +3204,7 @@ class PortfolioService:
             aggregate["tax_total"] += tax_cny
             aggregate["fx_stale"] = aggregate["fx_stale"] or any(
                 [
+                    bool(account_snapshot.get("fx_stale")),
                     stale_cash,
                     stale_mv,
                     stale_eq,
@@ -3176,6 +3215,11 @@ class PortfolioService:
                 ]
             )
 
+        self._project_aggregate_position_values(
+            accounts_payload=accounts_payload,
+            aggregate_currency=aggregate_currency,
+            as_of_date=as_of_date,
+        )
         valuation = self._conversion_coverage_payload(aggregate_valuation_coverage)
         snapshot_payload = {
             "as_of": as_of_date.isoformat(),
@@ -3247,7 +3291,121 @@ class PortfolioService:
         snapshot_payload["valuation_lineage"] = self._build_portfolio_valuation_lineage_sidecar(
             snapshot=snapshot_payload
         )
+        self._apply_public_valuation_truth(snapshot_payload)
         return snapshot_payload
+
+    @staticmethod
+    def _apply_public_valuation_truth(snapshot: Dict[str, Any]) -> None:
+        """Keep non-authoritative internal totals out of public projections."""
+        truth = snapshot.get("portfolio_truth") if isinstance(snapshot.get("portfolio_truth"), dict) else {}
+        authoritative = str(truth.get("value_semantics") or "") == "authoritative_total"
+
+        if not authoritative:
+            for field_name in _PUBLIC_SNAPSHOT_VALUATION_FIELDS:
+                snapshot[field_name] = None
+
+        performance = snapshot.get("performance") if isinstance(snapshot.get("performance"), dict) else {}
+        performance_available = str(performance.get("calculation_state") or "unavailable") == "available"
+        if not performance_available:
+            for field_name in _PUBLIC_SNAPSHOT_PERFORMANCE_FIELDS:
+                snapshot[field_name] = None
+
+        for account in list(snapshot.get("accounts") or []):
+            if not isinstance(account, dict):
+                continue
+            valuation = account.get("valuation") if isinstance(account.get("valuation"), dict) else {}
+            if str(valuation.get("state") or "unavailable") != "available":
+                for field_name in _PUBLIC_ACCOUNT_VALUATION_FIELDS:
+                    account[field_name] = None
+            performance = account.get("performance") if isinstance(account.get("performance"), dict) else {}
+            if str(performance.get("calculation_state") or "unavailable") != "available":
+                for field_name in _PUBLIC_ACCOUNT_PERFORMANCE_FIELDS:
+                    account[field_name] = None
+
+        market_breakdown = snapshot.get("market_breakdown")
+        if not authoritative and isinstance(market_breakdown, list):
+            for row in market_breakdown:
+                if isinstance(row, dict):
+                    row["total_market_value"] = None
+                    row["weight_pct"] = None
+
+        analytics = snapshot.get("analytics") if isinstance(snapshot.get("analytics"), dict) else {}
+        pnl = analytics.get("pnl") if isinstance(analytics.get("pnl"), dict) else {}
+        if not authoritative or not performance_available:
+            for metric in pnl.values():
+                if not isinstance(metric, dict):
+                    continue
+                metric["amount"] = None
+                metric["amount_display"] = None
+                metric["percent"] = None
+
+        exposure = analytics.get("exposure") if isinstance(analytics.get("exposure"), dict) else {}
+        for rows in exposure.values():
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if not authoritative or row.get("fx_status") == FX_STATUS_UNAVAILABLE:
+                    row["market_value"] = None
+                    row["display_value"] = None
+                    row["percent"] = None
+                    if "unrealized_pnl" in row:
+                        row["unrealized_pnl"] = None
+
+        risk = analytics.get("risk") if isinstance(analytics.get("risk"), dict) else {}
+        if not authoritative:
+            risk["cash_percent"] = None
+            for key in ("largest_position", "largest_currency", "largest_market"):
+                item = risk.get(key)
+                if not isinstance(item, dict):
+                    risk[key] = None
+                    continue
+                for field_name in ("market_value", "percent", "weight_pct"):
+                    if field_name in item:
+                        item[field_name] = None
+                item["value_semantics"] = "unavailable"
+
+        attribution = snapshot.get("portfolio_attribution")
+        if (not authoritative or not performance_available) and isinstance(attribution, dict):
+            performance = attribution.get("performance")
+            if isinstance(performance, dict):
+                cash_flows = performance.get("cash_flows")
+                if isinstance(cash_flows, dict):
+                    for field_name in ("deposits", "withdrawals", "net"):
+                        cash_flows[field_name] = None
+                pnl = performance.get("pnl")
+                if isinstance(pnl, dict):
+                    for field_name in ("price", "income", "fx", "fees", "taxes", "gross", "net"):
+                        pnl[field_name] = None
+                return_block = performance.get("return")
+                if isinstance(return_block, dict):
+                    for field_name in ("numerator", "denominator", "percent"):
+                        return_block[field_name] = None
+
+            account_attribution = attribution.get("account_attribution")
+            if isinstance(account_attribution, dict):
+                for field_name in ("total_equity", "total_market_value"):
+                    account_attribution[field_name] = None
+                for row in list(account_attribution.get("top_accounts") or []):
+                    if not isinstance(row, dict):
+                        continue
+                    for field_name in (
+                        "total_equity_base",
+                        "equity_weight_pct",
+                        "total_market_value_base",
+                        "market_value_weight_pct",
+                    ):
+                        row[field_name] = None
+
+            industry_attribution = attribution.get("industry_attribution")
+            if isinstance(industry_attribution, dict):
+                industry_attribution["total_market_value"] = None
+                for row in list(industry_attribution.get("top_industries") or []):
+                    if not isinstance(row, dict):
+                        continue
+                    row["market_value_base"] = None
+                    row["weight_pct"] = None
 
     def _attach_account_availability(self, account_payload: Dict[str, Any], *, loaded_from_cache: bool) -> None:
         position_count = len(account_payload.get("positions") or [])
@@ -3266,16 +3424,24 @@ class PortfolioService:
             if data_status == PORTFOLIO_DATA_STATUS_NO_POSITIONS
             else PORTFOLIO_CALCULATION_STATUS_READY
         )
+        performance_availability = self._performance_availability(account_payload.get("performance"))
+        metrics_ready = (
+            calculation_status == PORTFOLIO_CALCULATION_STATUS_READY
+            and str(valuation.get("state") or "unavailable") == "available"
+            and performance_availability["calculation_state"] == "available"
+            and not bool(account_payload.get("fx_stale"))
+            and data_status != PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE
+        )
         account_payload["data_status"] = data_status
         account_payload["calculation_status"] = calculation_status
         account_payload["availability"] = {
             "status": data_status,
             "reason": data_status,
-            "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
+            "metrics_ready": metrics_ready,
             "account_count": 1,
             "position_count": position_count,
             "valuation": valuation,
-            "performance": self._performance_availability(account_payload.get("performance")),
+            "performance": performance_availability,
         }
 
     def _attach_snapshot_availability(self, snapshot_payload: Dict[str, Any]) -> None:
@@ -3298,16 +3464,24 @@ class PortfolioService:
             if data_status in {PORTFOLIO_DATA_STATUS_NO_ACCOUNT, PORTFOLIO_DATA_STATUS_NO_POSITIONS}
             else PORTFOLIO_CALCULATION_STATUS_READY
         )
+        performance_availability = self._performance_availability(snapshot_payload.get("performance"))
+        metrics_ready = (
+            calculation_status == PORTFOLIO_CALCULATION_STATUS_READY
+            and str(valuation.get("state") or "unavailable") == "available"
+            and performance_availability["calculation_state"] == "available"
+            and not bool(snapshot_payload.get("fx_stale"))
+            and data_status != PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE
+        )
         snapshot_payload["data_status"] = data_status
         snapshot_payload["calculation_status"] = calculation_status
         snapshot_payload["availability"] = {
             "status": data_status,
             "reason": data_status,
-            "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
+            "metrics_ready": metrics_ready,
             "account_count": len(accounts),
             "position_count": position_count,
             "valuation": valuation,
-            "performance": self._performance_availability(snapshot_payload.get("performance")),
+            "performance": performance_availability,
         }
 
     @staticmethod
@@ -3415,7 +3589,11 @@ class PortfolioService:
                 "position_count": position_count,
             }
 
-        if valuation_state == "partial" or price_partial or valuation_lineage_state == "partial":
+        if (
+            valuation_state == "partial"
+            or price_partial
+            or valuation_lineage_state == "partial"
+        ):
             return {
                 "state": "valuation_partial",
                 "account_state": account_state,
@@ -3997,15 +4175,21 @@ class PortfolioService:
         price_status = str(price_lineage.get("status") or "").strip().lower()
         fx_status = str(fx_lineage.get("status") or "").strip().lower()
 
+        valuation_status = str((snapshot.get("valuation") or {}).get("state") or "unavailable").strip().lower()
+        fx_only_unavailable = valuation_status == "unavailable" and fx_status in {"missing", "stale"}
         blocked = (
-            not metrics_ready
-            or position_count == 0
+            position_count == 0
             or calculation_status == PORTFOLIO_CALCULATION_STATUS_UNAVAILABLE
             or data_status in {PORTFOLIO_DATA_STATUS_NO_ACCOUNT, PORTFOLIO_DATA_STATUS_NO_POSITIONS}
+            or (valuation_status == "unavailable" and not fx_only_unavailable)
         )
         if blocked:
             status = "blocked"
-        elif price_status == "available" and fx_status == "available" and data_status == PORTFOLIO_DATA_STATUS_READY:
+        elif (
+            price_status == "available"
+            and fx_status == "available"
+            and data_status in {PORTFOLIO_DATA_STATUS_READY, PORTFOLIO_DATA_STATUS_STALE_OR_CACHED}
+        ):
             status = "complete"
         else:
             status = "partial"
@@ -4123,6 +4307,12 @@ class PortfolioService:
                 currency_norm = self._normalize_currency(currency)
                 if currency_norm != base_currency:
                     pairs.add((currency_norm, base_currency))
+            sync_state = self.get_latest_broker_sync_state(portfolio_account_id=int(account.id))
+            if sync_state is not None:
+                for position in list(sync_state.get("positions") or []):
+                    currency_norm = self._normalize_currency(position.get("currency") or base_currency)
+                    if currency_norm != base_currency:
+                        pairs.add((currency_norm, base_currency))
 
         rows: List[Dict[str, Any]] = []
         for from_currency, to_currency in sorted(pairs):
@@ -4833,7 +5023,14 @@ class PortfolioService:
             "fx_stale": fx_stale,
         }
 
-    def _build_account_snapshot(self, *, account: Any, as_of_date: date, cost_method: str) -> Dict[str, Any]:
+    def _build_account_snapshot(
+        self,
+        *,
+        account: Any,
+        as_of_date: date,
+        cost_method: str,
+        fx_rates: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         sync_state = self.get_latest_broker_sync_state(portfolio_account_id=int(account.id))
         if sync_state is not None and self._should_use_broker_sync_state(sync_state=sync_state, as_of_date=as_of_date):
             return self._build_synced_account_snapshot(
@@ -4841,6 +5038,7 @@ class PortfolioService:
                 sync_state=sync_state,
                 cost_method=cost_method,
                 as_of_date=as_of_date,
+                fx_rates=fx_rates,
             )
         return self._replay_account(account=account, as_of_date=as_of_date, cost_method=cost_method)
 
@@ -4864,17 +5062,56 @@ class PortfolioService:
         sync_state: Dict[str, Any],
         cost_method: str,
         as_of_date: date,
+        fx_rates: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        missing_sync_values = [
+            field_name
+            for field_name in (
+                "total_cash",
+                "total_market_value",
+                "total_equity",
+                "realized_pnl",
+                "unrealized_pnl",
+            )
+            if sync_state.get(field_name) is None
+        ]
+        if missing_sync_values:
+            raise PortfolioExactNumericError(
+                "broker sync aggregate valuation fields are unavailable: "
+                + ", ".join(missing_sync_values)
+            )
         snapshot_date = str(sync_state.get("snapshot_date") or "").strip() or as_of_date.isoformat()
         public_positions = []
         cache_positions = []
+        fx_currencies_used: Set[str] = set()
+        position_fx_stale = False
         for item in list(sync_state.get("positions") or []):
             quantity = _internal_snapshot_decimal(item["quantity"])
             avg_cost = _internal_snapshot_decimal(item["avg_cost"])
             total_cost = _internal_snapshot_decimal(quantity * avg_cost)
             last_price = _internal_snapshot_decimal(item["last_price"])
-            market_value_base = _internal_snapshot_decimal(item["market_value_base"])
-            unrealized_pnl_base = _internal_snapshot_decimal(item["unrealized_pnl_base"])
+            market_value_source = item.get("market_value_base")
+            unrealized_source = item.get("unrealized_pnl_base")
+            market_value_base = (
+                _internal_snapshot_decimal(market_value_source)
+                if market_value_source is not None
+                else None
+            )
+            unrealized_pnl_base = (
+                _internal_snapshot_decimal(unrealized_source)
+                if unrealized_source is not None
+                else None
+            )
+            valuation_unavailable = market_value_source is None or unrealized_source is None
+            cache_market_value_base = market_value_base if market_value_base is not None else Decimal("0")
+            cache_unrealized_pnl_base = (
+                unrealized_pnl_base if unrealized_pnl_base is not None else Decimal("0")
+            )
+            valuation_currency = item["valuation_currency"]
+            position_currency = self._normalize_currency(item.get("currency") or account.base_currency)
+            account_base_currency = self._normalize_currency(account.base_currency)
+            if position_currency != account_base_currency:
+                fx_currencies_used.add(position_currency)
             price_metadata = self._build_position_price_metadata(
                 price_source=PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT,
                 price_as_of=snapshot_date,
@@ -4882,6 +5119,17 @@ class PortfolioService:
                 price_fallback_reason=None,
                 valuation_confidence=PORTFOLIO_PRICE_CONFIDENCE_SYNC,
             )
+            display_fx_status = (
+                FX_STATUS_UNAVAILABLE
+                if valuation_unavailable
+                else self._synced_position_fx_status(
+                    item=item,
+                    account=account,
+                    fx_rates=fx_rates,
+                    fallback_stale=bool(sync_state.get("fx_stale")),
+                )
+            )
+            position_fx_stale = position_fx_stale or display_fx_status == FX_STATUS_STALE
             public_positions.append(
                 {
                     "symbol": item["symbol"],
@@ -4899,13 +5147,27 @@ class PortfolioService:
                     "last_price": round_portfolio_decimal_value(
                         last_price, kind="price", market=item["market"]
                     ),
-                    "market_value_base": round_portfolio_decimal_value(
-                        market_value_base, kind="money", currency=item["valuation_currency"]
+                    "market_value_base": (
+                        None
+                        if valuation_unavailable
+                        else round_portfolio_decimal_value(
+                            market_value_base, kind="money", currency=valuation_currency
+                        )
                     ),
-                    "unrealized_pnl_base": round_portfolio_decimal_value(
-                        unrealized_pnl_base, kind="money", currency=item["valuation_currency"]
+                    "unrealized_pnl_base": (
+                        None
+                        if valuation_unavailable
+                        else round_portfolio_decimal_value(
+                            unrealized_pnl_base, kind="money", currency=valuation_currency
+                        )
                     ),
-                    "valuation_currency": item["valuation_currency"],
+                    "valuation_currency": valuation_currency,
+                    "display_currency": valuation_currency,
+                    "display_fx_status": display_fx_status,
+                    "valuation_status": self._position_valuation_status(display_fx_status, valuation_unavailable),
+                    "valuation_unavailable_reason": self._position_valuation_reason(
+                        display_fx_status, valuation_unavailable
+                    ),
                     **price_metadata,
                 }
             )
@@ -4920,25 +5182,17 @@ class PortfolioService:
                     # IBKR exposes average cost but not the independent entry-price cost.
                     "price_cost": None,
                     "last_price": last_price,
-                    "market_value_base": market_value_base,
-                    "unrealized_pnl_base": unrealized_pnl_base,
+                    "market_value_base": cache_market_value_base,
+                    "unrealized_pnl_base": cache_unrealized_pnl_base,
                     "valuation_currency": item["valuation_currency"],
                 }
             )
 
-        total_cash = _internal_snapshot_decimal(sync_state.get("total_cash", Decimal("0")) or Decimal("0"))
-        total_market_value = _internal_snapshot_decimal(
-            sync_state.get("total_market_value", Decimal("0")) or Decimal("0")
-        )
-        total_equity = _internal_snapshot_decimal(
-            sync_state.get("total_equity", Decimal("0")) or Decimal("0")
-        )
-        realized_pnl = _internal_snapshot_decimal(
-            sync_state.get("realized_pnl", Decimal("0")) or Decimal("0")
-        )
-        unrealized_pnl = _internal_snapshot_decimal(
-            sync_state.get("unrealized_pnl", Decimal("0")) or Decimal("0")
-        )
+        total_cash = _internal_snapshot_decimal(sync_state["total_cash"])
+        total_market_value = _internal_snapshot_decimal(sync_state["total_market_value"])
+        total_equity = _internal_snapshot_decimal(sync_state["total_equity"])
+        realized_pnl = _internal_snapshot_decimal(sync_state["realized_pnl"])
+        unrealized_pnl = _internal_snapshot_decimal(sync_state["unrealized_pnl"])
         payload = {
             "account_id": account.id,
             "account_name": account.name,
@@ -4969,19 +5223,30 @@ class PortfolioService:
             "tax_total": round_portfolio_decimal_value(
                 Decimal("0"), kind="money", currency=sync_state.get("base_currency") or account.base_currency
             ),
-            "fx_stale": bool(sync_state.get("fx_stale")),
+            "fx_stale": bool(sync_state.get("fx_stale")) or position_fx_stale,
             "positions": public_positions,
         }
-        valuation_components = [f"broker_position:{item['symbol']}" for item in public_positions]
+        valuation_components = [
+            f"broker_position:{item['symbol']}"
+            for item in public_positions
+            if item.get("market_value_base") is not None and item.get("unrealized_pnl_base") is not None
+        ]
+        unavailable_components = [
+            f"broker_position:{item['symbol']}"
+            for item in public_positions
+            if item.get("market_value_base") is None or item.get("unrealized_pnl_base") is None
+        ]
         if total_cash.copy_abs() > 0:
             valuation_components.append("broker_cash")
         payload["valuation"] = {
-            "state": "available",
+            "state": "partial" if valuation_components and unavailable_components else (
+                "unavailable" if unavailable_components else "available"
+            ),
             "value_semantics": "covered_subtotal",
             "covered_component_count": len(valuation_components),
-            "unavailable_component_count": 0,
+            "unavailable_component_count": len(unavailable_components),
             "covered_components": valuation_components,
-            "unavailable_components": [],
+            "unavailable_components": unavailable_components,
             "missing_fx_pairs": [],
         }
         payload["performance"] = self._unavailable_performance(
@@ -5011,7 +5276,7 @@ class PortfolioService:
                 ),
                 "_cache_meta": {
                     "contract_version": SNAPSHOT_CACHE_CONTRACT_VERSION,
-                    "fx_currencies": [],
+                    "fx_currencies": sorted(fx_currencies_used),
                 },
             },
             "positions_cache": cache_positions,
@@ -5026,12 +5291,41 @@ class PortfolioService:
             "fx_stale": bool(payload["fx_stale"]),
         }
 
+    def _synced_position_fx_status(
+        self,
+        *,
+        item: Dict[str, Any],
+        account: Any,
+        fx_rates: Optional[List[Dict[str, Any]]],
+        fallback_stale: bool,
+    ) -> str:
+        """Project the same FX freshness lineage used by the aggregate snapshot."""
+        currency = self._normalize_currency(item.get("currency") or account.base_currency)
+        base_currency = self._normalize_currency(account.base_currency)
+        if currency == base_currency:
+            return FX_STATUS_LIVE
+        if fx_rates is None:
+            return FX_STATUS_STALE if fallback_stale else FX_STATUS_LIVE
+        pair = next(
+            (
+                row
+                for row in fx_rates
+                if self._normalize_currency(row.get("from_currency") or "") == currency
+                and self._normalize_currency(row.get("to_currency") or "") == base_currency
+            ),
+            None,
+        )
+        if not isinstance(pair, dict) or pair.get("rate") in (None, "") or pair.get("source") == "missing":
+            return FX_STATUS_UNAVAILABLE
+        return FX_STATUS_STALE if bool(pair.get("is_stale")) else FX_STATUS_LIVE
+
     def _load_cached_account_snapshot(
         self,
         *,
         account: Any,
         as_of_date: date,
         cost_method: str,
+        fx_rates: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict[str, Any]]:
         latest_cached_snapshot_date = self.repo.get_latest_cached_snapshot_date(
             account_id=int(account.id),
@@ -5071,6 +5365,12 @@ class PortfolioService:
         payload_raw = dict(decoded_payload.value)
         if positions_cache and self._snapshot_payload_missing_price_disclosure(payload_raw):
             return None
+        if not self._cached_broker_sync_fx_statuses_match(
+            account=account,
+            payload=payload_raw,
+            fx_rates=fx_rates,
+        ):
+            return None
         latest_market_update = self.repo.get_latest_market_data_update(
             symbols=[item["symbol"] for item in positions_cache],
             as_of=as_of_date,
@@ -5079,6 +5379,18 @@ class PortfolioService:
             return None
 
         fx_currencies = self._extract_cached_fx_currencies(payload_raw)
+        if not fx_currencies:
+            # Older synced caches omitted their FX dependencies; derive them from
+            # persisted positions so a later rate freshness change cannot leave
+            # a stale display status rehydrated as live.
+            base_currency = self._normalize_currency(snapshot_row.base_currency or account.base_currency)
+            fx_currencies = sorted(
+                {
+                    self._normalize_currency(item.get("currency") or base_currency)
+                    for item in positions_cache
+                    if self._normalize_currency(item.get("currency") or base_currency) != base_currency
+                }
+            )
         latest_fx_update = self.repo.get_latest_fx_rate_update(
             as_of=as_of_date,
             base_currency=snapshot_row.base_currency or account.base_currency,
@@ -5086,7 +5398,7 @@ class PortfolioService:
         )
         if latest_fx_update is None and payload_raw.get("_cache_meta") is None:
             latest_fx_update = self.repo.get_latest_fx_rate_update(as_of=as_of_date)
-        if latest_fx_update is not None and latest_fx_update > snapshot_updated_at:
+        if latest_fx_update is not None and latest_fx_update >= snapshot_updated_at:
             return None
 
         lots_cache = [self._cached_lot_row_to_dict(row) for row in cached["lots"]]
@@ -5103,19 +5415,51 @@ class PortfolioService:
             "payload": payload,
             "positions_cache": positions_cache,
             "lots_cache": lots_cache,
-            "total_cash": _internal_snapshot_decimal(snapshot_row.total_cash or Decimal("0")),
-            "total_market_value": _internal_snapshot_decimal(
-                snapshot_row.total_market_value or Decimal("0")
-            ),
-            "total_equity": _internal_snapshot_decimal(snapshot_row.total_equity or Decimal("0")),
-            "realized_pnl": _internal_snapshot_decimal(snapshot_row.realized_pnl or Decimal("0")),
-            "unrealized_pnl": _internal_snapshot_decimal(
-                snapshot_row.unrealized_pnl or Decimal("0")
-            ),
-            "fee_total": _internal_snapshot_decimal(snapshot_row.fee_total or Decimal("0")),
-            "tax_total": _internal_snapshot_decimal(snapshot_row.tax_total or Decimal("0")),
+            # Cache compatibility rejects null exact scalars before this point;
+            # direct parsing keeps a corrupt replay from becoming a fabricated zero.
+            "total_cash": _internal_snapshot_decimal(snapshot_row.total_cash),
+            "total_market_value": _internal_snapshot_decimal(snapshot_row.total_market_value),
+            "total_equity": _internal_snapshot_decimal(snapshot_row.total_equity),
+            "realized_pnl": _internal_snapshot_decimal(snapshot_row.realized_pnl),
+            "unrealized_pnl": _internal_snapshot_decimal(snapshot_row.unrealized_pnl),
+            "fee_total": _internal_snapshot_decimal(snapshot_row.fee_total),
+            "tax_total": _internal_snapshot_decimal(snapshot_row.tax_total),
             "fx_stale": bool(snapshot_row.fx_stale),
         }
+
+    def _cached_broker_sync_fx_statuses_match(
+        self,
+        *,
+        account: Any,
+        payload: Dict[str, Any],
+        fx_rates: Optional[List[Dict[str, Any]]],
+    ) -> bool:
+        """Reject sync caches whose holding FX status no longer matches current FX truth."""
+        positions = list(payload.get("positions") or [])
+        if not positions or not any(
+            isinstance(position, dict)
+            and position.get("price_source") == PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT
+            for position in positions
+        ):
+            return True
+
+        for position in positions:
+            if not isinstance(position, dict):
+                return False
+            if position.get("valuation_unavailable") is True:
+                continue
+            cached_status = position.get("display_fx_status")
+            if cached_status not in {FX_STATUS_LIVE, FX_STATUS_STALE, FX_STATUS_UNAVAILABLE}:
+                return False
+            current_status = self._synced_position_fx_status(
+                item=position,
+                account=account,
+                fx_rates=fx_rates,
+                fallback_stale=bool(payload.get("fx_stale")),
+            )
+            if cached_status != current_status:
+                return False
+        return True
 
     def _build_positions(
         self,
@@ -5286,6 +5630,22 @@ class PortfolioService:
                 self._fx_status(stale_market, market_source),
                 self._fx_status(stale_cost, cost_source),
             )
+            market_value_base_public = (
+                None
+                if market_source == "missing_rate"
+                else round_portfolio_decimal_value(
+                    market_base, kind="money", currency=account.base_currency
+                )
+            )
+            unrealized_pnl_base_public = (
+                None
+                if market_source == "missing_rate" or cost_source == "missing_rate"
+                else round_portfolio_decimal_value(
+                    unrealized_base, kind="money", currency=account.base_currency
+                )
+            )
+            display_market_value = market_value_base_public
+            display_unrealized_pnl = unrealized_pnl_base_public
 
             public_position_rows.append(
                 {
@@ -5298,12 +5658,8 @@ class PortfolioService:
                         total_cost, kind="money", currency=currency
                     ),
                     "last_price": round_portfolio_decimal_value(last_price, kind="price", market=market),
-                    "market_value_base": round_portfolio_decimal_value(
-                        market_base, kind="money", currency=account.base_currency
-                    ),
-                    "unrealized_pnl_base": round_portfolio_decimal_value(
-                        unrealized_base, kind="money", currency=account.base_currency
-                    ),
+                    "market_value_base": market_value_base_public,
+                    "unrealized_pnl_base": unrealized_pnl_base_public,
                     "valuation_currency": account.base_currency,
                     "cost_basis_native": round_portfolio_decimal_value(
                         total_cost, kind="money", currency=currency
@@ -5321,14 +5677,18 @@ class PortfolioService:
                         unrealized_native, kind="money", currency=currency
                     ),
                     "unrealized_pnl_pct": round(unrealized_pct, 6) if unrealized_pct is not None else None,
-                    "display_market_value": round_portfolio_decimal_value(
-                        market_base, kind="money", currency=account.base_currency
-                    ),
-                    "display_unrealized_pnl": round_portfolio_decimal_value(
-                        unrealized_base, kind="money", currency=account.base_currency
-                    ),
+                    "display_market_value": display_market_value,
+                    "display_unrealized_pnl": display_unrealized_pnl,
                     "display_currency": account.base_currency,
                     "display_fx_status": display_fx_status,
+                    "valuation_status": self._position_valuation_status(
+                        display_fx_status,
+                        market_value_base_public is None or unrealized_pnl_base_public is None,
+                    ),
+                    "valuation_unavailable_reason": self._position_valuation_reason(
+                        display_fx_status,
+                        market_value_base_public is None or unrealized_pnl_base_public is None,
+                    ),
                     **price_metadata,
                 }
             )
@@ -6074,30 +6434,50 @@ class PortfolioService:
             "snapshot_date": row.snapshot_date.isoformat() if row.snapshot_date else None,
             "synced_at": row.synced_at.isoformat() if row.synced_at else None,
             "base_currency": row.base_currency,
-            "total_cash": serialize_portfolio_decimal_value(
-                row.total_cash if row.total_cash is not None else Decimal("0"),
-                kind="money",
-                currency=row.base_currency,
+            "total_cash": (
+                serialize_portfolio_decimal_value(
+                    row.total_cash,
+                    kind="money",
+                    currency=row.base_currency,
+                )
+                if row.total_cash is not None
+                else None
             ),
-            "total_market_value": serialize_portfolio_decimal_value(
-                row.total_market_value if row.total_market_value is not None else Decimal("0"),
-                kind="money",
-                currency=row.base_currency,
+            "total_market_value": (
+                serialize_portfolio_decimal_value(
+                    row.total_market_value,
+                    kind="money",
+                    currency=row.base_currency,
+                )
+                if row.total_market_value is not None
+                else None
             ),
-            "total_equity": serialize_portfolio_decimal_value(
-                row.total_equity if row.total_equity is not None else Decimal("0"),
-                kind="money",
-                currency=row.base_currency,
+            "total_equity": (
+                serialize_portfolio_decimal_value(
+                    row.total_equity,
+                    kind="money",
+                    currency=row.base_currency,
+                )
+                if row.total_equity is not None
+                else None
             ),
-            "realized_pnl": serialize_portfolio_decimal_value(
-                row.realized_pnl if row.realized_pnl is not None else Decimal("0"),
-                kind="money",
-                currency=row.base_currency,
+            "realized_pnl": (
+                serialize_portfolio_decimal_value(
+                    row.realized_pnl,
+                    kind="money",
+                    currency=row.base_currency,
+                )
+                if row.realized_pnl is not None
+                else None
             ),
-            "unrealized_pnl": serialize_portfolio_decimal_value(
-                row.unrealized_pnl if row.unrealized_pnl is not None else Decimal("0"),
-                kind="money",
-                currency=row.base_currency,
+            "unrealized_pnl": (
+                serialize_portfolio_decimal_value(
+                    row.unrealized_pnl,
+                    kind="money",
+                    currency=row.base_currency,
+                )
+                if row.unrealized_pnl is not None
+                else None
             ),
             "fx_stale": bool(row.fx_stale),
             "payload": payload,
@@ -6132,15 +6512,23 @@ class PortfolioService:
                     kind="price",
                     market=item.market,
                 ),
-                "market_value_base": serialize_portfolio_decimal_value(
-                    item.market_value_base if item.market_value_base is not None else Decimal("0"),
-                    kind="money",
-                    currency=item.valuation_currency,
+                "market_value_base": (
+                    serialize_portfolio_decimal_value(
+                        item.market_value_base,
+                        kind="money",
+                        currency=item.valuation_currency,
+                    )
+                    if item.market_value_base is not None
+                    else None
                 ),
-                "unrealized_pnl_base": serialize_portfolio_decimal_value(
-                    item.unrealized_pnl_base if item.unrealized_pnl_base is not None else Decimal("0"),
-                    kind="money",
-                    currency=item.valuation_currency,
+                "unrealized_pnl_base": (
+                    serialize_portfolio_decimal_value(
+                        item.unrealized_pnl_base,
+                        kind="money",
+                        currency=item.valuation_currency,
+                    )
+                    if item.unrealized_pnl_base is not None
+                    else None
                 ),
                 "valuation_currency": item.valuation_currency,
             }
@@ -6176,11 +6564,15 @@ class PortfolioService:
             "total_cost": _internal_snapshot_decimal(row.total_cost or Decimal("0")),
             "price_cost": _internal_snapshot_decimal(price_cost) if price_cost is not None else None,
             "last_price": _internal_snapshot_decimal(row.last_price or Decimal("0")),
-            "market_value_base": _internal_snapshot_decimal(
-                row.market_value_base or Decimal("0")
+            "market_value_base": (
+                _internal_snapshot_decimal(row.market_value_base)
+                if row.market_value_base is not None
+                else None
             ),
-            "unrealized_pnl_base": _internal_snapshot_decimal(
-                row.unrealized_pnl_base or Decimal("0")
+            "unrealized_pnl_base": (
+                _internal_snapshot_decimal(row.unrealized_pnl_base)
+                if row.unrealized_pnl_base is not None
+                else None
             ),
             "valuation_currency": row.valuation_currency,
         }
@@ -6259,7 +6651,8 @@ class PortfolioService:
                 if not isinstance(payload_value, str):
                     return False
                 persisted_value = getattr(snapshot_row, field)
-                persisted_value = Decimal("0") if persisted_value is None else persisted_value
+                if persisted_value is None:
+                    return False
                 if is_metadata_less_legacy:
                     if payload_value != serialize_portfolio_decimal_value(
                         payload_value,
@@ -6336,6 +6729,11 @@ class PortfolioService:
                 seen_keys.add(key)
                 exact_position = exact_by_key.get(key)
                 if exact_position is None:
+                    return False
+                # Older cache payloads cannot distinguish a genuine zero from
+                # the internal zero sentinel used when valuation was missing.
+                # Rebuild them at the canonical owner before exposing values.
+                if type(payload_position.get("valuation_unavailable")) is not bool:
                     return False
                 for field in _CACHE_SNAPSHOT_EXACT_POSITION_FIELDS:
                     payload_value = payload_position.get(field)
@@ -6441,6 +6839,13 @@ class PortfolioService:
                     public_position[field] = round_portfolio_decimal_value(
                         derived_values[field], kind="money", currency=public_position["display_currency"]
                     )
+            if bool(payload_position.get("valuation_unavailable")):
+                public_position["market_value_base"] = None
+                public_position["unrealized_pnl_base"] = None
+                public_position["display_market_value"] = None
+                public_position["display_unrealized_pnl"] = None
+                public_position["display_fx_status"] = FX_STATUS_UNAVAILABLE
+            public_position.pop("valuation_unavailable", None)
             resolved_positions.append(public_position)
         public_payload.update(
             {
@@ -6452,26 +6857,54 @@ class PortfolioService:
                 "base_currency": base_currency,
                 "as_of": as_of_date.isoformat(),
                 "cost_method": cost_method,
-                "total_cash": round_portfolio_decimal_value(
-                    snapshot_row.total_cash or Decimal("0"), kind="money", currency=base_currency
+                "total_cash": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.total_cash, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.total_cash is not None
+                    else None
                 ),
-                "total_market_value": round_portfolio_decimal_value(
-                    snapshot_row.total_market_value or Decimal("0"), kind="money", currency=base_currency
+                "total_market_value": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.total_market_value, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.total_market_value is not None
+                    else None
                 ),
-                "total_equity": round_portfolio_decimal_value(
-                    snapshot_row.total_equity or Decimal("0"), kind="money", currency=base_currency
+                "total_equity": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.total_equity, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.total_equity is not None
+                    else None
                 ),
-                "realized_pnl": round_portfolio_decimal_value(
-                    snapshot_row.realized_pnl or Decimal("0"), kind="money", currency=base_currency
+                "realized_pnl": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.realized_pnl, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.realized_pnl is not None
+                    else None
                 ),
-                "unrealized_pnl": round_portfolio_decimal_value(
-                    snapshot_row.unrealized_pnl or Decimal("0"), kind="money", currency=base_currency
+                "unrealized_pnl": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.unrealized_pnl, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.unrealized_pnl is not None
+                    else None
                 ),
-                "fee_total": round_portfolio_decimal_value(
-                    snapshot_row.fee_total or Decimal("0"), kind="money", currency=base_currency
+                "fee_total": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.fee_total, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.fee_total is not None
+                    else None
                 ),
-                "tax_total": round_portfolio_decimal_value(
-                    snapshot_row.tax_total or Decimal("0"), kind="money", currency=base_currency
+                "tax_total": (
+                    round_portfolio_decimal_value(
+                        snapshot_row.tax_total, kind="money", currency=base_currency
+                    )
+                    if snapshot_row.tax_total is not None
+                    else None
                 ),
                 "fx_stale": bool(snapshot_row.fx_stale),
                 "positions": resolved_positions,
@@ -6533,7 +6966,6 @@ class PortfolioService:
                 unavailable_accounts += 1
                 coverage["unavailable_components"].add(f"account:{account_id}:performance")
                 continue
-            covered_accounts += 1
             account_currency = self._normalize_currency(performance.get("currency") or account.get("base_currency"))
             values = {
                 "deposits": dict(performance.get("cash_flows") or {}).get("deposits"),
@@ -6546,8 +6978,16 @@ class PortfolioService:
                 "gross": dict(performance.get("pnl") or {}).get("gross"),
                 "net": dict(performance.get("pnl") or {}).get("net"),
             }
+            missing_components = [component for component, raw_value in values.items() if raw_value is None]
+            if missing_components:
+                unavailable_accounts += 1
+                coverage["unavailable_components"].update(
+                    f"account:{account_id}:performance:{component}" for component in missing_components
+                )
+                continue
+            covered_accounts += 1
             for component, raw_value in values.items():
-                amount = _internal_snapshot_decimal(raw_value or Decimal("0"))
+                amount = _internal_snapshot_decimal(raw_value)
                 converted, _stale, source = self._convert_amount_decimal(
                     amount=amount,
                     from_currency=account_currency,
@@ -6856,12 +7296,7 @@ class PortfolioService:
             )
             if market is None:
                 continue
-            converted_market_value, _stale, _ = self._convert_amount_decimal(
-                amount=position.get("market_value_base") or Decimal("0"),
-                from_currency=position.get("valuation_currency") or account_snapshot.get("base_currency"),
-                to_currency=aggregate_currency,
-                as_of_date=as_of_date,
-            )
+            source_market_value = position.get("market_value_base")
             bucket = market_breakdown.setdefault(
                 market,
                 {
@@ -6870,13 +7305,130 @@ class PortfolioService:
                 },
             )
             bucket["position_count"] += 1
+            if source_market_value is None:
+                bucket["total_market_value"] = None
+                continue
+            converted_market_value, _stale, source = self._convert_amount_decimal(
+                amount=source_market_value,
+                from_currency=position.get("valuation_currency") or account_snapshot.get("base_currency"),
+                to_currency=aggregate_currency,
+                as_of_date=as_of_date,
+            )
+            if source == "missing_rate":
+                bucket["total_market_value"] = None
+                continue
+            if bucket["total_market_value"] is None:
+                continue
             bucket["total_market_value"] += converted_market_value
+
+    def _project_aggregate_position_values(
+        self,
+        *,
+        accounts_payload: List[Dict[str, Any]],
+        aggregate_currency: str,
+        as_of_date: date,
+    ) -> None:
+        """Make holding valuation fields use the same currency and FX truth as the aggregate.
+
+        Account snapshots are first calculated in each account's base currency.  An
+        all-account snapshot must not leave those account-local fields exposed as if
+        they were already in the aggregate currency, because consumers would then
+        compare or label unlike amounts as one valuation.  Native fields remain the
+        source record; only the aggregate-facing valuation fields are projected here.
+        """
+        target_currency = self._normalize_currency(aggregate_currency)
+        for account_snapshot in accounts_payload:
+            if not isinstance(account_snapshot, dict):
+                continue
+            account_base_currency = self._normalize_currency(
+                account_snapshot.get("base_currency") or target_currency
+            )
+            for position in list(account_snapshot.get("positions") or []):
+                if not isinstance(position, dict):
+                    continue
+
+                # The account snapshot already owns native-to-account-base FX.
+                # Project that exact account-base value once more to the
+                # aggregate currency so aggregate totals and holding displays
+                # cannot follow different FX paths.
+                source_market_value = position.get("market_value_base")
+                source_pnl = position.get("unrealized_pnl_base")
+                source_currency = self._normalize_currency(
+                    position.get("valuation_currency") or account_base_currency
+                )
+                if source_market_value is None or source_pnl is None:
+                    self._mark_position_aggregate_unavailable(
+                        position=position,
+                        aggregate_currency=target_currency,
+                    )
+                    continue
+
+                converted_market_value, stale_market, market_source = self._convert_amount_decimal(
+                    amount=source_market_value,
+                    from_currency=source_currency,
+                    to_currency=target_currency,
+                    as_of_date=as_of_date,
+                )
+                converted_pnl, stale_pnl, pnl_source = self._convert_amount_decimal(
+                    amount=source_pnl,
+                    from_currency=source_currency,
+                    to_currency=target_currency,
+                    as_of_date=as_of_date,
+                )
+                status = self._combine_fx_statuses(
+                    self._fx_status(stale_market, market_source),
+                    self._fx_status(stale_pnl, pnl_source),
+                )
+                existing_status = position.get("display_fx_status")
+                if existing_status in {
+                    FX_STATUS_LIVE,
+                    FX_STATUS_STALE,
+                    FX_STATUS_UNAVAILABLE,
+                }:
+                    status = self._combine_fx_statuses(status, existing_status)
+
+                if status == FX_STATUS_UNAVAILABLE:
+                    self._mark_position_aggregate_unavailable(
+                        position=position,
+                        aggregate_currency=target_currency,
+                    )
+                    continue
+
+                market_value = round_portfolio_decimal_value(
+                    converted_market_value,
+                    kind="money",
+                    currency=target_currency,
+                )
+                pnl_value = round_portfolio_decimal_value(
+                    converted_pnl,
+                    kind="money",
+                    currency=target_currency,
+                )
+                position["display_market_value"] = market_value
+                position["display_unrealized_pnl"] = pnl_value
+                position["display_currency"] = target_currency
+                position["display_fx_status"] = status
+                position["valuation_status"] = self._position_valuation_status(status, False)
+                position["valuation_unavailable_reason"] = self._position_valuation_reason(status, False)
+
+    @staticmethod
+    def _mark_position_aggregate_unavailable(
+        *,
+        position: Dict[str, Any],
+        aggregate_currency: str,
+    ) -> None:
+        position["display_market_value"] = None
+        position["display_unrealized_pnl"] = None
+        position["display_currency"] = aggregate_currency
+        position["display_fx_status"] = FX_STATUS_UNAVAILABLE
+        position["valuation_status"] = VALUATION_STATUS_UNAVAILABLE
+        position["valuation_unavailable_reason"] = VALUATION_UNAVAILABLE_REASON
 
     @staticmethod
     def _build_market_breakdown_payload(
         *,
         market_breakdown: Dict[str, Dict[str, Any]],
-        total_market_value: Decimal,
+        total_market_value: Optional[Decimal],
         aggregate_currency: str,
     ) -> List[Dict[str, Any]]:
         if not market_breakdown:
@@ -6884,22 +7436,33 @@ class PortfolioService:
         rows: List[Dict[str, Any]] = []
         denominator = _internal_snapshot_decimal(total_market_value or Decimal("0"))
         for market, bucket in market_breakdown.items():
-            market_value = _internal_snapshot_decimal(bucket.get("total_market_value") or Decimal("0"))
+            raw_market_value = bucket.get("total_market_value")
+            market_value = (
+                _internal_snapshot_decimal(raw_market_value)
+                if raw_market_value is not None
+                else None
+            )
             rows.append(
                 {
                     "market": market,
                     "position_count": int(bucket.get("position_count") or 0),
                     "total_market_value": round_portfolio_decimal_value(
                         market_value, kind="money", currency=aggregate_currency
-                    ),
+                    ) if market_value is not None else None,
                     "weight_pct": (
                         round(float((market_value / denominator) * Decimal("100")), 4)
-                        if denominator > 0
-                        else 0.0
+                        if market_value is not None and denominator > 0
+                        else None
                     ),
                 }
             )
-        rows.sort(key=lambda item: (-item["total_market_value"], str(item["market"])))
+        rows.sort(
+            key=lambda item: (
+                item["total_market_value"] is None,
+                -(item["total_market_value"] or Decimal("0")),
+                str(item["market"]),
+            )
+        )
         return rows
 
     def _build_snapshot_analytics(
@@ -6923,8 +7486,9 @@ class PortfolioService:
         total_pnl = _internal_snapshot_decimal(performance_pnl.get("net") or Decimal("0"))
         cost_basis = total_market_value - unrealized_amount
         pnl_percent_raw = performance_return.get("percent")
-        pnl_percent = float(pnl_percent_raw) if pnl_percent_raw is not None else None
-        if str(performance.get("calculation_state") or "unavailable") != "available":
+        performance_available = str(performance.get("calculation_state") or "unavailable") == "available"
+        pnl_percent = float(pnl_percent_raw) if performance_available and pnl_percent_raw is not None else None
+        if not performance_available:
             fx_status = FX_STATUS_UNAVAILABLE
         else:
             fx_status = FX_STATUS_STALE if snapshot.get("fx_stale") else FX_STATUS_LIVE
@@ -6941,16 +7505,31 @@ class PortfolioService:
             base_currency = self._normalize_currency(
                 account_snapshot.get("base_currency") or getattr(account, "base_currency", display_currency)
             )
-            account_native_value = _internal_snapshot_decimal(
-                account_snapshot.get("total_market_value") or Decimal("0")
+            account_valuation = account_snapshot.get("valuation")
+            account_valuation = account_valuation if isinstance(account_valuation, dict) else {}
+            account_valuation_available = str(account_valuation.get("state") or "unavailable") == "available"
+            account_market_source = account_snapshot.get("total_market_value")
+            account_native_value = (
+                _internal_snapshot_decimal(account_market_source)
+                if account_valuation_available and account_market_source is not None
+                else None
             )
-            account_market_value, account_stale, account_source = self._convert_amount_decimal(
-                amount=account_native_value,
-                from_currency=base_currency,
-                to_currency=display_currency,
-                as_of_date=as_of_date,
+            if account_native_value is None:
+                account_market_value = Decimal("0")
+                account_stale = False
+                account_source = "missing_valuation"
+            else:
+                account_market_value, account_stale, account_source = self._convert_amount_decimal(
+                    amount=account_native_value,
+                    from_currency=base_currency,
+                    to_currency=display_currency,
+                    as_of_date=as_of_date,
+                )
+            account_fx_status = (
+                FX_STATUS_UNAVAILABLE
+                if account_native_value is None
+                else self._fx_status(account_stale, account_source)
             )
-            account_fx_status = self._fx_status(account_stale, account_source)
             any_fx_unavailable = any_fx_unavailable or account_fx_status == FX_STATUS_UNAVAILABLE
             by_account.append(
                 self._exposure_row(
@@ -6960,8 +7539,12 @@ class PortfolioService:
                     total_market_value=total_market_value,
                     display_currency=display_currency,
                     fx_status=account_fx_status,
-                    native_value=round_portfolio_decimal_value(
-                        account_native_value, kind="money", currency=base_currency
+                    native_value=(
+                        round_portfolio_decimal_value(
+                            account_native_value, kind="money", currency=base_currency
+                        )
+                        if account_native_value is not None
+                        else None
                     ),
                     native_currency=base_currency,
                     account_id=account_id,
@@ -6982,14 +7565,26 @@ class PortfolioService:
                     fallback_market=account_snapshot.get("market"),
                 ) or "unknown"
                 native_currency = self._normalize_currency(position.get("currency") or base_currency)
-                native_value = _internal_snapshot_decimal(position.get("market_value_native") or Decimal("0"))
-                display_value, display_stale, display_source = self._convert_amount_decimal(
-                    amount=native_value,
-                    from_currency=native_currency,
-                    to_currency=display_currency,
-                    as_of_date=as_of_date,
-                )
-                position_fx_status = self._fx_status(display_stale, display_source)
+                if position.get("market_value_native") is not None:
+                    native_value = _internal_snapshot_decimal(position["market_value_native"])
+                    display_value, display_stale, display_source = self._convert_amount_decimal(
+                        amount=native_value,
+                        from_currency=native_currency,
+                        to_currency=display_currency,
+                        as_of_date=as_of_date,
+                    )
+                    position_fx_status = self._fx_status(display_stale, display_source)
+                else:
+                    # A missing native market value is a missing observation, not a
+                    # zero holding.  The base/display projections may still carry
+                    # their own status, but they cannot reconstruct native value.
+                    native_value = None
+                    display_value = _internal_snapshot_decimal(
+                        position.get("display_market_value") or Decimal("0")
+                    )
+                    position_fx_status = str(
+                        position.get("display_fx_status") or FX_STATUS_UNAVAILABLE
+                    )
                 any_fx_unavailable = any_fx_unavailable or position_fx_status == FX_STATUS_UNAVAILABLE
 
                 currency_bucket = by_currency.setdefault(
@@ -7005,7 +7600,10 @@ class PortfolioService:
                         "holding_count": 0,
                     },
                 )
-                currency_bucket["native_value"] += native_value
+                if native_value is None:
+                    currency_bucket["native_value"] = None
+                elif currency_bucket["native_value"] is not None:
+                    currency_bucket["native_value"] += native_value
                 currency_bucket["display_value"] += display_value
                 currency_bucket["holding_count"] += 1
                 currency_bucket["fx_status"] = self._combine_fx_statuses(currency_bucket["fx_status"], position_fx_status)
@@ -7056,8 +7654,12 @@ class PortfolioService:
                 total_market_value=total_market_value,
                 display_currency=display_currency,
                 fx_status=item["fx_status"],
-                native_value=round_portfolio_decimal_value(
-                    item["native_value"], kind="money", currency=item["native_currency"]
+                native_value=(
+                    round_portfolio_decimal_value(
+                        item["native_value"], kind="money", currency=item["native_currency"]
+                    )
+                    if item["native_value"] is not None
+                    else None
                 ),
                 native_currency=item["native_currency"],
                 currency=item["currency"],
@@ -7119,23 +7721,23 @@ class PortfolioService:
             "pnl": {
                 "display_currency": display_currency,
                 "realized": self._pnl_metric(
-                    amount=realized_amount,
+                    amount=realized_amount if performance_available else None,
                     percent=None,
                     currency=display_currency,
                     fx_status=fx_status,
                 ),
                 "unrealized": self._pnl_metric(
-                    amount=unrealized_amount,
+                    amount=unrealized_amount if performance_available else None,
                     percent=(
                         float((unrealized_amount / abs(cost_basis)) * Decimal("100"))
-                        if abs(cost_basis) > Decimal(str(EPS))
+                        if performance_available and abs(cost_basis) > Decimal(str(EPS))
                         else None
                     ),
                     currency=display_currency,
                     fx_status=FX_STATUS_UNAVAILABLE if any_fx_unavailable else fx_status,
                 ),
                 "total": self._pnl_metric(
-                    amount=total_pnl,
+                    amount=total_pnl if performance_available else None,
                     percent=pnl_percent,
                     currency=display_currency,
                     fx_status=FX_STATUS_UNAVAILABLE if any_fx_unavailable else fx_status,
@@ -7209,12 +7811,29 @@ class PortfolioService:
                     if total_cost.copy_abs() > Decimal(str(EPS))
                     else None
                 )
-            position.setdefault("display_market_value", position.get("market_value_base", market_value))
-            position.setdefault("display_unrealized_pnl", position.get("unrealized_pnl_base", unrealized))
+            valuation_unavailable = (
+                position.get("market_value_base") is None
+                or position.get("unrealized_pnl_base") is None
+                or position.get("display_fx_status") == FX_STATUS_UNAVAILABLE
+            )
+            if valuation_unavailable:
+                position["display_market_value"] = None
+                position["display_unrealized_pnl"] = None
+                position["display_fx_status"] = FX_STATUS_UNAVAILABLE
+            else:
+                position.setdefault("display_market_value", position.get("market_value_base", market_value))
+                position.setdefault("display_unrealized_pnl", position.get("unrealized_pnl_base", unrealized))
             position.setdefault("display_currency", display_currency)
-            position.setdefault(
-                "display_fx_status",
-                FX_STATUS_LIVE if currency == self._normalize_currency(display_currency) else FX_STATUS_STALE,
+            if not valuation_unavailable:
+                position.setdefault(
+                    "display_fx_status",
+                    FX_STATUS_LIVE if currency == self._normalize_currency(display_currency) else FX_STATUS_STALE,
+                )
+            position["valuation_status"] = self._position_valuation_status(
+                position.get("display_fx_status"), valuation_unavailable
+            )
+            position["valuation_unavailable_reason"] = self._position_valuation_reason(
+                position.get("display_fx_status"), valuation_unavailable
             )
             positions.append(position)
         payload["positions"] = positions
@@ -7223,16 +7842,20 @@ class PortfolioService:
     @staticmethod
     def _pnl_metric(
         *,
-        amount: Decimal,
+        amount: Optional[Decimal],
         percent: Optional[float],
         currency: str,
         fx_status: str,
     ) -> Dict[str, Any]:
-        money_amount = round_portfolio_decimal_value(amount, kind="money", currency=currency)
+        money_amount = (
+            round_portfolio_decimal_value(amount, kind="money", currency=currency)
+            if amount is not None
+            else None
+        )
         return {
             "amount": money_amount,
-            "amount_display": f"{currency} {money_amount:,.2f}",
-            "percent": round(float(percent), 6) if percent is not None else None,
+            "amount_display": f"{currency} {money_amount:,.2f}" if money_amount is not None else None,
+            "percent": round(float(percent), 6) if money_amount is not None and percent is not None else None,
             "currency": currency,
             "fx_status": fx_status,
         }
@@ -7272,6 +7895,22 @@ class PortfolioService:
         if stale:
             return FX_STATUS_STALE
         return FX_STATUS_LIVE
+
+    @staticmethod
+    def _position_valuation_status(fx_status: Any, unavailable: bool) -> str:
+        if unavailable or fx_status == FX_STATUS_UNAVAILABLE:
+            return VALUATION_STATUS_UNAVAILABLE
+        if fx_status == FX_STATUS_STALE:
+            return VALUATION_STATUS_STALE
+        return VALUATION_STATUS_AVAILABLE
+
+    @staticmethod
+    def _position_valuation_reason(fx_status: Any, unavailable: bool) -> Optional[str]:
+        if unavailable or fx_status == FX_STATUS_UNAVAILABLE:
+            return VALUATION_UNAVAILABLE_REASON
+        if fx_status == FX_STATUS_STALE:
+            return VALUATION_STALE_REASON
+        return None
 
     @staticmethod
     def _combine_fx_statuses(*statuses: str) -> str:

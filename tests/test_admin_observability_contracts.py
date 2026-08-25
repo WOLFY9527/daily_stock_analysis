@@ -623,15 +623,20 @@ def test_provider_observability_fixtures_follow_capability_inventory_for_provide
 
 def test_admin_user_activity_and_portfolio_read_models_match_public_contracts() -> None:
     payload = _load_fixture("user_activity_portfolio_read_models.json")
+    portfolio_summary = payload["portfolio_summary"]
 
     AdminUserListResponse(**payload["user_list"])
     AdminUserDetailResponse(**payload["user_detail"])
     AdminActivityResponse(**payload["activity"])
-    AdminPortfolioSummaryResponse(**payload["portfolio_summary"])
+    AdminPortfolioSummaryResponse(**portfolio_summary)
     AdminPortfolioAccountDetailResponse(**payload["portfolio_account_detail"])
 
     assert payload["fixture_meta"]["surface"] == "admin_user_observability"
     assert payload["fixture_meta"]["read_only"] is True
+    assert portfolio_summary["fxFreshnessState"] == portfolio_summary["fxLineage"]["status"] == "available"
+    assert portfolio_summary["fxStale"] is False
+    assert portfolio_summary["brokerSyncSummary"]["fxStale"] is None
+    assert portfolio_summary["brokerSyncSummary"]["fxFreshnessState"] is None
 
 
 def test_admin_observability_boundary_fixture_keeps_read_only_and_mutation_ownership_explicit() -> None:

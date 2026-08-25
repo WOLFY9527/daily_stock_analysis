@@ -10,10 +10,12 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
 from src.config import Config
+from src.portfolio_exact_numeric import PortfolioExactNumericError
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import PortfolioService
 from src.storage import DatabaseManager
@@ -84,6 +86,170 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         )
         return int(account["id"])
 
+    def test_corrupt_sync_and_cache_valuation_inputs_never_become_numeric_zero(self) -> None:
+        account = SimpleNamespace(
+            id=1,
+            name="Corrupt sync",
+            owner_id="valuation-truth",
+            broker="Demo",
+            market="us",
+            base_currency="USD",
+        )
+        sync_state = {
+            "snapshot_date": "2026-08-24",
+            "base_currency": "USD",
+            "total_cash": Decimal("0"),
+            "total_market_value": Decimal("0"),
+            "total_equity": None,
+            "realized_pnl": Decimal("0"),
+            "unrealized_pnl": Decimal("0"),
+            "positions": [],
+        }
+        with self.assertRaisesRegex(PortfolioExactNumericError, "total_equity"):
+            self.service._build_synced_account_snapshot(
+                account=account,
+                sync_state=sync_state,
+                cost_method="fifo",
+                as_of_date=date(2026, 8, 24),
+                fx_rates=[],
+            )
+
+        sync_row = SimpleNamespace(
+            id=1,
+            owner_id="valuation-truth",
+            broker_connection_id=1,
+            portfolio_account_id=1,
+            broker_type="demo",
+            broker_account_ref=None,
+            sync_source="fixture",
+            sync_status="success",
+            snapshot_date=date(2026, 8, 24),
+            synced_at=date(2026, 8, 24),
+            base_currency="USD",
+            total_cash=Decimal("0"),
+            total_market_value=Decimal("0"),
+            total_equity=None,
+            realized_pnl=Decimal("0"),
+            unrealized_pnl=Decimal("0"),
+            fx_stale=False,
+            payload_json=None,
+        )
+        serialized_sync = PortfolioService._broker_sync_state_row_to_dict(sync_row)
+        self.assertEqual(serialized_sync["total_cash"], "0.00")
+        self.assertIsNone(serialized_sync["total_equity"])
+
+        cached_row = SimpleNamespace(
+            symbol="AAPL",
+            market="us",
+            currency="USD",
+            quantity=Decimal("1"),
+            avg_cost=Decimal("100"),
+            total_cost=Decimal("100"),
+            price_cost=None,
+            last_price=Decimal("100"),
+            market_value_base=None,
+            unrealized_pnl_base=None,
+            valuation_currency="USD",
+        )
+        exact_position = PortfolioService._cached_position_row_to_dict(cached_row)
+        self.assertIsNone(exact_position["market_value_base"])
+        self.assertIsNone(exact_position["unrealized_pnl_base"])
+        self.assertFalse(
+            PortfolioService._cached_snapshot_positions_are_compatible(
+                payload_positions=[
+                    {
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "valuation_currency": "USD",
+                        "valuation_unavailable": True,
+                        "quantity": "1.00000000",
+                        "avg_cost": "100.00000000",
+                        "total_cost": "100.00000000",
+                        "last_price": "100.00000000",
+                        "market_value_base": "0.00000000",
+                        "unrealized_pnl_base": "0.00000000",
+                    }
+                ],
+                exact_positions=[exact_position],
+            )
+        )
+
+    def test_snapshot_analytics_preserves_missing_native_exposure_as_none(self) -> None:
+        analytics = self.service._build_snapshot_analytics(
+            snapshot={
+                "total_cash": Decimal("0"),
+                "total_market_value": Decimal("0"),
+                "total_equity": Decimal("0"),
+                "realized_pnl": Decimal("0"),
+                "unrealized_pnl": Decimal("0"),
+                "performance": {"calculation_state": "unavailable"},
+                "accounts": [
+                    {
+                        "account_id": 1,
+                        "account_name": "Missing valuation",
+                        "base_currency": "USD",
+                        "valuation": {"state": "unavailable"},
+                        "positions": [
+                            {
+                                "symbol": "AAPL",
+                                "market": "us",
+                                "currency": "USD",
+                                "total_cost": Decimal("100"),
+                                "market_value_native": None,
+                                "market_value_base": None,
+                                "unrealized_pnl_native": None,
+                                "unrealized_pnl_base": None,
+                                "display_market_value": None,
+                                "display_unrealized_pnl": None,
+                                "display_fx_status": "unavailable",
+                            }
+                        ],
+                    }
+                ],
+            },
+            account_rows=[],
+            aggregate_currency="USD",
+            as_of_date=date(2026, 8, 24),
+        )
+
+        currency_row = analytics["exposure"]["by_currency"][0]
+        self.assertIsNone(currency_row["native_value"])
+
+    def test_available_performance_with_missing_component_becomes_unavailable(self) -> None:
+        performance = self.service._build_portfolio_performance(
+            snapshot={
+                "valuation": {"state": "available"},
+                "accounts": [
+                    {
+                        "account_id": 1,
+                        "base_currency": "USD",
+                        "performance": {
+                            "calculation_state": "available",
+                            "currency": "USD",
+                            "cash_flows": {"deposits": Decimal("100"), "withdrawals": Decimal("0")},
+                            "pnl": {
+                                "price": Decimal("1"),
+                                "income": Decimal("0"),
+                                "fx": Decimal("0"),
+                                "fees": Decimal("0"),
+                                "taxes": Decimal("0"),
+                                "gross": Decimal("1"),
+                                "net": None,
+                            },
+                            "return": {"denominator": Decimal("100")},
+                        },
+                    }
+                ],
+            },
+            aggregate_currency="USD",
+            as_of_date=date(2026, 8, 24),
+        )
+
+        self.assertEqual(performance["calculation_state"], "unavailable")
+        self.assertIsNone(performance["pnl"]["net"])
+        self.assertIn("account:1:performance:net", performance["component_coverage"]["unavailable_components"])
+
     def test_missing_fx_is_unavailable_without_one_to_one_or_zero_exposure(self) -> None:
         account_id = self._create_account(base_currency="CNY")
         self.service.record_cash_ledger(
@@ -115,8 +281,10 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         self.assertEqual(position["market_value_native"], 100.0)
         self.assertEqual(position["currency"], "USD")
         self.assertEqual(position["display_fx_status"], "unavailable")
-        self.assertEqual(position["market_value_base"], 0.0)
-        self.assertEqual(snapshot["total_market_value"], 0.0)
+        self.assertIsNone(position["market_value_base"])
+        self.assertIsNone(position["unrealized_pnl_base"])
+        self.assertIsNone(position["display_market_value"])
+        self.assertIsNone(position["display_unrealized_pnl"])
         self.assertEqual(snapshot["availability"]["valuation"]["state"], "unavailable")
         self.assertEqual(snapshot["availability"]["valuation"]["value_semantics"], "covered_subtotal")
         self.assertEqual(
@@ -211,7 +379,8 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         )
         partial = self.service.get_portfolio_snapshot(as_of=date(2026, 1, 2), cost_method="fifo")
         self.assertEqual(partial["availability"]["valuation"]["state"], "partial")
-        self.assertEqual(partial["total_cash"], 1000.0)
+        self.assertIsNone(partial["total_cash"])
+        self.assertEqual(partial["portfolio_truth"]["covered_subtotal"], 1000.0)
         self.assertEqual(partial["performance"]["calculation_state"], "partial")
 
     def test_portfolio_truth_model_separates_account_and_valuation_states(self) -> None:
@@ -336,6 +505,83 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         self.assertEqual(fully_valued_nonzero["portfolio_truth"]["value_semantics"], "authoritative_total")
         self.assertEqual(fully_valued_nonzero["portfolio_truth"]["authoritative_total"], 10.0)
 
+    def test_closed_position_missing_fx_keeps_realized_pnl_unavailable(self) -> None:
+        account_id = self._create_account(base_currency="CNY")
+        self.service.record_trade(
+            account_id=account_id,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            fee=Decimal("5"),
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=account_id,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="sell",
+            quantity=Decimal("1"),
+            price=Decimal("110"),
+            fee=Decimal("5"),
+            market="us",
+            currency="USD",
+        )
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+
+        self.assertEqual(snapshot["accounts"][0]["positions"], [])
+        self.assertEqual(snapshot["accounts"][0]["performance"]["calculation_state"], "unavailable")
+        # Current valuation is a genuine empty-account zero; historical
+        # performance remains unavailable because the realized USD/CNY
+        # conversion cannot be performed.
+        self.assertEqual(snapshot["portfolio_truth"]["state"], "account_no_holdings")
+        self.assertEqual(snapshot["portfolio_truth"]["value_semantics"], "authoritative_total")
+        self.assertEqual(snapshot["portfolio_truth"]["authoritative_total"], Decimal("0.00"))
+        for field_name in (
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(snapshot[field_name])
+        for metric in snapshot["analytics"]["pnl"].values():
+            if not isinstance(metric, dict):
+                continue
+            self.assertIsNone(metric["amount"])
+            self.assertIsNone(metric["amount_display"])
+            self.assertIsNone(metric["percent"])
+        self.assertEqual(snapshot["valuation"]["state"], "available")
+        self.assertIn(
+            "USD/CNY",
+            snapshot["accounts"][0]["performance"]["component_coverage"]["missing_fx_pairs"],
+        )
+
+    def test_valuation_truth_does_not_inherit_unavailable_performance_coverage(self) -> None:
+        snapshot = {
+            "currency": "USD",
+            "total_equity": Decimal("3500"),
+            "valuation": {"state": "available"},
+            "performance": {"calculation_state": "unavailable"},
+            "valuation_snapshot_lineage": {"status": "complete"},
+            "data_status": "ready",
+            "price_lineage": {"counts": {"total": 1, "missing": 0}},
+            "accounts": [{"positions": [{"symbol": "AAPL"}]}],
+        }
+
+        truth = self.service._build_portfolio_truth(snapshot=snapshot)
+
+        self.assertEqual(truth["state"], "fully_valued_nonzero")
+        self.assertEqual(truth["valuation_state"], "fully_valued")
+        self.assertEqual(truth["value_semantics"], "authoritative_total")
+        self.assertEqual(truth["authoritative_total"], Decimal("3500"))
+
     def test_multicurrency_components_keep_price_income_fees_fx_and_cash_distinct(self) -> None:
         account_id = self._create_account(base_currency="CNY")
         for rate_date, rate in (
@@ -457,7 +703,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         self._save_close("AAPL", date(2026, 3, 6), Decimal("90.0"))
         fifth = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 6))
 
-        self.assertEqual(fourth["performance"]["pnl"]["net"], 0.0)
+        # The holding has no valuation on 2026-03-05; unchanged exposure is
+        # unavailable, not an observed zero P&L.
+        self.assertIsNone(fourth["performance"]["pnl"]["net"])
         self.assertEqual(fifth["performance"]["pnl"]["net"], -100.0)
 
         drawdown = PortfolioRiskService(portfolio_service=self.service)._build_drawdown(

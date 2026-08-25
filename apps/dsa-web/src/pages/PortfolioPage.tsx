@@ -50,7 +50,6 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import {
-  addPortfolioDecimals,
   comparePortfolioDecimals,
   formatPortfolioDecimal,
   multiplyPortfolioDecimals,
@@ -80,6 +79,7 @@ import type {
   PortfolioCostMethod,
   PortfolioDecimal,
   PortfolioExposureItem,
+  PortfolioFxStatus,
   PortfolioFxRateItem,
   PortfolioImportBrokerItem,
   PortfolioImportCommitResponse,
@@ -1224,7 +1224,8 @@ function formatExposureMarketLabel(row: PortfolioExposureItem | undefined | null
   return row.label || marketValue.toUpperCase();
 }
 
-function formatSignedMoney(value: PortfolioDecimal, currency: string): string {
+function formatSignedMoney(value: PortfolioDecimal | null, currency: string): string {
+  if (value === null) return '--';
   const formatted = formatMoney(value.startsWith('-') ? value.slice(1) : value, currency);
   const sign = portfolioDecimalSign(value);
   return sign > 0 ? `+${formatted}` : sign < 0 ? `-${formatted}` : formatted;
@@ -2286,7 +2287,14 @@ const PortfolioPage: React.FC = () => {
         });
       }
     }
-    rows.sort((a, b) => comparePortfolioDecimals(b.marketValueBase, a.marketValueBase));
+    rows.sort((a, b) => {
+      const aDisplayValue = a.displayMarketValue ?? null;
+      const bDisplayValue = b.displayMarketValue ?? null;
+      if (aDisplayValue === null && bDisplayValue === null) return 0;
+      if (aDisplayValue === null) return 1;
+      if (bDisplayValue === null) return -1;
+      return comparePortfolioDecimals(bDisplayValue, aDisplayValue);
+    });
     return rows;
   }, [language, snapshot]);
 
@@ -2869,9 +2877,7 @@ const PortfolioPage: React.FC = () => {
   const rawTotalEquity = snapshot?.totalEquity ?? null;
   const rawTotalCash = snapshot?.totalCash ?? null;
   const rawTotalMarketValue = snapshot?.totalMarketValue ?? null;
-  const rawTotalUnrealizedPnl = positionRows.length
-    ? addPortfolioDecimals(...positionRows.map((row) => row.unrealizedPnlBase))
-    : PORTFOLIO_ZERO;
+  const rawTotalUnrealizedPnl = snapshot?.unrealizedPnl ?? null;
   const totalEquity = displaysAuthoritativeAmounts ? portfolioTruth.authoritativeTotal : null;
   const totalCash = displaysAuthoritativeAmounts ? rawTotalCash : null;
   const totalMarketValue = displaysAuthoritativeAmounts ? rawTotalMarketValue : null;
@@ -2915,12 +2921,13 @@ const PortfolioPage: React.FC = () => {
       snapshotCurrency,
     )}`
     : null;
-  const hasFxUnavailable = fxRateRows.some((item) => item.source === 'missing' || item.rate == null)
+  const hasFxUnavailable = positionRows.some((row) => row.displayFxStatus === 'unavailable')
+    || fxRateRows.some((item) => item.source === 'missing' || item.rate == null)
     || (displaysAuthoritativeAmounts && (
       (!totalEquityDisplay && rawTotalEquity !== null && portfolioDecimalSign(rawTotalEquity) !== 0)
       || (!totalCashDisplay && rawTotalCash !== null && portfolioDecimalSign(rawTotalCash) !== 0)
       || (!totalMarketValueDisplay && rawTotalMarketValue !== null && portfolioDecimalSign(rawTotalMarketValue) !== 0)
-      || (!totalUnrealizedDisplay && portfolioDecimalSign(rawTotalUnrealizedPnl) !== 0)
+      || (!totalUnrealizedDisplay && rawTotalUnrealizedPnl !== null && portfolioDecimalSign(rawTotalUnrealizedPnl) !== 0)
     ));
   const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
@@ -2949,20 +2956,29 @@ const PortfolioPage: React.FC = () => {
   const portfolioEmptyStateGuidance = language === 'zh'
     ? '添加持仓后显示'
     : 'Displays after adding holdings';
-  const formatConvertedDisplay = (value: PortfolioDecimal, nativeCurrency: string) => {
+  const formatConvertedDisplay = (value: PortfolioDecimal | null, nativeCurrency: string) => {
+    if (value === null) return fxUnavailableLabel;
     if (nativeCurrency === displayCurrency) {
       return null;
     }
     const converted = convertMoney(value, nativeCurrency);
     return converted ? `≈ ${formatMoney(converted.value, displayCurrency)}` : fxUnavailableLabel;
   };
+  const holdingDisplayValue = (row: FlatPosition) => row.displayMarketValue ?? null;
+  const holdingDisplayPnl = (row: FlatPosition) => row.displayUnrealizedPnl ?? null;
+  const holdingDisplayCurrency = (row: FlatPosition) => row.displayCurrency || row.valuationCurrency;
+  const holdingPnlTone = (row: FlatPosition) => {
+    const value = holdingDisplayPnl(row);
+    if (value === null) return 'text-[color:var(--wolfy-text-muted)]';
+    return portfolioDecimalSign(value) >= 0
+      ? 'text-[color:var(--state-success-text)]'
+      : 'text-[color:var(--state-danger-text)]';
+  };
   const analytics = snapshot?.analytics ?? null;
   const pnlSourceCurrency = analytics?.pnl.displayCurrency || snapshotCurrency;
   const realizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.realized.amount ?? snapshot?.realizedPnl ?? null) : null;
   const unrealizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.unrealized.amount ?? totalUnrealizedPnl) : null;
-  const totalPnl = displaysAuthoritativeAmounts
-    ? (analytics?.pnl.total.amount ?? addPortfolioDecimals(realizedPnl ?? PORTFOLIO_ZERO, unrealizedPnl ?? PORTFOLIO_ZERO))
-    : null;
+  const totalPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.total.amount ?? null) : null;
   const realizedPnlDisplay = convertMoney(realizedPnl, pnlSourceCurrency);
   const unrealizedPnlDisplay = convertMoney(unrealizedPnl, pnlSourceCurrency);
   const totalPnlDisplay = convertMoney(totalPnl, pnlSourceCurrency);
@@ -2999,10 +3015,10 @@ const PortfolioPage: React.FC = () => {
     if (exposureTab === 'symbol') return exposure.bySymbol || [];
     return exposure.bySector || [];
   })();
-  const formatAnalyticsMoney = (value: PortfolioDecimal, currency: string) => {
+  const formatAnalyticsMoney = (value: PortfolioDecimal, currency: string, fxStatus: PortfolioFxStatus) => {
+    if (fxStatus === 'unavailable') return fxUnavailableLabel;
     const converted = convertMoney(value, currency);
     if (converted) return formatMoney(converted.value, displayCurrency);
-    if (portfolioDecimalSign(value) === 0) return formatMoney(PORTFOLIO_ZERO, displayCurrency);
     return formatMoney(value, currency);
   };
   const renderExposureValue = (row: PortfolioExposureItem) => {
@@ -3014,7 +3030,7 @@ const PortfolioPage: React.FC = () => {
         : null;
     const display = displaySource == null
       ? (row.fxStatus === 'unavailable' ? fxUnavailableLabel : '--')
-      : formatAnalyticsMoney(displaySource, currency);
+      : formatAnalyticsMoney(displaySource, currency, row.fxStatus);
     const native = row.nativeCurrency
       && row.nativeCurrency !== displayCurrency
       && row.nativeValue != null
@@ -3037,9 +3053,13 @@ const PortfolioPage: React.FC = () => {
   const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
   const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
   const topAccount = accountExposureRows[0] || null;
-  const topPositionPercent = Number(topPosition?.percent || 0);
+  const topPositionPercent = typeof topPosition?.percent === 'number' && Number.isFinite(topPosition.percent)
+    ? topPosition.percent
+    : null;
   const concentrationLabel = !hasHoldings || !topPosition
     ? (language === 'zh' ? '待生成' : 'Pending')
+    : topPositionPercent === null
+      ? (language === 'zh' ? '估值不可用' : 'Valuation unavailable')
     : topPositionPercent < 20
       ? (language === 'zh' ? '分散' : 'Diversified')
       : topPositionPercent < 35
@@ -3047,7 +3067,9 @@ const PortfolioPage: React.FC = () => {
         : topPositionPercent < 50
           ? (language === 'zh' ? '集中' : 'Concentrated')
           : (language === 'zh' ? '高度集中' : 'Highly concentrated');
-  const concentrationToneClass = topPositionPercent >= 50
+  const concentrationToneClass = topPositionPercent === null
+    ? 'text-[color:var(--wolfy-text-muted)]'
+    : topPositionPercent >= 50
     ? 'text-[color:var(--state-danger-text)]'
     : topPositionPercent >= 35
       ? 'text-[color:var(--state-warning-text)]'
@@ -3056,11 +3078,13 @@ const PortfolioPage: React.FC = () => {
         : 'text-[color:var(--state-success-text)]';
   const concentrationDescription = !hasHoldings || !topPosition
     ? (language === 'zh' ? '完成首笔持仓后，系统会按真实持仓自动生成集中度与暴露判断。' : 'After the first holding is saved, concentration and exposure are generated from real positions automatically.')
+    : topPositionPercent === null
+      ? (language === 'zh' ? '当前持仓存在未完成估值，集中度暂不计算。' : 'Some holdings are not valued, so concentration is not calculated.')
     : language === 'zh'
       ? `最大持仓占 ${formatPercent(topPositionPercent)}，按持仓市值占比判定为${concentrationLabel}。`
       : `Largest holding is ${formatPercent(topPositionPercent)} of exposure, classified as ${concentrationLabel}.`;
   const riskHintTexts = [
-    topPositionPercent >= 35 ? (language === 'zh' ? '最大持仓偏高' : 'Largest holding elevated') : null,
+    topPositionPercent !== null && topPositionPercent >= 35 ? (language === 'zh' ? '最大持仓偏高' : 'Largest holding elevated') : null,
     Number(topCurrency?.percent || 0) >= 80 ? (language === 'zh' ? '币种集中' : 'Currency concentrated') : null,
     Number(topMarket?.percent || 0) >= 80 ? (language === 'zh' ? '市场集中' : 'Market concentrated') : null,
     hasHoldings && (analytics?.risk.holdingCount ?? positionRows.length) < 3 ? (language === 'zh' ? '持仓数量较少' : 'Few holdings') : null,
@@ -3252,6 +3276,7 @@ const PortfolioPage: React.FC = () => {
     },
   ];
   const buildHoldingTrustItems = (row: FlatPosition) => uniqueTrustItems([
+    buildTrustStateItem('fxFreshness', row.displayFxStatus, language),
     {
       key: `${row.symbol}-freshness`,
       label: positionPriceFreshnessLabel(row, language),
@@ -3264,7 +3289,7 @@ const PortfolioPage: React.FC = () => {
         variant: 'caution',
       }
       : null,
-    topPosition?.key === row.symbol && topPositionPercent >= 35
+    topPosition?.key === row.symbol && topPositionPercent !== null && topPositionPercent >= 35
       ? {
         key: `${row.symbol}-concentration`,
         label: language === 'zh' ? '集中' : 'Concentrated',
@@ -3379,6 +3404,12 @@ const PortfolioPage: React.FC = () => {
         label: language === 'zh' ? '风险待生成' : 'Risk pending',
         variant: 'neutral',
       }
+      : topPositionPercent === null
+        ? {
+          key: 'hero-risk-pending-valuation',
+          label: language === 'zh' ? '风险待确认' : 'Risk pending valuation',
+          variant: 'neutral',
+        }
       : topPositionPercent >= 50
         ? {
           key: 'hero-risk-high',
@@ -4439,7 +4470,7 @@ const PortfolioPage: React.FC = () => {
                     </div>
                     <span data-testid="portfolio-concentration-label">
                       <PillBadge
-                        variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
+                        variant={topPositionPercent !== null && topPositionPercent >= 50 ? 'danger' : topPositionPercent !== null && topPositionPercent >= 20 ? 'warning' : hasHoldings && topPositionPercent !== null ? 'success' : 'default'}
                         className={hasHoldings ? concentrationToneClass : 'text-[color:var(--wolfy-text-muted)]'}
                       >
                         {concentrationLabel}
@@ -4683,9 +4714,9 @@ const PortfolioPage: React.FC = () => {
                                         })}
                                       </p>
                                     </div>
-                                    <div className={`shrink-0 text-right font-mono text-sm ${portfolioDecimalSign(row.unrealizedPnlBase) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
-                                      {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                                      <div className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{formatPercent(row.unrealizedPnlPct)}</div>
+                                    <div className={`shrink-0 text-right font-mono text-sm ${holdingPnlTone(row)}`}>
+                                      {formatSignedMoney(holdingDisplayPnl(row), holdingDisplayCurrency(row) || row.currency || 'USD')}
+                                      <div className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{formatPercent(holdingDisplayPnl(row) === null ? null : row.unrealizedPnlPct)}</div>
                                     </div>
                                   </div>
                                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
@@ -4699,9 +4730,9 @@ const PortfolioPage: React.FC = () => {
                                     </div>
                                     <div className="col-span-2 min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
                                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '市值' : 'Market Value'}</p>
-                                      <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
-                                      {row.valuationCurrency !== displayCurrency ? (
-                                        <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</p>
+                                      <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatMoney(holdingDisplayValue(row), holdingDisplayCurrency(row))}</p>
+                                      {holdingDisplayCurrency(row) !== displayCurrency ? (
+                                        <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(holdingDisplayValue(row), holdingDisplayCurrency(row))}</p>
                                       ) : null}
                                       <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-secondary)]'}`}>
                                         {row.priceAsOf
@@ -4771,17 +4802,17 @@ const PortfolioPage: React.FC = () => {
                                   <td className="px-3 py-2 font-mono">{formatPortfolioDecimal(row.quantity)}</td>
                                   <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
                                   <td className="px-3 py-2 font-mono">
-                                    {formatMoney(row.marketValueBase, row.valuationCurrency)}
-                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                    {formatMoney(holdingDisplayValue(row), holdingDisplayCurrency(row) || row.currency || 'USD')}
+                                    {holdingDisplayCurrency(row) !== displayCurrency ? <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(holdingDisplayValue(row), holdingDisplayCurrency(row) || row.currency || 'USD')}</div> : null}
                                     <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-muted)]'}`}>
                                       {row.priceAsOf
                                         ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
                                         : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
                                     </div>
                                   </td>
-                                  <td className={`px-3 py-2 font-mono ${portfolioDecimalSign(row.unrealizedPnlBase) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
-                                    {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                                    <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatPercent(row.unrealizedPnlPct)}</div>
+                                  <td className={`px-3 py-2 font-mono ${holdingPnlTone(row)}`}>
+                                    {formatSignedMoney(holdingDisplayPnl(row), holdingDisplayCurrency(row) || row.currency || 'USD')}
+                                    <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatPercent(holdingDisplayPnl(row) === null ? null : row.unrealizedPnlPct)}</div>
                                   </td>
                                   <td className="px-3 py-2">
                                     {rowTrustItems.length ? (
