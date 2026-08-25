@@ -126,7 +126,7 @@ class PortfolioHistoryClient:
         total_equity: Decimal,
         unrealized_pnl: Decimal,
         realized_pnl: Decimal,
-        payload: str = '{"secret": "SNAPSHOT_SECRET"}',
+        payload: str = '{"valuation": {"state": "available"}, "performance": {"calculation_state": "available"}, "secret": "SNAPSHOT_SECRET"}',
     ) -> None:
         with self.db.get_session() as session:
             session.add(
@@ -201,7 +201,7 @@ def test_history_returns_stored_snapshots_with_date_filter_limit_and_coverage() 
             total_equity=Decimal("1999998"),
             unrealized_pnl=Decimal("999999"),
             realized_pnl=Decimal("999999"),
-            payload='{"secret": "OTHER_OWNER_SNAPSHOT_SECRET"}',
+            payload='{"valuation": {"state": "available"}, "performance": {"calculation_state": "available"}, "secret": "OTHER_OWNER_SNAPSHOT_SECRET"}',
         )
         before_count = ctx.snapshot_count()
 

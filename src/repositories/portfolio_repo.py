@@ -1907,6 +1907,11 @@ class PortfolioRepository:
             return None
         if performance.get("calculation_state") != "available":
             return None
+        valuation = payload.get("valuation")
+        if not isinstance(valuation, dict) or valuation.get("state") != "available":
+            return None
+        if row.total_equity is None:
+            return None
         cash_flows = performance.get("cash_flows")
         if not isinstance(cash_flows, dict):
             return None
@@ -1920,7 +1925,7 @@ class PortfolioRepository:
                 kind="storage",
             )
             total_equity = parse_portfolio_decimal(
-                Decimal("0") if row.total_equity is None else row.total_equity,
+                row.total_equity,
                 kind="storage",
             )
         except (TypeError, ValueError):

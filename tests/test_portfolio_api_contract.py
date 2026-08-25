@@ -527,6 +527,69 @@ class PortfolioExactWireContractTestCase(unittest.TestCase):
                 }
             )
 
+    def test_snapshot_schema_cannot_reexpose_non_authoritative_numeric_totals(self) -> None:
+        payload = {
+            "as_of": "2026-01-01",
+            "cost_method": "fifo",
+            "currency": "CNY",
+            "account_count": 1,
+            "total_cash": "100.00",
+            "total_market_value": "200.00",
+            "total_equity": "300.00",
+            "realized_pnl": "10.00",
+            "unrealized_pnl": "20.00",
+            "fee_total": "1.00",
+            "tax_total": "2.00",
+            "fx_stale": False,
+            "portfolio_truth": {
+                "state": "valuation_unavailable",
+                "account_state": "holdings_present",
+                "valuation_state": "unavailable",
+                "value_semantics": "unavailable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+            "accounts": [
+                {
+                    "account_id": 1,
+                    "account_name": "CNY",
+                    "market": "us",
+                    "base_currency": "CNY",
+                    "as_of": "2026-01-01",
+                    "cost_method": "fifo",
+                    "total_cash": "100.00",
+                    "total_market_value": "200.00",
+                    "total_equity": "300.00",
+                    "realized_pnl": "10.00",
+                    "unrealized_pnl": "20.00",
+                    "fee_total": "1.00",
+                    "tax_total": "2.00",
+                    "fx_stale": False,
+                    "availability": {
+                        "valuation": {"state": "unavailable"},
+                        "performance": {"calculation_state": "unavailable"},
+                    },
+                    "positions": [],
+                }
+            ],
+        }
+
+        snapshot = PortfolioSnapshotResponse(**payload)
+        public = snapshot.model_dump(mode="json")
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertIsNone(public[field_name])
+            self.assertIsNone(public["accounts"][0][field_name])
+
 
 class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -658,6 +721,16 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             "account_id": None,
             "cost_method": "fifo",
             "currency": "USD",
+            "portfolio_truth": {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            },
             "account_count": account_count,
             "data_status": data_status,
             "calculation_status": (

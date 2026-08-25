@@ -119,6 +119,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                 f"\"totalcashvalue\": {exact_money}, "
                 "\"stockmarketvalue\": 0, "
                 f"\"netliquidation\": {exact_money}, "
+                "\"realizedpnl\": 0, "
                 "\"unrealizedpnl\": 0"
                 "}"
             ),
@@ -222,6 +223,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                 "totalcashvalue": {"amount": "5000"},
                 "stockmarketvalue": {"amount": "5824" if multi_market else "1600"},
                 "netliquidation": {"amount": "10824" if multi_market else "6600"},
+                "realizedpnl": {"amount": "0"},
                 "unrealizedpnl": {"amount": "228" if multi_market else "100"},
             },
             f"/v1/api/portfolio/{account_ref}/ledger": {"USD": {"cashbalance": "5000"}},
@@ -244,7 +246,9 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             account_row.pop("currency", None)
         else:
             account_row["currency"] = account_currency
-        transport.responses[f"/v1/api/portfolio/{account_ref}/summary"] = {}
+        transport.responses[f"/v1/api/portfolio/{account_ref}/summary"] = {
+            "realizedpnl": {"amount": "0"},
+        }
         transport.responses[f"/v1/api/portfolio/{account_ref}/ledger"] = {
             ledger_currency: {"cashbalance": "5000"}
         }
@@ -318,6 +322,51 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         self.assertFalse(fx_stale)
         self.assertEqual(warnings, [])
         self.assertEqual(markets, ["us"])
+
+    def test_position_normalization_rejects_missing_valuation_sources_instead_of_zero(self) -> None:
+        portfolio_service = MagicMock()
+        portfolio_service.convert_amount_exact.side_effect = lambda *, amount, **_kwargs: (
+            Decimal(amount),
+            False,
+            "identity",
+        )
+        sync_service = PortfolioIbkrSyncService(portfolio_service=portfolio_service)
+
+        missing_market_and_price = {
+            "contractDesc": "AAPL",
+            "position": "1",
+            "avgCost": "100",
+            "unrealizedPnl": "0",
+            "currency": "USD",
+            "assetClass": "STK",
+            "listingExchange": "NASDAQ",
+        }
+        with self.assertRaises(PortfolioIbkrSyncError) as market_ctx:
+            sync_service._normalize_positions(
+                positions=[missing_market_and_price],
+                base_currency="USD",
+                as_of_date=date(2026, 1, 3),
+            )
+        self.assertEqual(market_ctx.exception.code, "ibkr_valuation_unavailable")
+        self.assertIn("市值和价格来源", str(market_ctx.exception))
+
+        missing_cost_and_pnl = {
+            "contractDesc": "AAPL",
+            "position": "1",
+            "mktPrice": "100",
+            "mktValue": "100",
+            "currency": "USD",
+            "assetClass": "STK",
+            "listingExchange": "NASDAQ",
+        }
+        with self.assertRaises(PortfolioIbkrSyncError) as pnl_ctx:
+            sync_service._normalize_positions(
+                positions=[missing_cost_and_pnl],
+                base_currency="USD",
+                as_of_date=date(2026, 1, 3),
+            )
+        self.assertEqual(pnl_ctx.exception.code, "ibkr_valuation_unavailable")
+        self.assertIn("成本和未实现盈亏来源", str(pnl_ctx.exception))
 
     def test_position_normalization_rounds_derived_market_price_before_strict_parse(self) -> None:
         portfolio_service = MagicMock()
@@ -442,6 +491,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             "totalcashvalue": {"amount": "5000", "currency": " usd "},
             "stockmarketvalue": {"amount": "1600", "currency": "USD"},
             "netliquidation": {"amount": "6600", "currency": "USD"},
+            "realizedpnl": {"amount": "0", "currency": "USD"},
         }
 
         result = PortfolioIbkrSyncService(
@@ -736,6 +786,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": exact_money},
                     "stockmarketvalue": {"amount": "0.00"},
                     "netliquidation": {"amount": exact_money},
+                    "realizedpnl": {"amount": "0.00"},
                     "unrealizedpnl": {"amount": "0.00"},
                 },
                 "/v1/api/portfolio/U-EXACT/ledger": {
@@ -914,6 +965,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "5000"},
                     "stockmarketvalue": {"amount": "0"},
                     "netliquidation": {"amount": "5000"},
+                    "realizedpnl": {"amount": "0"},
                 },
                 "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "5000"}},
                 "/v1/api/portfolio/U1234567/positions/0": [],
@@ -935,6 +987,50 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         )
         self.assertAlmostEqual(snapshot["accounts"][0]["total_cash"], 5000.0, places=6)
         self.assertEqual(snapshot["accounts"][0]["positions"], [])
+
+    def test_read_only_sync_rejects_missing_account_valuation_sources_instead_of_zero(self) -> None:
+        account = self.service.create_account(name="IBKR Missing Totals", broker="IBKR", market="us", base_currency="USD")
+        cases = [
+            (
+                {
+                    "netliquidation": {"amount": "5000"},
+                    "realizedpnl": {"amount": "0"},
+                },
+                {},
+                "总现金来源",
+            ),
+            (
+                {
+                    "totalcashvalue": {"amount": "5000"},
+                    "netliquidation": {"amount": "5000"},
+                    "realizedpnl": {"amount": "0"},
+                },
+                {"USD": {"cashbalance": "5000"}},
+                "总市值来源",
+            ),
+        ]
+        for summary, ledger, expected_fragment in cases:
+            with self.subTest(expected_fragment=expected_fragment):
+                transport = FakeIbkrTransport(
+                    {
+                        "/v1/api/portfolio/accounts": [
+                            {"accountId": "U-MISSING-TOTALS", "displayName": "Missing Totals", "currency": "USD"}
+                        ],
+                        "/v1/api/portfolio/U-MISSING-TOTALS/summary": summary,
+                        "/v1/api/portfolio/U-MISSING-TOTALS/ledger": ledger,
+                        "/v1/api/portfolio/U-MISSING-TOTALS/positions/0": [],
+                    }
+                )
+                with self.assertRaises(PortfolioIbkrSyncError) as ctx:
+                    PortfolioIbkrSyncService(
+                        portfolio_service=self.service,
+                        transport=transport,
+                    ).sync_read_only_account_state(
+                        account_id=account["id"],
+                        session_token="unit-test-session",
+                    )
+                self.assertEqual(ctx.exception.code, "ibkr_valuation_unavailable")
+                self.assertIn(expected_fragment, str(ctx.exception))
 
     def test_read_only_sync_coexists_with_existing_ibkr_file_import(self) -> None:
         account = self.service.create_account(name="IBKR History", broker="IBKR", market="us", base_currency="USD")
@@ -1157,6 +1253,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "5000"},
                     "stockmarketvalue": {"amount": "1600"},
                     "netliquidation": {"amount": "6600"},
+                    "realizedpnl": {"amount": "0"},
                     "unrealizedpnl": {"amount": "100"},
                 },
                 "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "5000"}},
@@ -1180,6 +1277,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "2000"},
                     "stockmarketvalue": {"amount": "2000"},
                     "netliquidation": {"amount": "4000"},
+                    "realizedpnl": {"amount": "0"},
                     "unrealizedpnl": {"amount": "100"},
                 },
                 "/v1/api/portfolio/U7654321/ledger": {"USD": {"cashbalance": "2000"}},
@@ -1232,6 +1330,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "4500"},
                     "stockmarketvalue": {"amount": "5450"},
                     "netliquidation": {"amount": "9950"},
+                    "realizedpnl": {"amount": "0"},
                     "unrealizedpnl": {"amount": "250"},
                 },
                 "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "4500"}},
@@ -1332,6 +1431,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "5000"},
                     "stockmarketvalue": {"amount": "1600"},
                     "netliquidation": {"amount": "6600"},
+                    "realizedpnl": {"amount": "0"},
                     "unrealizedpnl": {"amount": "100"},
                 },
                 "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "5000"}},
@@ -1380,6 +1480,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                     "totalcashvalue": {"amount": "4500"},
                     "stockmarketvalue": {"amount": "5450"},
                     "netliquidation": {"amount": "9950"},
+                    "realizedpnl": {"amount": "0"},
                     "unrealizedpnl": {"amount": "250"},
                 },
                 "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "4500"}},

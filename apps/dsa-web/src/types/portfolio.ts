@@ -104,8 +104,8 @@ export interface PortfolioPositionItem {
   isPriceFallback?: boolean | null;
   priceFallbackReason?: string | null;
   valuationConfidence?: number | null;
-  marketValueBase: PortfolioDecimal;
-  unrealizedPnlBase: PortfolioDecimal;
+  marketValueBase: PortfolioDecimal | null;
+  unrealizedPnlBase: PortfolioDecimal | null;
   valuationCurrency: string;
   costBasisNative?: PortfolioDecimal | null;
   marketValueNative?: PortfolioDecimal | null;
@@ -115,6 +115,8 @@ export interface PortfolioPositionItem {
   displayUnrealizedPnl?: PortfolioDecimal | null;
   displayCurrency?: string | null;
   displayFxStatus?: PortfolioFxStatus | null;
+  valuationStatus?: 'available' | 'stale' | 'unavailable' | null;
+  valuationUnavailableReason?: string | null;
 }
 
 export interface PortfolioAccountSnapshot {
@@ -126,13 +128,13 @@ export interface PortfolioAccountSnapshot {
   baseCurrency: string;
   asOf: string;
   costMethod: PortfolioCostMethod;
-  totalCash: PortfolioDecimal;
-  totalMarketValue: PortfolioDecimal;
-  totalEquity: PortfolioDecimal;
-  realizedPnl: PortfolioDecimal;
-  unrealizedPnl: PortfolioDecimal;
-  feeTotal: PortfolioDecimal;
-  taxTotal: PortfolioDecimal;
+  totalCash: PortfolioDecimal | null;
+  totalMarketValue: PortfolioDecimal | null;
+  totalEquity: PortfolioDecimal | null;
+  realizedPnl: PortfolioDecimal | null;
+  unrealizedPnl: PortfolioDecimal | null;
+  feeTotal: PortfolioDecimal | null;
+  taxTotal: PortfolioDecimal | null;
   fxStale: boolean;
   positions: PortfolioPositionItem[];
 }
@@ -162,7 +164,7 @@ export interface PortfolioLiveFxRateResponse {
 export type PortfolioFxStatus = 'live' | 'stale' | 'unavailable';
 
 export interface PortfolioPnlMetric {
-  amount: PortfolioDecimal;
+  amount: PortfolioDecimal | null;
   amountDisplay?: string | null;
   percent?: number | null;
   currency: string;
@@ -179,10 +181,10 @@ export interface PortfolioPnlSummary {
 export interface PortfolioExposureItem {
   key: string;
   label: string;
-  marketValue: PortfolioDecimal;
-  displayValue: PortfolioDecimal;
+  marketValue: PortfolioDecimal | null;
+  displayValue: PortfolioDecimal | null;
   displayCurrency: string;
-  percent: number;
+  percent: number | null;
   fxStatus: PortfolioFxStatus;
   nativeValue?: PortfolioDecimal | null;
   nativeCurrency?: string | null;
@@ -522,13 +524,13 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
   costMethod: PortfolioCostMethod;
   currency: string;
   accountCount: number;
-  totalCash: PortfolioDecimal;
-  totalMarketValue: PortfolioDecimal;
-  totalEquity: PortfolioDecimal;
-  realizedPnl: PortfolioDecimal;
-  unrealizedPnl: PortfolioDecimal;
-  feeTotal: PortfolioDecimal;
-  taxTotal: PortfolioDecimal;
+  totalCash: PortfolioDecimal | null;
+  totalMarketValue: PortfolioDecimal | null;
+  totalEquity: PortfolioDecimal | null;
+  realizedPnl: PortfolioDecimal | null;
+  unrealizedPnl: PortfolioDecimal | null;
+  feeTotal: PortfolioDecimal | null;
+  taxTotal: PortfolioDecimal | null;
   fxStale: boolean;
   portfolioTruth: PortfolioTruth;
   fxRates?: PortfolioFxRateItem[];
@@ -541,25 +543,27 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
 
 export interface PortfolioConcentrationItem {
   symbol: string;
-  marketValueBase: PortfolioDecimal;
-  weightPct: number;
-  isAlert: boolean;
+  marketValueBase: PortfolioDecimal | null;
+  weightPct: number | null;
+  isAlert: boolean | null;
 }
 
 export interface PortfolioSectorConcentrationItem {
   sector: string;
-  marketValueBase: PortfolioDecimal;
-  weightPct: number;
+  marketValueBase: PortfolioDecimal | null;
+  weightPct: number | null;
   symbolCount: number;
-  isAlert: boolean;
+  isAlert: boolean | null;
 }
 
 export interface PortfolioDrawdownBlock {
   seriesPoints: number;
-  maxDrawdownPct: number;
-  currentDrawdownPct: number;
-  alert: boolean;
+  maxDrawdownPct: number | null;
+  currentDrawdownPct: number | null;
+  alert: boolean | null;
   fxStale: boolean;
+  calculationStatus: 'available' | 'unavailable' | 'not_evaluated';
+  unavailableReason?: string | null;
 }
 
 export interface PortfolioStopLossItem {
@@ -577,17 +581,18 @@ export interface PortfolioRiskResponse extends PortfolioEvidenceMetadata, Portfo
   accountId?: number | null;
   costMethod: PortfolioCostMethod;
   currency: string;
+  portfolioTruth: PortfolioTruth;
   thresholds: Record<string, number>;
   concentration: {
-    totalMarketValue: PortfolioDecimal;
-    topWeightPct: number;
-    alert: boolean;
+    totalMarketValue: PortfolioDecimal | null;
+    topWeightPct: number | null;
+    alert: boolean | null;
     topPositions: PortfolioConcentrationItem[];
   };
   sectorConcentration: {
-    totalMarketValue: PortfolioDecimal;
-    topWeightPct: number;
-    alert: boolean;
+    totalMarketValue: PortfolioDecimal | null;
+    topWeightPct: number | null;
+    alert: boolean | null;
     topSectors: PortfolioSectorConcentrationItem[];
     coverage: Record<string, number>;
     errors: string[];

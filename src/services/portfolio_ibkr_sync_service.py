@@ -607,10 +607,20 @@ class PortfolioIbkrSyncService:
 
         total_cash = self._summary_amount(summary, base_currency, "totalcashvalue", "settledcash")
         if total_cash is None:
+            if not cash_rows:
+                raise PortfolioIbkrSyncError(
+                    code="ibkr_valuation_unavailable",
+                    message="IBKR 摘要和现金账本都缺少总现金来源，当前同步无法证明账户现金，已拒绝整次同步。",
+                )
             total_cash = cash_total_base
             warnings.append("IBKR 摘要中缺少总现金字段，已根据 ledger 明细回退计算。")
         total_market_value = self._summary_amount(summary, base_currency, "stockmarketvalue", "netstockmarketvalue")
         if total_market_value is None:
+            if not position_rows:
+                raise PortfolioIbkrSyncError(
+                    code="ibkr_valuation_unavailable",
+                    message="IBKR 摘要和持仓明细都缺少总市值来源，当前同步无法证明账户估值，已拒绝整次同步。",
+                )
             total_market_value = position_total_base
             warnings.append("IBKR 摘要中缺少持仓市值字段，已根据持仓明细回退计算。")
         total_equity = self._summary_amount(summary, base_currency, "netliquidation")
@@ -619,7 +629,10 @@ class PortfolioIbkrSyncService:
             warnings.append("IBKR 摘要中缺少总权益字段，已按现金加市值回退计算。")
         realized_pnl = self._summary_amount(summary, base_currency, "realizedpnl")
         if realized_pnl is None:
-            realized_pnl = Decimal("0")
+            raise PortfolioIbkrSyncError(
+                code="ibkr_valuation_unavailable",
+                message="IBKR 摘要缺少已实现盈亏来源，当前同步无法证明 P&L，已拒绝整次同步。",
+            )
         unrealized_pnl = self._summary_amount(summary, base_currency, "unrealizedpnl")
         if unrealized_pnl is None:
             unrealized_pnl = unrealized_total_base
@@ -769,18 +782,39 @@ class PortfolioIbkrSyncService:
             market = identity.market
 
             currency = self._require_ibkr_currency(item.get("currency"), scope="position")
-            avg_cost = self._to_decimal(item.get("avgCost")) or self._to_decimal(item.get("avgPrice")) or Decimal("0")
-            last_price = self._to_decimal(item.get("mktPrice")) or self._to_decimal(item.get("marketPrice")) or Decimal("0")
-            market_value_local = self._to_decimal(item.get("mktValue")) or self._to_decimal(item.get("marketValue"))
+            avg_cost = self._pick_first_numeric(item, "avgCost", "avgPrice")
+            last_price = self._pick_first_numeric(item, "mktPrice", "marketPrice")
+            market_value_local = self._pick_first_numeric(item, "mktValue", "marketValue")
+            unrealized_local = self._pick_first_numeric(item, "unrealizedPnl", "upl")
+            if market_value_local is None and last_price is None:
+                raise PortfolioIbkrSyncError(
+                    code="ibkr_valuation_unavailable",
+                    message=f"IBKR 持仓 {symbol} 缺少市值和价格来源，当前同步无法证明估值，已拒绝整次同步。",
+                )
             if market_value_local is None:
-                market_value_local = quantity * (last_price or avg_cost)
-            if last_price <= 0 and quantity != 0:
+                market_value_local = quantity * last_price
+            if last_price is None or (last_price == 0 and market_value_local != 0):
+                # A zero price paired with a nonzero observed market value is an
+                # internally inconsistent provider row, so derive the price from
+                # the observed value instead of turning the holding into zero.
                 last_price = round_portfolio_decimal_value(
                     market_value_local / quantity,
                     kind="price",
                     market=market,
                 )
-            unrealized_local = self._to_decimal(item.get("unrealizedPnl")) or self._to_decimal(item.get("upl")) or Decimal("0")
+            if avg_cost is None and unrealized_local is None:
+                raise PortfolioIbkrSyncError(
+                    code="ibkr_valuation_unavailable",
+                    message=f"IBKR 持仓 {symbol} 缺少成本和未实现盈亏来源，当前同步无法证明 P&L，已拒绝整次同步。",
+                )
+            if avg_cost is None:
+                avg_cost = round_portfolio_decimal_value(
+                    (market_value_local - unrealized_local) / quantity,
+                    kind="price",
+                    market=market,
+                )
+            if unrealized_local is None:
+                unrealized_local = market_value_local - (quantity * avg_cost)
 
             market_value_base, stale_mv = self._convert_required_amount(
                 amount=market_value_local,

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from api.v1.schemas.portfolio import PortfolioTransportDecimal
 
 
 class _AdminPortfolioModel(BaseModel):
@@ -13,7 +15,7 @@ class _AdminPortfolioModel(BaseModel):
 
 
 class AdminMoneyAmount(_AdminPortfolioModel):
-    amount: float = 0.0
+    amount: Optional[PortfolioTransportDecimal] = None
     currency: Optional[str] = None
 
 
@@ -48,7 +50,8 @@ class AdminBrokerSyncSummary(_AdminPortfolioModel):
     connections: int = 0
     statuses: dict[str, int] = Field(default_factory=dict)
     last_sync_at: Optional[str] = Field(default=None, alias="lastSyncAt")
-    fx_stale: bool = Field(default=False, alias="fxStale")
+    fx_stale: Optional[bool] = Field(default=None, alias="fxStale")
+    fx_freshness_state: Optional[str] = Field(default=None, alias="fxFreshnessState")
 
 
 class AdminLedgerCounts(_AdminPortfolioModel):
@@ -59,8 +62,12 @@ class AdminLedgerCounts(_AdminPortfolioModel):
 
 class AdminPortfolioSummaryResponse(_AdminPortfolioModel):
     user_id: str = Field(alias="userId")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    cost_method: Optional[str] = Field(default=None, alias="costMethod")
     account_count: int = Field(alias="accountCount")
     active_account_count: int = Field(alias="activeAccountCount")
+    valuation_scope: str = Field(alias="valuationScope")
+    valuation_account_count: int = Field(alias="valuationAccountCount")
     base_currencies: list[str] = Field(default_factory=list, alias="baseCurrencies")
     accounts: list[AdminPortfolioAccountItem] = Field(default_factory=list)
     total_cash: AdminMoneyAmount = Field(alias="totalCash")
@@ -70,6 +77,19 @@ class AdminPortfolioSummaryResponse(_AdminPortfolioModel):
     unrealized_pnl: AdminMoneyAmount = Field(alias="unrealizedPnl")
     ledger_counts: AdminLedgerCounts = Field(alias="ledgerCounts")
     broker_sync_summary: AdminBrokerSyncSummary = Field(alias="brokerSyncSummary")
+    valuation_currency: Optional[str] = Field(default=None, alias="valuationCurrency")
+    portfolio_truth: dict[str, Any] = Field(default_factory=dict, alias="portfolioTruth")
+    valuation: dict[str, Any] = Field(default_factory=dict)
+    availability: dict[str, Any] = Field(default_factory=dict)
+    fx_lineage: dict[str, Any] = Field(default_factory=dict, alias="fxLineage")
+    valuation_snapshot_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationSnapshotLineage")
+    valuation_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationLineage")
+    data_status: Optional[str] = Field(default=None, alias="dataStatus")
+    calculation_status: Optional[str] = Field(default=None, alias="calculationStatus")
+    fx_stale: bool = Field(default=False, alias="fxStale")
+    fx_freshness_state: Optional[str] = Field(default=None, alias="fxFreshnessState")
+    valuation_lineage_state: Optional[str] = Field(default=None, alias="valuationLineageState")
+    unvalued_holding_count: int = Field(default=0, alias="unvaluedHoldingCount")
     limitations: list[str] = Field(default_factory=list)
 
 
@@ -81,13 +101,17 @@ class AdminHoldingItem(_AdminPortfolioModel):
     symbol: str
     market: Optional[str] = None
     currency: Optional[str] = None
-    quantity: float
-    avg_cost: float = Field(alias="avgCost")
-    last_price: float = Field(alias="lastPrice")
-    market_value_base: float = Field(alias="marketValueBase")
-    unrealized_pnl_base: float = Field(alias="unrealizedPnlBase")
+    quantity: PortfolioTransportDecimal
+    avg_cost: PortfolioTransportDecimal = Field(alias="avgCost")
+    last_price: PortfolioTransportDecimal = Field(alias="lastPrice")
+    market_value_base: Optional[PortfolioTransportDecimal] = Field(default=None, alias="marketValueBase")
+    unrealized_pnl_base: Optional[PortfolioTransportDecimal] = Field(default=None, alias="unrealizedPnlBase")
     valuation_currency: Optional[str] = Field(default=None, alias="valuationCurrency")
     fx_status: str = Field(alias="fxStatus")
+    valuation_status: str = Field(default="unavailable", alias="valuationStatus")
+    valuation_unavailable_reason: Optional[str] = Field(default=None, alias="valuationUnavailableReason")
+    display_market_value: Optional[PortfolioTransportDecimal] = Field(default=None, alias="displayMarketValue")
+    display_unrealized_pnl: Optional[PortfolioTransportDecimal] = Field(default=None, alias="displayUnrealizedPnl")
     updated_at: Optional[str] = Field(default=None, alias="updatedAt")
 
 
@@ -98,6 +122,21 @@ class AdminHoldingListResponse(_AdminPortfolioModel):
     offset: int
     has_more: bool = Field(default=False, alias="hasMore")
     limitations: list[str] = Field(default_factory=list)
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    cost_method: Optional[str] = Field(default=None, alias="costMethod")
+    valuation_currency: Optional[str] = Field(default=None, alias="valuationCurrency")
+    portfolio_truth: dict[str, Any] = Field(default_factory=dict, alias="portfolioTruth")
+    valuation: dict[str, Any] = Field(default_factory=dict)
+    availability: dict[str, Any] = Field(default_factory=dict)
+    fx_lineage: dict[str, Any] = Field(default_factory=dict, alias="fxLineage")
+    valuation_snapshot_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationSnapshotLineage")
+    valuation_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationLineage")
+    data_status: Optional[str] = Field(default=None, alias="dataStatus")
+    calculation_status: Optional[str] = Field(default=None, alias="calculationStatus")
+    fx_stale: bool = Field(default=False, alias="fxStale")
+    fx_freshness_state: Optional[str] = Field(default=None, alias="fxFreshnessState")
+    valuation_lineage_state: Optional[str] = Field(default=None, alias="valuationLineageState")
+    unvalued_holding_count: int = Field(default=0, alias="unvaluedHoldingCount")
 
 
 class AdminPortfolioActivityItem(_AdminPortfolioModel):
@@ -139,14 +178,29 @@ class AdminPortfolioSyncState(_AdminPortfolioModel):
     total_equity: AdminMoneyAmount = Field(alias="totalEquity")
     realized_pnl: AdminMoneyAmount = Field(alias="realizedPnl")
     unrealized_pnl: AdminMoneyAmount = Field(alias="unrealizedPnl")
-    fx_stale: bool = Field(default=False, alias="fxStale")
+    fx_stale: Optional[bool] = Field(default=None, alias="fxStale")
 
 
 class AdminPortfolioAccountDetailResponse(_AdminPortfolioModel):
     user_id: str = Field(alias="userId")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    cost_method: Optional[str] = Field(default=None, alias="costMethod")
     account: AdminPortfolioAccountItem
     broker_connections: list[AdminPortfolioBrokerConnectionItem] = Field(default_factory=list, alias="brokerConnections")
     sync_state: Optional[AdminPortfolioSyncState] = Field(default=None, alias="syncState")
     holdings: AdminHoldingListResponse
     activity: AdminPortfolioActivityResponse
+    valuation_currency: Optional[str] = Field(default=None, alias="valuationCurrency")
+    portfolio_truth: dict[str, Any] = Field(default_factory=dict, alias="portfolioTruth")
+    valuation: dict[str, Any] = Field(default_factory=dict)
+    availability: dict[str, Any] = Field(default_factory=dict)
+    fx_lineage: dict[str, Any] = Field(default_factory=dict, alias="fxLineage")
+    valuation_snapshot_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationSnapshotLineage")
+    valuation_lineage: dict[str, Any] = Field(default_factory=dict, alias="valuationLineage")
+    data_status: Optional[str] = Field(default=None, alias="dataStatus")
+    calculation_status: Optional[str] = Field(default=None, alias="calculationStatus")
+    fx_stale: bool = Field(default=False, alias="fxStale")
+    fx_freshness_state: Optional[str] = Field(default=None, alias="fxFreshnessState")
+    valuation_lineage_state: Optional[str] = Field(default=None, alias="valuationLineageState")
+    unvalued_holding_count: int = Field(default=0, alias="unvaluedHoldingCount")
     limitations: list[str] = Field(default_factory=list)

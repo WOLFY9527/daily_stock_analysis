@@ -51,6 +51,8 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatCurrency, formatDateTime, formatNumber } from '../utils/format';
+import { portfolioDecimalSign } from '../utils/portfolioDecimal';
+import type { PortfolioDecimal } from '../types/portfolio';
 
 type PageMode = 'directory' | 'detail' | 'activity';
 type DetailTabKey = 'detail' | 'portfolio' | 'security';
@@ -202,12 +204,43 @@ function tabFromSearch(search: string): DetailTabKey {
 }
 
 function formatMoney(value?: AdminMoneyAmount | null): string {
-  if (!value) return '--';
+  if (!value || value.amount === null) return '--';
   return formatCurrency(value.amount, { currency: value.currency || 'USD' });
 }
 
-function compactNumber(value?: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+function moneyTone(value?: AdminMoneyAmount | null): 'neutral' | 'good' | 'danger' {
+  if (!value || value.amount === null) return 'neutral';
+  return portfolioDecimalSign(value.amount) < 0 ? 'danger' : 'good';
+}
+
+function holdingMoney(value: PortfolioDecimal | null | undefined, currency?: string | null): string {
+  if (value === null) return '--';
+  if (value === undefined) return '--';
+  return formatCurrency(value, { currency: currency || 'USD' });
+}
+
+function holdingPnlClass(value: PortfolioDecimal | null | undefined): string {
+  if (value === null || value === undefined) return 'text-[color:var(--wolfy-text-muted)]';
+  return portfolioDecimalSign(value) < 0
+    ? 'text-[color:var(--wolfy-market-down)]'
+    : 'text-[color:var(--wolfy-market-up)]';
+}
+
+function valuationStateLabel(value?: string | null): string {
+  if (value === 'fully_valued_nonzero' || value === 'fully_valued_zero') return '估值完整';
+  if (value === 'valuation_partial') return '估值部分可用';
+  if (value === 'valuation_unavailable') return '估值不可用';
+  if (value === 'account_no_holdings') return '无持仓';
+  if (value === 'no_account') return '无账户';
+  return '估值状态未知';
+}
+
+function valuationScopeLabel(scope: string, accountCount: number): string {
+  return scope === 'active_accounts_only' ? `活跃账户 ${accountCount}` : '范围未知';
+}
+
+function compactNumber(value?: unknown): string {
+  if (value === null || value === undefined) return '--';
   return formatNumber(value, 2);
 }
 
@@ -629,11 +662,14 @@ const PortfolioTab: React.FC<{
                 <TerminalMetric label="现金" value={formatMoney(summary.totalCash)} valueClassName={cn('text-xl font-semibold', metricValueTone('neutral'))} />
                 <TerminalMetric label="市值" value={formatMoney(summary.totalMarketValue)} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
                 <TerminalMetric label="权益" value={formatMoney(summary.totalEquity)} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
-                <TerminalMetric label="已实现 P&L" value={formatMoney(summary.realizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(summary.realizedPnl.amount >= 0 ? 'good' : 'danger'))} />
-                <TerminalMetric label="未实现 P&L" value={formatMoney(summary.unrealizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(summary.unrealizedPnl.amount >= 0 ? 'good' : 'danger'))} />
+                <TerminalMetric label="已实现 P&L" value={formatMoney(summary.realizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(moneyTone(summary.realizedPnl)))} />
+                <TerminalMetric label="未实现 P&L" value={formatMoney(summary.unrealizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(moneyTone(summary.unrealizedPnl)))} />
                 <TerminalMetric label="交易/现金/公司行动" value={`${summary.ledgerCounts.trades}/${summary.ledgerCounts.cashEvents}/${summary.ledgerCounts.corporateActions}`} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
                 <TerminalMetric label="币种" value={summary.baseCurrencies.join(' / ') || '--'} valueClassName={cn('text-xl font-semibold', metricValueTone('neutral'))} />
               </div>
+              <TerminalNotice variant={summary.unvaluedHoldingCount > 0 || summary.calculationStatus !== 'ready' ? 'caution' : 'info'} className="mt-5">
+                canonical 估值：{valuationStateLabel(typeof summary.portfolioTruth.state === 'string' ? summary.portfolioTruth.state : summary.dataStatus)} · 范围 {valuationScopeLabel(summary.valuationScope, summary.valuationAccountCount)} · 币种 {summary.valuationCurrency || '--'} · FX {summary.fxFreshnessState || (summary.fxStale ? 'stale' : 'unknown')} · 未估值持仓 {summary.unvaluedHoldingCount}
+              </TerminalNotice>
               {summary.accountCount === 0 ? (
                 <TerminalEmptyState className="mt-5" title="该用户暂无组合账户" />
               ) : (
@@ -660,7 +696,7 @@ const PortfolioTab: React.FC<{
                 </div>
               )}
               <TerminalNotice variant="info" className="mt-5">
-                经纪商同步摘要：{summary.brokerSyncSummary.connections} 条连接 · 最近同步 {formatDate(summary.brokerSyncSummary.lastSyncAt)} · 汇率 {summary.brokerSyncSummary.fxStale ? '过期' : '最新'}
+                经纪商同步摘要：{summary.brokerSyncSummary.connections} 条连接 · 最近同步 {formatDate(summary.brokerSyncSummary.lastSyncAt)} · 汇率 {summary.brokerSyncSummary.fxFreshnessState || (summary.brokerSyncSummary.fxStale ? '过期' : 'unknown')}
                 {brokerStatuses.length ? ` · ${brokerStatuses.map(([key, value]) => `${key}:${value}`).join(' ')}` : ''}
               </TerminalNotice>
               {summary.limitations.length ? (
@@ -703,8 +739,8 @@ const PortfolioTab: React.FC<{
                         <p className="font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</p>
                         <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{item.accountName}</p>
                       </div>
-                      <p className={cn('shrink-0 text-right font-mono text-sm', item.unrealizedPnlBase >= 0 ? 'text-[color:var(--wolfy-market-up)]' : 'text-[color:var(--wolfy-market-down)]')}>
-                        {formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}
+                      <p className={cn('shrink-0 text-right font-mono text-sm', holdingPnlClass(item.displayUnrealizedPnl))}>
+                        {holdingMoney(item.displayUnrealizedPnl, item.valuationCurrency || item.currency)}
                       </p>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -714,7 +750,7 @@ const PortfolioTab: React.FC<{
                       </div>
                       <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">市值</p>
-                        <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</p>
+                        <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{holdingMoney(item.displayMarketValue, item.valuationCurrency || item.currency)}</p>
                       </div>
                       <div className="col-span-2 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">汇率状态</p>
@@ -742,8 +778,8 @@ const PortfolioTab: React.FC<{
                         <td className="py-3 pr-3 font-mono text-[color:var(--wolfy-text-primary)]">{item.symbol}</td>
                         <td className="py-3 pr-3">{item.accountName}</td>
                         <td className="py-3 pr-3 font-mono">{compactNumber(item.quantity)}</td>
-                        <td className="py-3 pr-3 font-mono">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
-                        <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-[color:var(--wolfy-market-up)]' : 'text-[color:var(--wolfy-market-down)]')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                        <td className="py-3 pr-3 font-mono">{holdingMoney(item.displayMarketValue, item.valuationCurrency || item.currency)}</td>
+                        <td className={cn('py-3 pr-3 font-mono', holdingPnlClass(item.displayUnrealizedPnl))}>{holdingMoney(item.displayUnrealizedPnl, item.valuationCurrency || item.currency)}</td>
                         <td className="py-3">{item.fxStatus}</td>
                       </tr>
                     ))}

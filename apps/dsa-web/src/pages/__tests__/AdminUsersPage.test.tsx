@@ -158,6 +158,8 @@ const portfolioSummaryPayload = {
   userId: 'user-123',
   accountCount: 2,
   activeAccountCount: 1,
+  valuationScope: 'active_accounts_only',
+  valuationAccountCount: 1,
   baseCurrencies: ['USD', 'CNY'],
   accounts: [
     {
@@ -174,19 +176,35 @@ const portfolioSummaryPayload = {
       sync_metadata_json: '{"secret":"never"}',
     },
   ],
-  totalCash: { amount: 1000, currency: 'USD' },
-  totalMarketValue: { amount: 25000, currency: 'USD' },
-  totalEquity: { amount: 26000, currency: 'USD' },
-  realizedPnl: { amount: 125, currency: 'USD' },
-  unrealizedPnl: { amount: 450, currency: 'USD' },
+  totalCash: { amount: '1000', currency: 'USD' },
+  totalMarketValue: { amount: '25000', currency: 'USD' },
+  totalEquity: { amount: '26000', currency: 'USD' },
+  realizedPnl: { amount: '125', currency: 'USD' },
+  unrealizedPnl: { amount: '450', currency: 'USD' },
   ledgerCounts: { trades: 8, cashEvents: 2, corporateActions: 1 },
   brokerSyncSummary: {
     connections: 1,
     statuses: { success: 1 },
     lastSyncAt: '2026-05-06T00:00:00+08:00',
-    fxStale: false,
+    fxStale: null,
+    fxFreshnessState: null,
     payload_json: 'payload-json-never-render',
   },
+  asOf: '2026-05-06',
+  costMethod: 'fifo',
+  valuationCurrency: 'USD',
+  portfolioTruth: { state: 'fully_valued_nonzero', value_semantics: 'authoritative_total' },
+  valuation: { state: 'available', value_semantics: 'authoritative_total' },
+  availability: { status: 'ready' },
+  fxLineage: { status: 'available' },
+  valuationSnapshotLineage: { status: 'available' },
+  valuationLineage: { status: 'available' },
+  dataStatus: 'ready',
+  calculationStatus: 'ready',
+  fxStale: false,
+  fxFreshnessState: 'available',
+  valuationLineageState: 'available',
+  unvaluedHoldingCount: 0,
   limitations: ['read_only_projection'],
 };
 
@@ -200,13 +218,17 @@ const holdingsPayload = {
       symbol: 'AAPL',
       market: 'US',
       currency: 'USD',
-      quantity: 10,
-      avgCost: 150,
-      lastPrice: 180,
-      marketValueBase: 1800,
-      unrealizedPnlBase: 300,
+      quantity: '10',
+      avgCost: '150',
+      lastPrice: '180',
+      marketValueBase: '1800',
+      unrealizedPnlBase: '300',
       valuationCurrency: 'USD',
-      fxStatus: 'current',
+      fxStatus: 'live',
+      valuationStatus: 'available',
+      valuationUnavailableReason: null,
+      displayMarketValue: '1800',
+      displayUnrealizedPnl: '300',
       updatedAt: '2026-05-06T00:00:00+08:00',
       [apiKeyField]: 'masked-api-value-never-render',
     },
@@ -215,6 +237,21 @@ const holdingsPayload = {
   limit: 50,
   offset: 0,
   hasMore: false,
+  asOf: '2026-05-06',
+  costMethod: 'fifo',
+  valuationCurrency: 'USD',
+  portfolioTruth: { state: 'fully_valued_nonzero', value_semantics: 'authoritative_total' },
+  valuation: { state: 'available', value_semantics: 'authoritative_total' },
+  availability: { status: 'ready' },
+  fxLineage: { status: 'available' },
+  valuationSnapshotLineage: { status: 'available' },
+  valuationLineage: { status: 'available' },
+  dataStatus: 'ready',
+  calculationStatus: 'ready',
+  fxStale: false,
+  fxFreshnessState: 'available',
+  valuationLineageState: 'available',
+  unvaluedHoldingCount: 0,
   limitations: [],
 };
 
@@ -432,6 +469,9 @@ describe('AdminUsersPage', () => {
     expect(screen.getAllByText('Growth Main').length).toBeGreaterThan(0);
     expect(screen.getAllByText('IBKR-****-42').length).toBeGreaterThan(0);
     expect(screen.getAllByText('只读投影').length).toBeGreaterThan(0);
+    expect(await screen.findByText(/范围 活跃账户 1/)).toBeInTheDocument();
+    expect(screen.getByText(/canonical 估值：估值完整 .* FX available/)).toBeInTheDocument();
+    expect(screen.getByText(/经纪商同步摘要：1 条连接 .* 汇率 unknown/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步|导入|重放|刷新 FX/ })).not.toBeInTheDocument();
     expect(getAdminUserPortfolioSummary).toHaveBeenCalledWith('user-123', expect.objectContaining({ includeInactive: true }));
     expect(getAdminUserHoldings).toHaveBeenCalledWith('user-123', expect.objectContaining({ limit: 50 }));
@@ -451,7 +491,7 @@ describe('AdminUsersPage', () => {
 
     expect(screen.getByTestId('admin-users-page-shell')).toHaveClass('overflow-visible');
     expect(await screen.findByText('组合只读总览')).toBeInTheDocument();
-    const holdingsPanel = screen.getByText('持仓明细').closest('[data-terminal-primitive="panel"]') as HTMLElement;
+    const holdingsPanel = (await screen.findByText('持仓明细')).closest('[data-terminal-primitive="panel"]') as HTMLElement;
     const mobileList = within(holdingsPanel).getByTestId('admin-users-holdings-mobile-list');
     const mobileCard = within(mobileList).getByTestId('admin-users-holding-mobile-card-AAPL');
     const desktopTable = within(holdingsPanel).getByRole('table');
@@ -464,6 +504,76 @@ describe('AdminUsersPage', () => {
     expect(desktopShell).toHaveClass('hidden', 'md:block');
     expect(desktopTable).toHaveClass('min-w-[620px]');
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+  });
+
+  it('keeps unavailable holding valuation and P&L nonnumeric in the admin projection', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+    getAdminUserPortfolioSummary.mockResolvedValue({
+      ...portfolioSummaryPayload,
+      totalCash: { amount: null, currency: 'CNY' },
+      totalMarketValue: { amount: null, currency: 'CNY' },
+      totalEquity: { amount: null, currency: 'CNY' },
+      realizedPnl: { amount: null, currency: 'CNY' },
+      unrealizedPnl: { amount: null, currency: 'CNY' },
+      valuationCurrency: 'CNY',
+      portfolioTruth: { state: 'valuation_unavailable', value_semantics: 'unavailable' },
+      valuation: { state: 'unavailable', value_semantics: 'covered_subtotal' },
+      availability: { status: 'provider_unavailable' },
+      valuationLineage: { status: 'blocked' },
+      dataStatus: 'provider_unavailable',
+      calculationStatus: 'calculation_unavailable',
+      brokerSyncSummary: {
+        ...portfolioSummaryPayload.brokerSyncSummary,
+        fxStale: null,
+        fxFreshnessState: undefined,
+      },
+      fxStale: false,
+      fxFreshnessState: 'missing',
+      valuationLineageState: 'blocked',
+      unvaluedHoldingCount: 1,
+    });
+    getAdminUserHoldings.mockResolvedValue({
+      ...holdingsPayload,
+      items: [{
+        ...holdingsPayload.items[0],
+        currency: 'HKD',
+        quantity: '1',
+        avgCost: '300',
+        lastPrice: '300',
+        marketValueBase: null,
+        unrealizedPnlBase: null,
+        valuationCurrency: 'CNY',
+        fxStatus: 'unavailable',
+        valuationStatus: 'unavailable',
+        valuationUnavailableReason: 'conversion_or_source_valuation_unavailable',
+        displayMarketValue: null,
+        displayUnrealizedPnl: null,
+      }],
+      valuationCurrency: 'CNY',
+      portfolioTruth: { state: 'valuation_unavailable', value_semantics: 'unavailable' },
+      valuation: { state: 'unavailable', value_semantics: 'covered_subtotal' },
+      availability: { status: 'provider_unavailable' },
+      valuationLineage: { status: 'blocked' },
+      dataStatus: 'provider_unavailable',
+      calculationStatus: 'calculation_unavailable',
+      fxStale: false,
+      fxFreshnessState: 'missing',
+      valuationLineageState: 'blocked',
+      unvaluedHoldingCount: 1,
+    });
+    getAdminUserPortfolioActivity.mockResolvedValue(portfolioActivityPayload);
+
+    renderAt('/zh/admin/users/user-123?tab=portfolio');
+
+    const holdingsPanel = (await screen.findByText('持仓明细')).closest('[data-terminal-primitive="panel"]') as HTMLElement;
+    const mobileCard = await within(within(holdingsPanel).getByTestId('admin-users-holdings-mobile-list'))
+      .findByTestId('admin-users-holding-mobile-card-AAPL');
+    expect(mobileCard).toHaveTextContent('--');
+    expect(mobileCard).toHaveTextContent('unavailable');
+    expect(mobileCard).not.toHaveTextContent('0.00');
+    expect(await screen.findByText(/未估值持仓 1/)).toBeInTheDocument();
+    expect(await screen.findByText(/汇率 unknown/)).toBeInTheDocument();
+    expect(screen.queryByText(/汇率 最新/)).not.toBeInTheDocument();
   });
 
   it('hides portfolio tab and does not fetch portfolio data when portfolio capability is missing', async () => {

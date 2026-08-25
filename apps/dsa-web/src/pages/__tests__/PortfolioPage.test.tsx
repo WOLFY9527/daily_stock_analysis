@@ -808,6 +808,8 @@ function makeRisk() {
       currentDrawdownPct: 0,
       alert: false,
       fxStale: false,
+      calculationStatus: 'not_evaluated' as const,
+      unavailableReason: null,
     },
     stopLoss: {
       nearAlert: false,
@@ -1387,6 +1389,60 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-total-assets-value')).not.toHaveTextContent('CNY 0.00');
   });
 
+  it('keeps unavailable holding value and P&L nonnumeric when the covered subtotal is zero', async () => {
+    const snapshot = makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      positionOverrides: {
+        marketValueBase: null,
+        marketValueNative: null,
+        unrealizedPnlBase: null,
+        unrealizedPnlNative: null,
+        displayMarketValue: null,
+        displayUnrealizedPnl: null,
+        valuationStatus: 'unavailable',
+        valuationUnavailableReason: 'source_valuation_unavailable',
+      },
+    });
+    getSnapshot.mockResolvedValue({
+      ...snapshot,
+      totalCash: '0',
+      totalMarketValue: null,
+      totalEquity: null,
+      realizedPnl: null,
+      unrealizedPnl: null,
+      portfolioTruth: {
+        state: 'valuation_partial' as const,
+        accountState: 'holdings_present' as const,
+        valuationState: 'partial' as const,
+        valueSemantics: 'covered_subtotal' as const,
+        authoritativeTotal: null,
+        coveredSubtotal: '0',
+        accountCount: 1,
+        positionCount: 1,
+      },
+      analytics: {
+        ...snapshot.analytics,
+        pnl: {
+          ...snapshot.analytics!.pnl,
+          realized: { ...snapshot.analytics!.pnl.realized, amount: null, amountDisplay: null, percent: null, fxStatus: 'unavailable' as const },
+          unrealized: { ...snapshot.analytics!.pnl.unrealized, amount: null, amountDisplay: null, percent: null, fxStatus: 'unavailable' as const },
+          total: { ...snapshot.analytics!.pnl.total, amount: null, amountDisplay: null, percent: null, fxStatus: 'unavailable' as const },
+        },
+      },
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-summary-market-value-card')).toHaveTextContent('估值部分可用');
+    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('估值部分可用');
+    expect(screen.getByTestId('portfolio-pnl-summary')).not.toHaveTextContent('0.00');
+    expect(screen.getByTestId('portfolio-holding-mobile-card-AAPL')).toHaveTextContent('--');
+    expect(screen.getByTestId('portfolio-holding-mobile-card-AAPL')).not.toHaveTextContent('USD 0.00');
+  });
+
   it('exposes confirmed empty portfolio first-use actions to authenticated members', async () => {
     setConsumerPortfolioSurface();
 
@@ -1539,6 +1595,58 @@ describe('PortfolioPage FX refresh', () => {
     expect(handoff).toContainElement(nextAction);
     expect(within(risk).getByTestId('portfolio-risk-exposure-summary')).toBeInTheDocument();
     expect(valuation).toHaveTextContent(/估值与新鲜度|Valuation freshness/);
+  });
+
+  it('orders mixed-currency holdings by canonical display value for research handoff', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
+    const baseAccount = snapshot.accounts[0];
+    const basePosition = baseAccount.positions[0];
+    snapshot.currency = 'CNY';
+    snapshot.accounts = [
+      {
+        ...baseAccount,
+        accountId: 1,
+        accountName: 'USD account',
+        baseCurrency: 'USD',
+        positions: [{
+          ...basePosition,
+          symbol: 'AAPL',
+          market: 'us',
+          currency: 'USD',
+          valuationCurrency: 'USD',
+          marketValueBase: '1000',
+          displayMarketValue: '7000',
+          displayCurrency: 'CNY',
+        }],
+      },
+      {
+        ...baseAccount,
+        accountId: 2,
+        accountName: 'CNY account',
+        market: 'cn',
+        baseCurrency: 'CNY',
+        positions: [{
+          ...basePosition,
+          symbol: '600519',
+          market: 'cn',
+          currency: 'CNY',
+          valuationCurrency: 'CNY',
+          marketValueBase: '5000',
+          displayMarketValue: '5000',
+          displayCurrency: 'CNY',
+        }],
+      },
+    ];
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-stock-research-handoff')).toHaveAttribute(
+      'href',
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=us&source=portfolio',
+    );
   });
 
   it('renders pnl, holding unrealized percent, exposure tabs, and risk summary for active holdings', async () => {
@@ -2867,6 +2975,42 @@ describe('PortfolioPage FX refresh', () => {
     expect(exposure).toHaveTextContent('折算暂不可用');
     expect(exposure).not.toHaveTextContent('USD 0.00');
     expect(exposure).not.toHaveTextContent('CNY 0.00');
+  });
+
+  it('does not relabel an unavailable zero sentinel as a target-currency amount', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: false, fxRates: [] });
+    snapshot.analytics.exposure.byCurrency = [
+      {
+        key: 'USD',
+        label: 'USD',
+        marketValue: '0.00',
+        displayValue: '0.00',
+        displayCurrency: 'USD',
+        percent: null,
+        fxStatus: 'unavailable' as const,
+        nativeValue: null,
+        nativeCurrency: 'USD',
+        currency: 'USD',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.risk = {
+      ...snapshot.analytics.risk,
+      largestCurrency: snapshot.analytics.exposure.byCurrency[0],
+      fxUnavailable: true,
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    openPortfolioDataNotes();
+    fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '币种' }));
+
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    expect(exposure).toHaveTextContent('折算暂不可用');
+    expect(exposure).not.toHaveTextContent('CNY 0.00');
+    expect(exposure).not.toHaveTextContent('USD 0.00');
   });
 
   it('renders no-account portfolio truth instead of a dominant zero fallback', async () => {

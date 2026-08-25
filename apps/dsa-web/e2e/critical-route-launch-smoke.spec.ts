@@ -452,6 +452,8 @@ if (productAuthFixture) {
         await appExpect(page.getByRole('heading', { name: '总资产' })).toBeVisible({ timeout: 15_000 });
         await appExpect(page.getByTestId('portfolio-workspace-lanes')).toBeVisible({ timeout: 15_000 });
         await appExpect(page.getByRole('heading', { name: /当前持仓/ })).toBeVisible({ timeout: 15_000 });
+        await appExpect(page.getByTestId('portfolio-total-assets-value')).toContainText('USD 6,600.00');
+        await appExpect(page.getByTestId('portfolio-summary-market-value')).toContainText('USD 1,600.00');
         await expectVisibleTextPresent(page, visibleOwnerPortfolioSentinels);
         await expectVisibleTextPresent(page, requiredPortfolioLedgerLanguage);
         await expectVisibleTextAbsent(page, [
@@ -556,8 +558,12 @@ adminTest.describe('admin launch route smoke', () => {
 
       await appExpect(page.getByRole('heading', { name: '组合只读总览' })).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByText('只读投影').first()).toBeVisible();
+      await appExpect(page.getByText(/canonical 估值：估值完整 · 范围 活跃账户 1 · 币种 USD · FX available · 未估值持仓 0/)).toBeVisible();
+      await appExpect(page.getByText(/经纪商同步摘要：1 条连接 .* 汇率 unknown/)).toBeVisible();
       await expectVisibleTextPresent(page, ['Alice Launch Portfolio', 'AAPL']);
       await expectVisibleTextAbsent(page, [
+        '范围未知',
+        '汇率 最新',
         'Bob Admin Portfolio',
         'MSFT-ADMIN-BOB-PRIVATE',
         'mock-canary-bob-admin-broker-account',
