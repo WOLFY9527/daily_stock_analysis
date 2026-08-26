@@ -45,7 +45,7 @@ import WatchlistResearchQueuePanel, { type WatchlistResearchQueueState } from '.
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
-import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchOverlayResponse, WatchlistResearchPriorityQueueItem, WatchlistScannerLineageV1 } from '../types/watchlist';
+import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchOverlayResponse, WatchlistResearchPriorityQueueItem, WatchlistResearchReadiness, WatchlistResearchReadinessState, WatchlistScannerLineageV1 } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -134,9 +134,9 @@ type WatchlistResearchOverlayViewState = WatchlistResearchQueueState;
 
 function deriveResearchOverlayViewState(response: WatchlistResearchOverlayResponse): WatchlistResearchOverlayViewState {
   const overlayState = normalizeText(response.overlayState).toLowerCase();
-  return overlayState === 'unavailable' || overlayState === 'error' || overlayState === 'failed'
-    ? 'unavailable'
-    : 'available';
+  if (overlayState === 'available') return 'available';
+  if (overlayState === 'degraded' || overlayState === 'partial') return 'degraded';
+  return 'unavailable';
 }
 type BatchProgress = {
   kind: 'scan' | 'backtest';
@@ -176,6 +176,14 @@ function getEnabledMenuItems(menu: HTMLElement | null): HTMLButtonElement[] {
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
+}
+
+function getCanonicalResearchReadiness(item: WatchlistItem): WatchlistResearchReadiness | null {
+  return item.researchReadiness ?? item.rowResearchPacket?.researchReadiness ?? null;
+}
+
+function getCanonicalResearchState(item: WatchlistItem): WatchlistResearchReadinessState {
+  return getCanonicalResearchReadiness(item)?.state ?? 'unknown';
 }
 
 type WatchlistCanonicalIdentity = {
@@ -360,10 +368,10 @@ function getBacktestReturn(item: WatchlistItem): number | null {
 
 function hasBacktestMetrics(item: WatchlistItem): boolean {
   const backtest = item.intelligence?.backtest;
-  return typeof backtest?.totalReturnPct === 'number'
+  return hasBacktestEvidence(item) && (typeof backtest?.totalReturnPct === 'number'
     || typeof backtest?.maxDrawdownPct === 'number'
     || typeof backtest?.sharpe === 'number'
-    || typeof backtest?.tradeCount === 'number';
+    || typeof backtest?.tradeCount === 'number');
 }
 
 function getHitRate(item: WatchlistItem): number | null {
@@ -371,11 +379,15 @@ function getHitRate(item: WatchlistItem): number | null {
 }
 
 function hasScannerEvidence(item: WatchlistItem): boolean {
-  return getScannerScore(item) !== null || Boolean(item.scannerRunId || item.intelligence?.scanner?.profile);
+  return ['available', 'partial', 'stale'].includes(
+    getCanonicalResearchReadiness(item)?.scannerEvidence?.state ?? 'unknown',
+  );
 }
 
 function hasBacktestEvidence(item: WatchlistItem): boolean {
-  return item.intelligence?.backtest?.lastResultId != null || hasBacktestMetrics(item);
+  return getCanonicalResearchReadiness(item)?.backtestResult?.state === 'available'
+    && item.intelligence?.backtest?.lastResultId != null
+    && item.intelligence.backtest.resultContractAvailable === true;
 }
 
 function isStaleIntelligence(item: WatchlistItem): boolean {
@@ -948,18 +960,19 @@ function buildWatchlistCatalystExposureView(
 }
 
 function getTrustState(item: WatchlistItem): WatchlistTrustState {
-  const state = getScoreDisclosureState(item);
-  if (state === 'fresh') return 'fresh';
-  if (state === 'unknown') return 'unknown';
+  const readiness = getCanonicalResearchReadiness(item);
+  if (readiness?.state === 'available' && readiness.freshnessState === 'available') return 'fresh';
+  if (!readiness || readiness.state === 'unknown' || readiness.state === 'pending') return 'unknown';
   return 'stale';
 }
 
 function hasLimitedConfidenceDisclosure(item: WatchlistItem): boolean {
-  return isFallbackTrustSource(item.scoreSource)
-    || isFallbackTrustSource(item.source)
-    || isFallbackTrustSource(item.scoreReason)
-    || isFallbackTrustSource(item.intelligence?.scanner?.reason)
-    || isFallbackTrustSource(item.intelligence?.scanner?.status);
+  const readiness = getCanonicalResearchReadiness(item);
+  if (!readiness) return false;
+  return [readiness.marketData, readiness.scannerEvidence, readiness.backtestResult].some(
+    (dimension) => dimension.state === 'available'
+      && ['simulated', 'example', 'fixture'].includes(dimension.provenanceState),
+  );
 }
 
 function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en'): WatchlistConclusionModel {
@@ -981,7 +994,7 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
 
   const topItem = items.reduce<WatchlistItem | null>((best, item) => {
     const score = getScannerScore(item);
-    if (getTrustState(item) !== 'fresh' || score === null) return best;
+    if (getCanonicalResearchState(item) !== 'available' || getTrustState(item) !== 'fresh' || score === null) return best;
     if (!best) return item;
     return score > (getScannerScore(best) ?? Number.NEGATIVE_INFINITY) ? item : best;
   }, null);
@@ -1189,7 +1202,11 @@ function buildWatchlistRowResearchPacketView(
   item: WatchlistItem,
   language: 'zh' | 'en',
 ): WatchlistRowResearchPacketConsumerCopy | null {
-  return getWatchlistRowResearchPacketConsumerCopy(item.rowResearchPacket ?? null, language);
+  return getWatchlistRowResearchPacketConsumerCopy(
+    item.rowResearchPacket ?? null,
+    language,
+    item.researchReadiness ?? null,
+  );
 }
 
 function normalizeRowPacketState(value?: string | null): string {
@@ -1250,16 +1267,16 @@ function getDecisionQuoteLabel(
 }
 
 function getDecisionResearchPacketLabel(
-  researchStatus: string,
+  readinessState: WatchlistResearchReadinessState,
   language: 'zh' | 'en',
 ): WatchlistRowDecisionContextChip {
-  if (researchStatus === 'ready') {
+  if (readinessState === 'available') {
     return {
       label: language === 'en' ? 'Research packet ready' : '研究包可用',
       variant: 'success',
     };
   }
-  if (researchStatus === 'partial') {
+  if (['partial', 'stale'].includes(readinessState)) {
     return {
       label: language === 'en' ? 'Research packet partial' : '研究包部分可用',
       variant: 'info',
@@ -1272,17 +1289,17 @@ function getDecisionResearchPacketLabel(
 }
 
 function getDecisionDataReadinessLabel(
-  researchStatus: string,
+  readinessState: WatchlistResearchReadinessState,
   evidenceGapCount: number,
   language: 'zh' | 'en',
 ): WatchlistRowDecisionContextChip {
-  if (researchStatus === 'ready' && evidenceGapCount === 0) {
+  if (readinessState === 'available' && evidenceGapCount === 0) {
     return {
       label: language === 'en' ? 'Evidence ready' : '证据可用',
       variant: 'success',
     };
   }
-  if (researchStatus === 'partial' || evidenceGapCount > 0) {
+  if (['partial', 'stale'].includes(readinessState) || evidenceGapCount > 0) {
     return {
       label: language === 'en' ? 'Evidence partially ready' : '证据部分可用',
       variant: 'info',
@@ -1295,12 +1312,13 @@ function getDecisionDataReadinessLabel(
 }
 
 function hasPacketScannerScoreEvidence(item: WatchlistItem): boolean {
-  const lineage = item.rowResearchPacket?.scannerLineage;
-  return Boolean(lineage?.runId != null || lineage?.rank != null || lineage?.score != null || lineage?.lastScoredAt);
+  return ['available', 'partial', 'stale'].includes(
+    getCanonicalResearchReadiness(item)?.scannerEvidence?.state ?? 'unknown',
+  );
 }
 
 function getDecisionRiskContextLabel(
-  researchStatus: string,
+  readinessState: WatchlistResearchReadinessState,
   evidenceGapLabels: string[],
   hasScoreEvidence: boolean,
   language: 'zh' | 'en',
@@ -1309,7 +1327,7 @@ function getDecisionRiskContextLabel(
   const needsRiskContext = language === 'en'
     ? /peers|structure|research context/.test(joined)
     : /同业|结构|研究上下文/.test(joined);
-  if (!needsRiskContext && (researchStatus === 'ready' || researchStatus === 'partial' || hasScoreEvidence)) {
+  if (!needsRiskContext && (['available', 'partial', 'stale'].includes(readinessState) || hasScoreEvidence)) {
     return {
       label: language === 'en' ? 'Risk context ready' : '风险线索可用',
       variant: 'info',
@@ -1323,15 +1341,6 @@ function getDecisionRiskContextLabel(
 
 function getWatchlistConsumerGapLabels(item: WatchlistItem, language: 'zh' | 'en'): string[] {
   return getPacketGapLabels(item.rowResearchPacket?.missingData, language);
-}
-
-function getWatchlistConsumerResearchLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const packet = item.rowResearchPacket;
-  if (!packet) return language === 'en' ? 'Research can start from saved item' : '可从已保存信息继续研究';
-  const status = normalizeRowPacketState(packet.researchStatus);
-  if (status === 'ready') return language === 'en' ? 'Research packet ready' : '研究包可用';
-  if (status === 'partial') return language === 'en' ? 'Research packet partial' : '研究包部分可用';
-  return language === 'en' ? 'Research packet needs data' : '研究包待补资料';
 }
 
 function getWatchlistConsumerPrice(item: WatchlistItem, language: 'zh' | 'en'): string {
@@ -1373,7 +1382,7 @@ function getWatchlistConsumerNextAction(item: WatchlistItem, language: 'zh' | 'e
 function watchlistConsumerItemsNeedingData(items: WatchlistItem[]): number {
   return items.filter((item) => {
     const gaps = getWatchlistConsumerGapLabels(item, 'zh');
-    return gaps.length > 0 || !hasWatchlistConsumerQuote(item) || !item.rowResearchPacket;
+    return getCanonicalResearchState(item) !== 'available' || gaps.length > 0 || !hasWatchlistConsumerQuote(item) || !item.rowResearchPacket;
   }).length;
 }
 
@@ -1396,6 +1405,7 @@ function WatchlistConsumerObservationBoard({
   const selected = activeItem || items[0];
   const selectedPrice = selected ? getWatchlistConsumerPrice(selected, language) : '--';
   const selectedGaps = selected ? getWatchlistConsumerGapLabels(selected, language) : [];
+  const packetCopy = selected ? buildWatchlistRowResearchPacketView(selected, language) : null;
   const selectedName = selected ? buildWatchlistIdentityLabel(selected, language) : '';
   const selectedMarket = selected ? getWatchlistDisplayMarket(selected) : '--';
   const selectedSymbol = selected ? getWatchlistDisplaySymbol(selected) : '--';
@@ -1441,7 +1451,7 @@ function WatchlistConsumerObservationBoard({
             const price = getWatchlistConsumerPrice(item, language);
             const change = getWatchlistConsumerChange(item);
             const gaps = getWatchlistConsumerGapLabels(item, language);
-            const researchLabel = getWatchlistConsumerResearchLabel(item, language);
+            const itemCopy = buildWatchlistRowResearchPacketView(item, language);
             const nextAction = getWatchlistConsumerNextAction(item, language);
             const isActive = selected?.id === item.id;
             const statusLine = gaps.length
@@ -1466,7 +1476,9 @@ function WatchlistConsumerObservationBoard({
                     {price}
                     {change ? <span className={change.startsWith('-') ? 'ml-2 text-[color:var(--state-danger-text)]' : 'ml-2 text-[color:var(--state-success-text)]'}>{change}</span> : null}
                   </p>
-                  <p className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{researchLabel}</p>
+                  <p className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">
+                    {itemCopy?.evidenceSummaryLabel || (language === 'en' ? 'Research can start from saved item' : '可从已保存信息继续研究')}
+                  </p>
                   <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">
                     {statusLine}
                   </p>
@@ -1517,10 +1529,15 @@ function WatchlistConsumerObservationBoard({
           <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             <p>{language === 'en' ? 'Latest quote' : '最新报价'} {selectedPrice}</p>
             <p>
-              {selectedGaps.length
+              {packetCopy && !packetCopy.evidenceAvailable
+                ? packetCopy.evidenceSummaryLabel
+                : selectedGaps.length
                 ? `${language === 'en' ? 'Evidence gaps: ' : '资料缺口：'}${selectedGaps.join(language === 'en' ? ', ' : '、')}`
                 : (language === 'en' ? 'Core evidence is usable for review.' : '核心证据可用于查看。')}
             </p>
+            {packetCopy && !packetCopy.evidenceAvailable && selectedGaps.length ? (
+              <p>{`${language === 'en' ? 'Evidence gaps: ' : '资料缺口：'}${selectedGaps.join(language === 'en' ? ', ' : '、')}`}</p>
+            ) : null}
             <p>{language === 'en' ? 'Next: ' : '下一步：'}{selectedNext}</p>
           </div>
         </aside>
@@ -1537,13 +1554,13 @@ function buildWatchlistRowDecisionContext(
   if (!packet) return null;
 
   const quoteState = normalizeRowPacketState(packet.quote?.state);
-  const researchStatus = normalizeRowPacketState(packet.researchStatus);
+  const readinessState = getCanonicalResearchState(item);
   const evidenceGapLabels = getPacketGapLabels(packet.missingData, language);
   const hasScoreEvidence = hasPacketScannerScoreEvidence(item);
   const chips: WatchlistRowDecisionContextChip[] = [
     getDecisionQuoteLabel(quoteState, language),
-    getDecisionResearchPacketLabel(researchStatus, language),
-    getDecisionDataReadinessLabel(researchStatus, evidenceGapLabels.length, language),
+    getDecisionResearchPacketLabel(readinessState, language),
+    getDecisionDataReadinessLabel(readinessState, evidenceGapLabels.length, language),
   ];
 
   if (evidenceGapLabels.length > 0) {
@@ -1554,7 +1571,7 @@ function buildWatchlistRowDecisionContext(
   }
 
   chips.push(
-    getDecisionRiskContextLabel(researchStatus, evidenceGapLabels, hasScoreEvidence, language),
+    getDecisionRiskContextLabel(readinessState, evidenceGapLabels, hasScoreEvidence, language),
     {
       label: hasScoreEvidence
         ? (language === 'en' ? 'Score recorded' : '评分已记录')
@@ -1618,6 +1635,9 @@ function buildDefaultBacktestWindow(): { startDate: string; endDate: string } {
 function buildBacktestIntelligence(run: RuleBacktestRunResponse): NonNullable<WatchlistItem['intelligence']>['backtest'] {
   return {
     lastResultId: run.id,
+    status: run.status ?? null,
+    resultContractAvailable: run.executionReadiness?.resultContractAvailable === true,
+    dataSufficiencyState: run.dataStatus ?? null,
     totalReturnPct: run.totalReturnPct ?? null,
     maxDrawdownPct: run.maxDrawdownPct ?? null,
     sharpe: run.sharpeRatio ?? null,
@@ -2644,6 +2664,10 @@ const WatchlistPage: React.FC = () => {
           confirmed: true,
           waitForCompletion: true,
         });
+        if (normalizeText(run.status).toLowerCase() !== 'completed'
+          || run.executionReadiness?.resultContractAvailable !== true) {
+          throw new Error(run.noResultMessage || run.noResultReason || 'Backtest result unavailable');
+        }
         completed += 1;
         setItems((current) => current.map((row) => (
           getWatchlistCanonicalIdentity(row)?.symbol === symbol
@@ -2755,7 +2779,9 @@ const WatchlistPage: React.FC = () => {
       ].filter(Boolean) as string[]
     : [];
   const activeHasEvidence = activeItem
-    ? hasScannerEvidence(activeItem) || activeSimulation?.status === 'ready' || hasBacktestEvidence(activeItem)
+    ? getCanonicalResearchState(activeItem) === 'available'
+      || hasScannerEvidence(activeItem)
+      || hasBacktestEvidence(activeItem)
     : false;
   const watchlistWorkflowSymbol = activeCanonicalIdentity?.symbol || routeContext.symbol || null;
   const watchlistWorkflowMarket = activeCanonicalIdentity?.market || routeContext.market || null;
@@ -3986,7 +4012,7 @@ const WatchlistPage: React.FC = () => {
                       <BarChart3 className="h-3.5 w-3.5" />
                       {copy.backtest}
                     </TerminalButton>
-                    {activeBacktest?.lastResultId != null ? (
+                    {activeBacktest?.lastResultId != null && activeItem && hasBacktestEvidence(activeItem) ? (
                       <TerminalButton
                         type="button"
                         variant="compact"

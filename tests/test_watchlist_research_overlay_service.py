@@ -250,8 +250,8 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["evidenceGaps"])
         self.assertTrue(payload["riskObservations"])
         self.assertEqual(payload["aggregateSummary"]["byThemeOrSector"]["ai_infra"], 1)
-        self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["stale_or_cached"], 1)
-        self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["no_evidence"], 1)
+        self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["partial"], 1)
+        self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["unknown"], 1)
         self.assertEqual(payload["dataQuality"]["state"], "partial")
         self.assertTrue(payload["dataQuality"]["failClosed"])
 
@@ -270,7 +270,7 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
             "Evidence quality is not cleared for a stronger score-grade conclusion.",
             nvda["evidenceGaps"],
         )
-        self.assertEqual(nvda["freshness"]["state"], "stale_or_cached")
+        self.assertEqual(nvda["freshness"]["state"], "partial")
         self.assertEqual(
             nvda["drilldownTargets"],
             [
@@ -367,32 +367,32 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         queue = payload["researchPriorityQueue"]
         self.assertGreaterEqual(len(queue), 3)
         self.assertLessEqual(len(queue), 5)
-        self.assertEqual(queue[0]["symbol"], "MSFT")
+        self.assertEqual(queue[0]["symbol"], "NVDA")
         self.assertEqual(queue[0]["priorityTier"], "attention")
         self.assertEqual(
             {entry["symbol"]: entry["priorityTier"] for entry in queue},
-            {"MSFT": "attention", "NVDA": "follow_up", "AVGO": "follow_up"},
+            {"MSFT": "attention", "NVDA": "attention", "AVGO": "attention"},
         )
         self.assertTrue(all(entry["observationOnly"] is True for entry in queue))
         self.assertTrue(all(isinstance(entry["suggestedResearchPath"], list) for entry in queue))
         self.assertTrue(all(entry["suggestedResearchPath"] for entry in queue))
 
-        msft = queue[0]
+        msft = next(entry for entry in queue if entry["symbol"] == "MSFT")
         self.assertIn("Missing", msft["priorityReasonSafeLabel"])
         self.assertIn("Price-history evidence", msft["missingEvidence"])
-        self.assertEqual(msft["evidenceAge"]["state"], "no_evidence")
+        self.assertEqual(msft["evidenceAge"]["state"], "unknown")
         self.assertIsNone(msft["evidenceAge"]["lastReviewedAt"])
 
         queue_by_symbol = {entry["symbol"]: entry for entry in queue}
         nvda = queue_by_symbol["NVDA"]
-        self.assertIn("Evidence needs refresh", nvda["priorityReasonSafeLabel"])
+        self.assertIn("Missing", nvda["priorityReasonSafeLabel"])
         self.assertIn("Cached or delayed evidence", nvda["missingEvidence"])
-        self.assertEqual(nvda["evidenceAge"]["state"], "stale_or_cached")
+        self.assertEqual(nvda["evidenceAge"]["state"], "partial")
         self.assertTrue(nvda["evidenceAge"]["lastReviewedAt"])
 
         avgo = queue_by_symbol["AVGO"]
-        self.assertEqual(avgo["priorityReasonSafeLabel"], "Large move needs evidence review.")
-        self.assertEqual(avgo["evidenceAge"]["state"], "stale_or_cached")
+        self.assertIn("Missing", avgo["priorityReasonSafeLabel"])
+        self.assertEqual(avgo["evidenceAge"]["state"], "unknown")
 
         monitor_queue = WatchlistResearchOverlayService._build_research_priority_queue(
             [

@@ -232,6 +232,12 @@ describe('watchlistApi investor signal normalization', () => {
         changePercent: -0.42,
         asOf: '2026-05-01T11:00:00Z',
       },
+      provenance: {
+        sourceClass: 'unknown',
+        provenanceState: 'unknown',
+        asOf: null,
+        freshnessState: 'unknown',
+      },
       scannerLineage: {
         runId: null,
         rank: null,

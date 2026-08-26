@@ -25,7 +25,7 @@ _FORBIDDEN_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 _LARGE_MOVE_TEXT_RE = re.compile(r"\b(large|sharp|big)\s+(price\s+)?move\b", re.IGNORECASE)
-_DEGRADED_QUALITY = {"stale_or_cached", "no_evidence", "unavailable", "symbol_unknown", "unsupported_market"}
+_DEGRADED_QUALITY = {"partial", "stale", "unavailable", "pending", "unknown"}
 
 
 class WatchlistResearchOverlayService:
@@ -175,11 +175,19 @@ class WatchlistResearchOverlayService:
 
     @classmethod
     def _quality_state(cls, item: Mapping[str, Any]) -> str:
-        for key in ("data_quality", "research_status", "evidence_status", "symbol_status"):
-            value = cls._text(item.get(key))
-            if value:
-                return value
-        return "no_evidence"
+        readiness = item.get("research_readiness")
+        if not isinstance(readiness, Mapping):
+            return "unknown"
+        state = cls._text(readiness.get("state")) or "unknown"
+        return state if state in {"available", "partial", "stale", "unavailable", "pending", "unknown"} else "unknown"
+
+    @staticmethod
+    def _readiness_dimension(item: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+        readiness = item.get("research_readiness")
+        if not isinstance(readiness, Mapping):
+            return {}
+        dimension = readiness.get(key)
+        return dimension if isinstance(dimension, Mapping) else {}
 
     @classmethod
     def _evidence_gaps(
@@ -190,17 +198,21 @@ class WatchlistResearchOverlayService:
     ) -> List[str]:
         gaps: List[str] = []
         freshness_state = cls._quality_state(item)
-        if freshness_state in {"no_evidence", "symbol_unknown"}:
-            gaps.extend(["watchlist_research_context", "local_ohlcv_evidence"])
+        market_state = cls._text(cls._readiness_dimension(item, "market_data").get("state")) or "unknown"
+        scanner_state = cls._text(cls._readiness_dimension(item, "scanner_evidence").get("state")) or "unknown"
+        if freshness_state in {"unknown", "pending"}:
+            gaps.append("watchlist_research_context")
         if freshness_state == "unavailable":
             gaps.append("watchlist_data_unavailable")
-        if freshness_state == "stale_or_cached":
+        if freshness_state in {"stale", "partial"}:
             gaps.append("fresh_evidence")
+        if market_state != "available":
+            gaps.append("watchlist_research_context")
         if not isinstance(scanner.get("ohlcv_provenance"), Mapping):
             gaps.append("local_ohlcv_evidence")
-        if scanner.get("score_confidence") is None and item.get("scanner_score") is None:
+        if scanner_state not in {"available", "partial", "stale"}:
             gaps.append("scanner_score_evidence")
-        if lineage and lineage.get("data_state") not in {"ready"}:
+        if scanner_state in {"partial", "stale", "unavailable"}:
             gaps.append("score_grade_not_allowed")
         return cls._unique(gaps)
 
@@ -212,9 +224,9 @@ class WatchlistResearchOverlayService:
         scanner: Mapping[str, Any],
     ) -> List[str]:
         flags: List[str] = []
-        if freshness_state == "stale_or_cached":
+        if freshness_state in {"stale", "partial"}:
             flags.append("cached_or_stale_evidence")
-        if freshness_state in {"no_evidence", "symbol_unknown", "unavailable"}:
+        if freshness_state in {"unknown", "pending", "unavailable"}:
             flags.append("insufficient_research_evidence")
         if "local_ohlcv_evidence" in set(evidence_gaps):
             flags.append("missing_local_ohlcv")
@@ -222,13 +234,14 @@ class WatchlistResearchOverlayService:
             flags.append("scanner_data_unavailable")
         return cls._unique(flags)
 
-    @staticmethod
-    def _structure_state(item: Mapping[str, Any], freshness_state: str, evidence_gaps: Iterable[str]) -> str:
+    @classmethod
+    def _structure_state(cls, item: Mapping[str, Any], freshness_state: str, evidence_gaps: Iterable[str]) -> str:
         if freshness_state == "unavailable":
             return "unavailable"
-        if "local_ohlcv_evidence" in set(evidence_gaps) and item.get("scanner_score") is None:
+        scanner_state = cls._text(cls._readiness_dimension(item, "scanner_evidence").get("state")) or "unknown"
+        if "local_ohlcv_evidence" in set(evidence_gaps) and scanner_state == "unknown":
             return "missing_evidence"
-        if item.get("scanner_run_id") is not None or item.get("scanner_score") is not None:
+        if scanner_state in {"available", "partial", "stale"}:
             return "structure_changed"
         return "watchlist_only"
 
@@ -243,9 +256,9 @@ class WatchlistResearchOverlayService:
             return None
         if "local_ohlcv_evidence" in gaps:
             return None
-        if freshness_state == "ready":
+        if freshness_state == "available":
             return "high"
-        if freshness_state == "stale_or_cached":
+        if freshness_state in {"stale", "partial"}:
             return "medium"
         return None
 
@@ -270,7 +283,7 @@ class WatchlistResearchOverlayService:
 
     @staticmethod
     def _item_overlay_state(freshness_state: str) -> str:
-        if freshness_state == "ready":
+        if freshness_state == "available":
             return "available"
         if freshness_state == "unavailable":
             return "unavailable"
@@ -324,13 +337,13 @@ class WatchlistResearchOverlayService:
             state = "no_evidence"
         else:
             states = [cls._text((item.get("freshness") or {}).get("state")) or "no_evidence" for item in items]
-            if all(state == "ready" for state in states):
+            if all(state == "available" for state in states):
                 state = "ready"
             elif any(state == "unavailable" for state in states):
                 state = "unavailable"
             else:
                 state = "partial" if any(value in _DEGRADED_QUALITY for value in states) else "ready"
-        ready_count = sum(1 for item in items if (item.get("freshness") or {}).get("state") == "ready")
+        ready_count = sum(1 for item in items if (item.get("freshness") or {}).get("state") == "available")
         unavailable_count = sum(1 for item in items if (item.get("freshness") or {}).get("state") == "unavailable")
         raw_missing_evidence = cls._raw_missing_evidence(items)
         missing_evidence_count = len(raw_missing_evidence)
@@ -405,11 +418,11 @@ class WatchlistResearchOverlayService:
     ) -> str:
         gaps = set(raw_evidence_gaps)
         flags = set(raw_risk_flags)
-        if freshness_state in {"no_evidence", "symbol_unknown", "unavailable", "unsupported_market"}:
+        if freshness_state in {"unknown", "pending", "unavailable"}:
             return "attention"
         if gaps.intersection({"watchlist_research_context", "local_ohlcv_evidence", "scanner_score_evidence"}):
             return "attention"
-        if freshness_state == "stale_or_cached" or "fresh_evidence" in gaps:
+        if freshness_state in {"stale", "partial"} or "fresh_evidence" in gaps:
             return "follow_up"
         if large_move_observed:
             return "follow_up"
@@ -426,7 +439,7 @@ class WatchlistResearchOverlayService:
         }.get(str(entry.get("priorityTier") or ""), 0)
         missing_count = len(entry.get("missingEvidence") or [])
         state = str((entry.get("evidenceAge") or {}).get("state") or "")
-        stale_bonus = 20 if state == "stale_or_cached" else 0
+        stale_bonus = 20 if state in {"stale", "partial"} else 0
         return tier_score + min(missing_count, 5) * 10 + stale_bonus
 
     @classmethod
@@ -447,7 +460,7 @@ class WatchlistResearchOverlayService:
         if priority_tier == "follow_up":
             if large_move_observed:
                 return "Large move needs evidence review."
-            if freshness_state == "stale_or_cached":
+            if freshness_state in {"stale", "partial"}:
                 return "Evidence needs refresh before confidence can improve."
             return "Research context has follow-up flags."
         return "Research context is ready for follow-up."

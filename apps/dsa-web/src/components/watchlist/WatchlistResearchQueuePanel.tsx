@@ -4,7 +4,7 @@ import type { WatchlistResearchPriorityQueueItem } from '../../types/watchlist';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import { getResearchQueueConsumerCopy } from '../../utils/researchQueueConsumerCopy';
 
-export type WatchlistResearchQueueState = 'loading' | 'available' | 'unavailable';
+export type WatchlistResearchQueueState = 'loading' | 'available' | 'degraded' | 'unavailable';
 
 type WatchlistResearchQueuePanelProps = {
   queue: WatchlistResearchPriorityQueueItem[];
@@ -45,10 +45,12 @@ export default function WatchlistResearchQueuePanel({
     ? (language === 'en' ? 'Loading' : '读取中')
     : state === 'unavailable'
       ? (language === 'en' ? 'Unavailable' : '暂不可用')
-      : language === 'en'
+      : state === 'degraded'
+        ? (language === 'en' ? 'Needs evidence' : '证据待补')
+        : language === 'en'
         ? `${boundedQueue.length} saved symbols`
         : `${boundedQueue.length} 个已保存标的`;
-  const countVariant = state === 'unavailable' ? 'caution' : 'neutral';
+  const countVariant = state === 'unavailable' || state === 'degraded' ? 'caution' : 'neutral';
 
   return (
     <TerminalPanel

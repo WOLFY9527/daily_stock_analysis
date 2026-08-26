@@ -76,6 +76,10 @@ export interface WatchlistStrategySimulationIntelligence {
 
 export interface WatchlistBacktestIntelligence {
   lastResultId?: number | null;
+  status?: string | null;
+  resultContractAvailable?: boolean | null;
+  dataSufficiencyState?: string | null;
+  readbackIntegrityLevel?: string | null;
   totalReturnPct?: number | null;
   maxDrawdownPct?: number | null;
   sharpe?: number | null;
@@ -108,6 +112,26 @@ export interface WatchlistRowResearchQuote {
   asOf?: string | null;
 }
 
+export type WatchlistResearchReadinessState = 'available' | 'partial' | 'stale' | 'unavailable' | 'pending' | 'unknown';
+export type WatchlistResearchProvenanceState = 'observed' | 'calculated' | 'delayed' | 'simulated' | 'example' | 'fixture' | 'unavailable' | 'unknown';
+export type WatchlistResearchSourceClass = 'market_observation' | 'scanner_run' | 'rule_backtest_result' | 'simulated' | 'example' | 'fixture' | 'unknown';
+
+export interface WatchlistResearchDimension {
+  state: WatchlistResearchReadinessState;
+  freshnessState: WatchlistResearchReadinessState;
+  sourceClass: WatchlistResearchSourceClass;
+  provenanceState: WatchlistResearchProvenanceState;
+  asOf?: string | null;
+  reason?: string | null;
+}
+
+export interface WatchlistRowResearchProvenance {
+  sourceClass: WatchlistResearchSourceClass;
+  provenanceState: WatchlistResearchProvenanceState;
+  asOf?: string | null;
+  freshnessState: WatchlistResearchReadinessState;
+}
+
 export interface WatchlistRowScannerLineage {
   runId?: number | null;
   rank?: number | null;
@@ -122,6 +146,7 @@ export interface WatchlistRowResearchPacketResponse {
   identity: WatchlistRowResearchIdentity;
   savedItemSource: string;
   quote: WatchlistRowResearchQuote;
+  provenance: WatchlistRowResearchProvenance;
   scannerLineage: WatchlistRowScannerLineage;
   researchStatus: 'ready' | 'partial' | 'blocked' | 'unknown' | string;
   researchReadiness?: WatchlistResearchReadiness | null;
@@ -142,12 +167,16 @@ export interface WatchlistSymbolIdentity {
 
 export interface WatchlistResearchReadiness {
   contractVersion?: string | null;
-  state: 'available' | 'partial' | 'stale' | 'unavailable' | 'pending' | 'unknown' | string;
-  freshnessState: 'available' | 'partial' | 'stale' | 'unavailable' | 'pending' | 'unknown' | string;
+  state: WatchlistResearchReadinessState;
+  freshnessState: WatchlistResearchReadinessState;
   identityState: string;
   lastReviewedAt?: string | null;
   scoreFreshnessImplied?: boolean | null;
   sourceAuthorityImplied?: boolean | null;
+  marketData: WatchlistResearchDimension;
+  scannerEvidence: WatchlistResearchDimension;
+  backtestResult: WatchlistResearchDimension;
+  blockedReasons: string[];
 }
 
 export interface WatchlistItem {

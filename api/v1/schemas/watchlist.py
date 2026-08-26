@@ -31,6 +31,27 @@ WatchlistResearchReadinessState = Literal[
     "unknown",
 ]
 
+WatchlistResearchProvenanceState = Literal[
+    "observed",
+    "calculated",
+    "delayed",
+    "simulated",
+    "example",
+    "fixture",
+    "unavailable",
+    "unknown",
+]
+
+WatchlistResearchSourceClass = Literal[
+    "market_observation",
+    "scanner_run",
+    "rule_backtest_result",
+    "simulated",
+    "example",
+    "fixture",
+    "unknown",
+]
+
 
 class WatchlistScoreStatusContextResponse(BaseModel):
     scope: str
@@ -59,6 +80,15 @@ class WatchlistSymbolIdentityResponse(BaseModel):
     identity_state: str
 
 
+class WatchlistResearchDimensionResponse(BaseModel):
+    state: WatchlistResearchReadinessState
+    freshness_state: WatchlistResearchReadinessState
+    source_class: WatchlistResearchSourceClass
+    provenance_state: WatchlistResearchProvenanceState
+    as_of: Optional[str] = None
+    reason: Optional[str] = None
+
+
 class WatchlistResearchReadinessResponse(BaseModel):
     contract_version: Literal["product_read_model_v1"] = "product_read_model_v1"
     state: WatchlistResearchReadinessState
@@ -67,6 +97,10 @@ class WatchlistResearchReadinessResponse(BaseModel):
     last_reviewed_at: Optional[str] = None
     score_freshness_implied: bool = False
     source_authority_implied: bool = False
+    market_data: WatchlistResearchDimensionResponse
+    scanner_evidence: WatchlistResearchDimensionResponse
+    backtest_result: WatchlistResearchDimensionResponse
+    blocked_reasons: List[str] = Field(default_factory=list)
 
 
 class WatchlistRowResearchQuoteResponse(BaseModel):
@@ -74,6 +108,13 @@ class WatchlistRowResearchQuoteResponse(BaseModel):
     price: Optional[float] = None
     changePercent: Optional[float] = None
     asOf: Optional[str] = None
+
+
+class WatchlistRowResearchProvenanceResponse(BaseModel):
+    sourceClass: WatchlistResearchSourceClass
+    provenanceState: WatchlistResearchProvenanceState
+    asOf: Optional[str] = None
+    freshnessState: WatchlistResearchReadinessState
 
 
 class WatchlistRowScannerLineageResponse(BaseModel):
@@ -90,6 +131,7 @@ class WatchlistRowResearchPacketResponse(BaseModel):
     identity: WatchlistRowResearchIdentityResponse
     savedItemSource: str
     quote: WatchlistRowResearchQuoteResponse
+    provenance: WatchlistRowResearchProvenanceResponse
     scannerLineage: WatchlistRowScannerLineageResponse = Field(default_factory=WatchlistRowScannerLineageResponse)
     researchStatus: Literal["ready", "partial", "blocked", "unknown"]
     researchReadiness: Optional[WatchlistResearchReadinessResponse] = None
@@ -280,6 +322,10 @@ class WatchlistStrategySimulationIntelligenceResponse(BaseModel):
 
 class WatchlistBacktestIntelligenceResponse(BaseModel):
     last_result_id: Optional[int] = None
+    status: Optional[str] = None
+    result_contract_available: Optional[bool] = None
+    data_sufficiency_state: Optional[str] = None
+    readback_integrity_level: Optional[str] = None
     total_return_pct: Optional[float] = None
     max_drawdown_pct: Optional[float] = None
     sharpe: Optional[float] = None

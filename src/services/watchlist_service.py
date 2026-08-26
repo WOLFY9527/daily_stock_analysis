@@ -349,37 +349,173 @@ class WatchlistService:
         return "unknown"
 
     @classmethod
+    def _research_dimension(
+        cls,
+        *,
+        state: Any,
+        freshness_state: Any = None,
+        source_class: str = "unknown",
+        provenance_state: str = "unknown",
+        as_of: Any = None,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        normalized_state = cls._watchlist_readiness_state_from_quality(state)
+        normalized_freshness = cls._watchlist_readiness_state_from_quality(
+            freshness_state if freshness_state is not None else state
+        )
+        return {
+            "state": normalized_state,
+            "freshness_state": normalized_freshness,
+            "source_class": source_class,
+            "provenance_state": provenance_state,
+            "as_of": cls._optional_str(as_of),
+            "reason": reason,
+        }
+
+    @classmethod
+    def _market_dimension(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        packet = item.get("rowResearchPacket") if isinstance(item.get("rowResearchPacket"), dict) else {}
+        quote = packet.get("quote") if isinstance(packet.get("quote"), dict) else {}
+        provenance = packet.get("provenance") if isinstance(packet.get("provenance"), dict) else {}
+        quote_state = str(quote.get("state") or "unknown").strip().lower()
+        state = {
+            "available": "available",
+            "stale": "stale",
+            "unavailable": "unavailable",
+            "missing": "unknown",
+            "unknown": "unknown",
+        }.get(quote_state, "unknown")
+        freshness = provenance.get("freshnessState") or quote_state
+        provenance_state = str(provenance.get("provenanceState") or "unknown").strip().lower()
+        source_class = str(provenance.get("sourceClass") or "unknown").strip().lower()
+        reason = None if state == "available" else (
+            "market_data_stale" if state == "stale" else "market_data_unavailable"
+        )
+        return cls._research_dimension(
+            state=state,
+            freshness_state=freshness,
+            source_class=source_class,
+            provenance_state=provenance_state,
+            as_of=provenance.get("asOf") or quote.get("asOf"),
+            reason=reason,
+        )
+
+    @classmethod
+    def _scanner_dimension(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+        scanner = cls._nested_dict(intelligence, "scanner")
+        lineage = cls._nested_dict(scanner, "scanner_lineage_v1")
+        if not lineage:
+            explicit_states = {
+                cls._research_state_from_quality(value)
+                for value in (
+                    item.get("score_status"),
+                    scanner.get("status"),
+                    scanner.get("data_quality"),
+                )
+                if value is not None
+            }
+            if "unavailable" in explicit_states:
+                return cls._research_dimension(
+                    state="unavailable",
+                    freshness_state="unavailable",
+                    source_class="unknown",
+                    provenance_state="unavailable",
+                    reason="scanner_evidence_unavailable",
+                )
+            return cls._research_dimension(
+                state="unknown",
+                source_class="unknown",
+                provenance_state="unknown",
+                reason="scanner_evidence_unknown",
+            )
+        state = cls._watchlist_readiness_state_from_quality(lineage.get("data_state"))
+        reason = None if state == "available" else (
+            "scanner_evidence_unavailable" if state == "unavailable" else "scanner_evidence_incomplete"
+        )
+        return cls._research_dimension(
+            state=state,
+            freshness_state=lineage.get("data_state"),
+            source_class="scanner_run",
+            provenance_state="calculated" if state in {"available", "partial", "stale"} else state,
+            as_of=lineage.get("run_completed_at"),
+            reason=reason,
+        )
+
+    @classmethod
+    def _backtest_dimension(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+        backtest = cls._nested_dict(intelligence, "backtest")
+        if backtest.get("last_result_id") is None:
+            return cls._research_dimension(
+                state="unknown",
+                source_class="unknown",
+                provenance_state="unknown",
+                reason="backtest_result_unknown",
+            )
+        if backtest.get("result_contract_available") is not True:
+            return cls._research_dimension(
+                state="unavailable",
+                freshness_state="unavailable",
+                source_class="rule_backtest_result",
+                provenance_state="unavailable",
+                as_of=backtest.get("tested_at"),
+                reason="backtest_result_unavailable",
+            )
+
+        state = cls._watchlist_readiness_state_from_quality(backtest.get("data_status"))
+        if state == "unknown":
+            state = "available"
+        reason = None if state == "available" else f"backtest_result_{state}"
+        return cls._research_dimension(
+            state=state,
+            freshness_state=state,
+            source_class="rule_backtest_result",
+            provenance_state="calculated",
+            as_of=backtest.get("tested_at"),
+            reason=reason,
+        )
+
+    @classmethod
     def _build_research_readiness_payload(
         cls,
         item: Dict[str, Any],
         *,
         identity_state: str,
     ) -> Dict[str, Any]:
-        data_quality = cls._watchlist_readiness_state_from_quality(item.get("data_quality"))
-        research_state = cls._watchlist_readiness_state_from_quality(item.get("research_status"))
-        evidence_state = cls._watchlist_readiness_state_from_quality(item.get("evidence_status"))
-        freshness_state = cls._watchlist_readiness_state_from_quality(item.get("data_quality"))
-        state = research_state
+        market_data = cls._market_dimension(item)
+        scanner_evidence = cls._scanner_dimension(item)
+        backtest_result = cls._backtest_dimension(item)
+        dimensions = [market_data, scanner_evidence, backtest_result]
+        dimension_states = {dimension["state"] for dimension in dimensions}
+        state = "unknown"
+        freshness_state = market_data["freshness_state"]
         if identity_state in {"unsupported", "unavailable"}:
             state = "unavailable"
             freshness_state = "unavailable"
         elif identity_state == "unknown":
             state = "unknown"
-        elif "unavailable" in {data_quality, research_state, evidence_state}:
+        elif dimension_states == {"available"}:
+            state = "available"
+        elif "unavailable" in dimension_states:
             state = "unavailable"
             freshness_state = "unavailable"
-        elif "stale" in {data_quality, research_state, evidence_state}:
-            state = "stale" if research_state == "stale" else "partial"
-            freshness_state = "stale"
-        elif "partial" in {data_quality, research_state, evidence_state}:
+        elif dimension_states.intersection({"available", "partial", "stale"}):
             state = "partial"
-        elif "available" in {data_quality, research_state, evidence_state}:
-            state = "available"
+            if "stale" in dimension_states:
+                freshness_state = "stale"
         else:
             state = "unknown"
             freshness_state = "unknown"
 
         context = item.get("score_status_context") if isinstance(item.get("score_status_context"), dict) else {}
+        blocked_reasons = list(
+            dict.fromkeys(
+                dimension["reason"]
+                for dimension in dimensions
+                if dimension.get("reason")
+            )
+        )
         return {
             "contract_version": PRODUCT_READ_MODEL_CONTRACT_VERSION,
             "state": state,
@@ -388,6 +524,10 @@ class WatchlistService:
             "last_reviewed_at": cls._optional_str(item.get("last_reviewed_at")),
             "score_freshness_implied": bool(context.get("source_freshness_implied")),
             "source_authority_implied": bool(context.get("source_authority_implied")),
+            "market_data": market_data,
+            "scanner_evidence": scanner_evidence,
+            "backtest_result": backtest_result,
+            "blocked_reasons": blocked_reasons,
         }
 
     @classmethod
@@ -396,23 +536,19 @@ class WatchlistService:
         packet_identity = packet.get("identity") if isinstance(packet.get("identity"), dict) else {}
         identity = cls._build_symbol_identity_payload(item, packet_identity)
         readiness = cls._build_research_readiness_payload(item, identity_state=identity["identity_state"])
-        packet_status = str(packet.get("researchStatus") or "").strip().lower()
-        packet_quote = packet.get("quote") if isinstance(packet.get("quote"), dict) else {}
-        quote_state = str(packet_quote.get("state") or "").strip().lower()
-        if packet_status == "partial":
-            readiness["state"] = "partial"
-        elif packet_status == "blocked" and readiness["state"] not in {"unavailable", "unknown"}:
-            readiness["state"] = "partial"
-        elif packet_status == "unknown" and readiness["state"] == "available":
-            readiness["state"] = "unknown"
-        if quote_state == "stale":
-            readiness["freshness_state"] = "stale"
-            if readiness["state"] == "available":
-                readiness["state"] = "partial"
-        elif quote_state in {"missing", "unknown"} and readiness["freshness_state"] == "available":
-            readiness["freshness_state"] = "unknown"
         item["identity"] = identity
         item["research_readiness"] = readiness
+        legacy_state = {
+            "available": "ready",
+            "partial": "partial",
+            "stale": "stale_or_cached",
+            "unavailable": "unavailable",
+            "pending": "pending",
+            "unknown": "no_evidence",
+        }[readiness["state"]]
+        item["research_status"] = legacy_state
+        item["data_quality"] = legacy_state
+        item["evidence_status"] = legacy_state
         if isinstance(packet, dict):
             packet["researchReadiness"] = readiness
         return item
@@ -427,25 +563,6 @@ class WatchlistService:
         return current if isinstance(current, dict) else {}
 
     @classmethod
-    def _has_research_evidence(cls, item: Dict[str, Any]) -> bool:
-        if item.get("scanner_score") is not None or item.get("scanner_run_id") is not None:
-            return True
-        if cls._optional_str(item.get("score_reason")) or cls._optional_str(item.get("last_scored_at")):
-            return True
-        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
-        scanner = cls._nested_dict(intelligence, "scanner")
-        backtest = cls._nested_dict(intelligence, "backtest")
-        if backtest.get("last_result_id") is not None:
-            return True
-        if intelligence.get("catalyst_exposures"):
-            return True
-        if scanner.get("scanner_lineage_v1") or scanner.get("ohlcv_provenance") or scanner.get("investor_signal"):
-            return True
-        if scanner.get("score_confidence") is not None:
-            return True
-        return False
-
-    @classmethod
     def _symbol_research_status(cls, item: Dict[str, Any]) -> str:
         precheck = validate_consumer_symbol_precheck(
             cls._optional_str(item.get("symbol")),
@@ -457,7 +574,7 @@ class WatchlistService:
             return "unavailable"
         if precheck.status in {"ambiguous", "invalid_format", "not_found"}:
             return "symbol_unknown"
-        return "ready" if cls._has_research_evidence(item) else "symbol_unknown"
+        return "ready"
 
     @classmethod
     def _research_data_quality(cls, item: Dict[str, Any]) -> str:
@@ -488,9 +605,6 @@ class WatchlistService:
             states.append("ready")
         if intelligence.get("catalyst_exposures"):
             states.append("stale_or_cached")
-        if item.get("scanner_score") is not None or item.get("scanner_run_id") is not None:
-            states.append("ready")
-
         if "unavailable" in states:
             return "unavailable"
         if "stale_or_cached" in states:
@@ -600,6 +714,28 @@ class WatchlistService:
         score_status = cls._optional_str(item.get("score_status")) if any(
             value is not None for value in (run_id, rank, score, last_scored_at)
         ) else None
+        product_read_model = packet.get("productReadModel") if isinstance(packet.get("productReadModel"), dict) else {}
+        raw_provenance = product_read_model.get("provenance") if isinstance(product_read_model.get("provenance"), dict) else {}
+        raw_source_class = str(raw_provenance.get("sourceClass") or "").strip().lower()
+        raw_freshness = str(raw_provenance.get("freshness") or product_read_model.get("freshness", {}).get("state") or "unknown").strip().lower()
+        if "fixture" in raw_source_class:
+            source_class, provenance_state = "fixture", "fixture"
+        elif "example" in raw_source_class or "demo" in raw_source_class:
+            source_class, provenance_state = "example", "example"
+        elif "simulat" in raw_source_class or "synthetic" in raw_source_class:
+            source_class, provenance_state = "simulated", "simulated"
+        elif raw_freshness in {"stale", "delayed"}:
+            source_class, provenance_state = "market_observation", "delayed"
+        elif str(packet.get("quote", {}).get("state") or "").strip().lower() == "available":
+            source_class, provenance_state = "market_observation", "observed"
+        else:
+            source_class, provenance_state = "unknown", "unknown"
+        provenance = {
+            "sourceClass": source_class,
+            "provenanceState": provenance_state,
+            "asOf": cls._optional_str(raw_provenance.get("asOf") or packet.get("quote", {}).get("asOf")),
+            "freshnessState": cls._watchlist_readiness_state_from_quality(raw_freshness),
+        }
         readiness = cls._build_research_readiness_payload(item, identity_state=symbol_identity["identity_state"])
         return {
             "symbol": str(packet.get("symbol") or symbol),
@@ -607,6 +743,7 @@ class WatchlistService:
             "identity": safe_identity,
             "savedItemSource": str(item.get("source") or "scanner"),
             "quote": packet.get("quote") if isinstance(packet.get("quote"), dict) else {"state": "unknown", "price": None, "changePercent": None, "asOf": None},
+            "provenance": provenance,
             "scannerLineage": {
                 "runId": run_id,
                 "rank": rank,
@@ -955,11 +1092,17 @@ class WatchlistService:
         cls,
         *,
         item: Dict[str, Any],
+        candidate_diagnostics: Dict[str, Any],
+        run: MarketScannerRun,
+        run_diagnostics: Dict[str, Any],
         disclosure: Optional[Dict[str, Any]],
         score_grade_allowed: bool,
     ) -> str:
         status = str(item.get("score_status") or "").strip().lower()
         source_confidence = disclosure.get("source_confidence") if isinstance(disclosure, dict) else None
+        run_status = str(getattr(run, "status", None) or "").strip().lower()
+        if run_status != "completed":
+            return "unavailable"
         if status in {"data_failed", "provider_down", "provider_error", "failed", "error", "critical"}:
             return "unavailable"
         if isinstance(source_confidence, dict) and source_confidence.get("is_unavailable") is True:
@@ -968,11 +1111,42 @@ class WatchlistService:
             return "no_evidence"
         if status in {"", "unknown"} and item.get("scanner_score") is None:
             return "no_evidence"
-        if score_grade_allowed:
-            return "ready"
-        if disclosure is None:
-            return "no_evidence"
-        return cls._consumer_data_quality_label(source_confidence, disclosure.get("cap_reason"), disclosure.get("degradation_reason"))
+        candidate_readiness = cls._extract_lineage_frame(
+            candidate_diagnostics,
+            "candidateResearchReadiness",
+            "candidate_research_readiness",
+        )
+        candidate_state = cls._consumer_data_quality_label(
+            candidate_readiness.get("readinessState") or candidate_readiness.get("readiness_state")
+        ) if candidate_readiness else "no_evidence"
+        if score_grade_allowed and scanner_candidate_score_evidence_is_complete(candidate_diagnostics):
+            candidate_state = "ready"
+        elif disclosure is not None and candidate_state == "no_evidence":
+            candidate_state = cls._consumer_data_quality_label(
+                source_confidence,
+                disclosure.get("cap_reason"),
+                disclosure.get("degradation_reason"),
+            )
+
+        run_readiness = cls._extract_lineage_frame(run_diagnostics, "dataReadiness", "data_readiness")
+        if not run_readiness:
+            return "partial" if candidate_state == "ready" else candidate_state
+        run_state = str(run_readiness.get("state") or "unknown").strip().lower()
+        generation_state = str(
+            run_readiness.get("candidateGenerationState")
+            or run_readiness.get("candidate_generation_state")
+            or "unknown"
+        ).strip().lower()
+        blockers = run_readiness.get("candidateGenerationBlockers") or run_readiness.get("candidate_generation_blockers")
+        if run_state == "blocked" or generation_state == "blocked" or (isinstance(blockers, list) and blockers):
+            return "unavailable"
+        if run_state == "partial" or generation_state == "degraded":
+            return "partial" if candidate_state == "ready" else candidate_state
+        if str(run_readiness.get("freshness") or "").strip().lower() in {"stale", "delayed"}:
+            return "cached" if candidate_state == "ready" else candidate_state
+        if run_state == "ready" and generation_state == "ready":
+            return candidate_state
+        return "partial" if candidate_state == "ready" else candidate_state
 
     @staticmethod
     def _lineage_freshness_label(data_state: str, disclosure: Optional[Dict[str, Any]]) -> str:
@@ -1103,11 +1277,15 @@ class WatchlistService:
         candidate: MarketScannerCandidate,
         run: MarketScannerRun,
         diagnostics: Dict[str, Any],
+        run_diagnostics: Dict[str, Any],
         disclosure: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         score_grade_allowed = cls._lineage_score_grade_allowed(disclosure)
         data_state = cls._lineage_data_state(
             item=item,
+            candidate_diagnostics=diagnostics,
+            run=run,
+            run_diagnostics=run_diagnostics,
             disclosure=disclosure,
             score_grade_allowed=score_grade_allowed,
         )
@@ -1211,6 +1389,14 @@ class WatchlistService:
                 context["storage_integrity"] = storage_integrity
                 context_by_key[key] = context
                 continue
+            run_diagnostics: Dict[str, Any] = {}
+            raw_run_diagnostics = getattr(run, "diagnostics_json", None)
+            if raw_run_diagnostics:
+                run_diagnostics, run_storage_integrity = self._load_candidate_diagnostics(raw_run_diagnostics)
+                if run_storage_integrity is not None:
+                    context["storage_integrity"] = run_storage_integrity
+                    context_by_key[key] = context
+                    continue
             provenance = self._project_local_ohlcv_provenance(diagnostics)
             internal_disclosure = self._project_scanner_score_disclosure_internal(diagnostics)
             disclosure = self._project_scanner_score_disclosure(internal_disclosure)
@@ -1220,6 +1406,7 @@ class WatchlistService:
                 candidate=candidate,
                 run=run,
                 diagnostics=diagnostics,
+                run_diagnostics=run_diagnostics,
                 disclosure=internal_disclosure,
             )
             catalyst_exposures = self._project_catalyst_exposures(item, diagnostics)
@@ -1240,7 +1427,7 @@ class WatchlistService:
     def _build_intelligence_payload(
         item: Dict[str, Any],
         *,
-        backtest: Optional[RuleBacktestRun] = None,
+        backtest: Optional[Dict[str, Any]] = None,
         scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
         scanner_score_disclosure: Optional[Dict[str, Any]] = None,
         scanner_investor_signal: Optional[Dict[str, Any]] = None,
@@ -1249,7 +1436,15 @@ class WatchlistService:
         scanner_storage_integrity: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
-        scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
+        lineage_state = WatchlistService._watchlist_readiness_state_from_quality(
+            scanner_lineage_v1.get("data_state") if isinstance(scanner_lineage_v1, dict) else None
+        )
+        scanner_status = {
+            "available": "selected",
+            "partial": "preview",
+            "stale": "preview",
+            "unavailable": "data_failed",
+        }.get(lineage_state, "unknown")
         if str(item.get("score_status") or "").strip().lower() == "data_failed":
             scanner_status = "data_failed"
 
@@ -1266,6 +1461,10 @@ class WatchlistService:
 
         backtest_payload = {
             "last_result_id": None,
+            "status": None,
+            "result_contract_available": None,
+            "data_sufficiency_state": None,
+            "readback_integrity_level": None,
             "total_return_pct": None,
             "max_drawdown_pct": None,
             "sharpe": None,
@@ -1273,25 +1472,21 @@ class WatchlistService:
             "tested_at": None,
         }
         if backtest is not None:
-            summary = WatchlistService._load_json_object(getattr(backtest, "summary_json", None))
-            metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+            execution_readiness = WatchlistService._nested_dict(backtest, "execution_readiness")
+            data_sufficiency = WatchlistService._nested_dict(backtest, "data_sufficiency")
+            readback_integrity = WatchlistService._nested_dict(backtest, "readback_integrity")
             backtest_payload = {
-                "last_result_id": int(backtest.id) if backtest.id is not None else None,
-                "total_return_pct": WatchlistService._safe_float(backtest.total_return_pct),
-                "max_drawdown_pct": WatchlistService._safe_float(backtest.max_drawdown_pct),
-                "sharpe": WatchlistService._safe_float(
-                    metrics.get("sharpe_ratio")
-                    if isinstance(metrics, dict)
-                    else None
-                ),
-                "trade_count": int(backtest.trade_count) if backtest.trade_count is not None else None,
-                "tested_at": (
-                    backtest.completed_at.isoformat()
-                    if backtest.completed_at
-                    else backtest.run_at.isoformat()
-                    if backtest.run_at
-                    else None
-                ),
+                "last_result_id": int(backtest["id"]) if backtest.get("id") is not None else None,
+                "status": WatchlistService._optional_str(backtest.get("status")),
+                "result_contract_available": execution_readiness.get("result_contract_available") is True,
+                "data_status": WatchlistService._optional_str(backtest.get("data_status")),
+                "data_sufficiency_state": WatchlistService._optional_str(data_sufficiency.get("status")),
+                "readback_integrity_level": WatchlistService._optional_str(readback_integrity.get("integrity_level")),
+                "total_return_pct": WatchlistService._safe_float(backtest.get("total_return_pct")),
+                "max_drawdown_pct": WatchlistService._safe_float(backtest.get("max_drawdown_pct")),
+                "sharpe": WatchlistService._safe_float(backtest.get("sharpe_ratio")),
+                "trade_count": int(backtest["trade_count"]) if backtest.get("trade_count") is not None else None,
+                "tested_at": WatchlistService._optional_str(backtest.get("completed_at") or backtest.get("run_at")),
             }
 
         scanner_payload = {
@@ -1336,7 +1531,7 @@ class WatchlistService:
         *,
         owner_id: str,
         symbols: List[Tuple[str, str]],
-    ) -> Dict[str, RuleBacktestRun]:
+    ) -> Dict[str, Dict[str, Any]]:
         storage_to_canonical: Dict[str, str] = {}
         for symbol, market in symbols:
             canonical_symbol = self._canonical_symbol_for_market(symbol, market)
@@ -1363,13 +1558,15 @@ class WatchlistService:
                     RuleBacktestRun.code.asc(),
                 )
             ).scalars().all()
-        latest: Dict[str, RuleBacktestRun] = {}
+        latest: Dict[str, Dict[str, Any]] = {}
+        backtest_service = RuleBacktestService(self.db, owner_id=owner_id)
         for row in rows:
-            if RuleBacktestService._effective_run_status(row) != "completed":
+            canonical_backtest = backtest_service.get_run(int(row.id))
+            if not canonical_backtest or canonical_backtest.get("status") != "completed":
                 continue
             canonical_symbol = storage_to_canonical.get(str(row.code or "").strip().upper())
             if canonical_symbol is not None and canonical_symbol not in latest:
-                latest[canonical_symbol] = row
+                latest[canonical_symbol] = canonical_backtest
         return latest
 
     def _attach_intelligence(

@@ -259,9 +259,15 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["theme_id"], "crypto_miners")
         self.assertEqual(payload["universe_type"], "default")
         self.assertEqual(payload["symbol_status"], "ready")
-        self.assertEqual(payload["research_status"], "ready")
-        self.assertEqual(payload["data_quality"], "ready")
-        self.assertEqual(payload["evidence_status"], "ready")
+        self.assertEqual(payload["research_status"], "no_evidence")
+        self.assertEqual(payload["data_quality"], "no_evidence")
+        self.assertEqual(payload["evidence_status"], "no_evidence")
+        readiness = payload["research_readiness"]
+        self.assertEqual(readiness["state"], "unknown")
+        self.assertEqual(readiness["market_data"]["state"], "unknown")
+        self.assertEqual(readiness["scanner_evidence"]["state"], "unknown")
+        self.assertEqual(readiness["backtest_result"]["state"], "unknown")
+        self.assertEqual(payload["intelligence"]["scanner"]["status"], "unknown")
         self.assertTrue(payload["notes_available"])
         self.assertTrue(payload["user_note_present"])
         self.assertIn("research", payload["no_advice_disclosure"].lower())
@@ -320,6 +326,15 @@ class WatchlistApiTestCase(unittest.TestCase):
                     "industry": "Consumer Electronics",
                 },
                 "quote": {"state": "stale", "price": 190.25, "changePercent": -0.42, "asOf": "2026-05-01T11:00:00Z"},
+                "productReadModel": {
+                    "state": "partial",
+                    "freshness": {"state": "stale", "asOf": "2026-05-01T11:00:00Z"},
+                    "provenance": {
+                        "sourceClass": "repo_fixture",
+                        "asOf": "2026-05-01T11:00:00Z",
+                        "freshness": "stale",
+                    },
+                },
                 "missingData": ["fundamentals", "filing_event_catalyst"],
                 "researchStatus": "partial",
                 "nextDataAction": "Add fundamentals and event evidence before marking the packet ready.",
@@ -365,10 +380,103 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["research_readiness"]["freshness_state"], "stale")
         self.assertEqual(payload["research_readiness"]["identity_state"], "resolved")
         self.assertEqual(payload["research_readiness"]["contract_version"], "product_read_model_v1")
+        self.assertEqual(payload["research_readiness"]["market_data"]["source_class"], "fixture")
+        self.assertEqual(payload["research_readiness"]["market_data"]["provenance_state"], "fixture")
+        self.assertEqual(payload["rowResearchPacket"]["provenance"]["sourceClass"], "fixture")
+        self.assertEqual(payload["rowResearchPacket"]["provenance"]["provenanceState"], "fixture")
         self.assertEqual(payload["rowResearchPacket"]["researchReadiness"], payload["research_readiness"])
         self.assertEqual(payload["rowResearchPacket"]["identity"]["canonicalSymbol"], "AAPL")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["displaySymbol"], "AAPL")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["identityState"], "resolved")
+
+        available_market = {
+            "quote": {"state": "available", "asOf": "2026-08-25T08:00:00Z"},
+            "provenance": {
+                "sourceClass": "fixture",
+                "provenanceState": "fixture",
+                "freshnessState": "available",
+                "asOf": "2026-08-25T08:00:00Z",
+            },
+        }
+        available_scanner = {
+            "scanner_lineage_v1": {
+                "data_state": "available",
+                "run_completed_at": "2026-08-25T08:01:00Z",
+            }
+        }
+
+        missing_backtest = watchlist_service_module.WatchlistService._build_research_readiness_payload(
+            {
+                "rowResearchPacket": available_market,
+                "intelligence": {"scanner": available_scanner, "backtest": {"last_result_id": None}},
+            },
+            identity_state="resolved",
+        )
+        self.assertEqual(missing_backtest["state"], "partial")
+        self.assertEqual(missing_backtest["backtest_result"]["state"], "unknown")
+        self.assertIn("backtest_result_unknown", missing_backtest["blocked_reasons"])
+
+        missing_scanner = watchlist_service_module.WatchlistService._build_research_readiness_payload(
+            {
+                "rowResearchPacket": available_market,
+                "intelligence": {
+                    "scanner": {},
+                    "backtest": {
+                        "last_result_id": 7,
+                        "result_contract_available": True,
+                        "tested_at": "2026-08-25T08:02:00Z",
+                    },
+                },
+            },
+            identity_state="resolved",
+        )
+        self.assertEqual(missing_scanner["state"], "partial")
+        self.assertEqual(missing_scanner["scanner_evidence"]["state"], "unknown")
+        self.assertIn("scanner_evidence_unknown", missing_scanner["blocked_reasons"])
+
+        unavailable_market = watchlist_service_module.WatchlistService._build_research_readiness_payload(
+            {
+                "rowResearchPacket": {
+                    "quote": {"state": "unavailable"},
+                    "provenance": {
+                        "sourceClass": "provider",
+                        "provenanceState": "unavailable",
+                        "freshnessState": "unavailable",
+                    },
+                },
+                "intelligence": {
+                    "scanner": available_scanner,
+                    "backtest": {
+                        "last_result_id": 7,
+                        "result_contract_available": True,
+                        "tested_at": "2026-08-25T08:02:00Z",
+                    },
+                },
+            },
+            identity_state="resolved",
+        )
+        self.assertEqual(unavailable_market["state"], "unavailable")
+        self.assertEqual(unavailable_market["market_data"]["state"], "unavailable")
+        self.assertIn("market_data_unavailable", unavailable_market["blocked_reasons"])
+
+        canonical_contract_missing = watchlist_service_module.WatchlistService._build_research_readiness_payload(
+            {
+                "rowResearchPacket": available_market,
+                "intelligence": {
+                    "scanner": available_scanner,
+                    "backtest": {
+                        "last_result_id": 7,
+                        "status": "completed",
+                        "result_contract_available": False,
+                        "tested_at": "2026-08-25T08:02:00Z",
+                    },
+                },
+            },
+            identity_state="resolved",
+        )
+        self.assertEqual(canonical_contract_missing["state"], "unavailable")
+        self.assertEqual(canonical_contract_missing["backtest_result"]["state"], "unavailable")
+        self.assertIn("backtest_result_unavailable", canonical_contract_missing["blocked_reasons"])
 
     def test_watchlist_add_rejects_unsupported_market_identity_without_provider_lookup(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -448,6 +556,16 @@ class WatchlistApiTestCase(unittest.TestCase):
             run_at=now,
             completed_at=now,
             shortlist_size=1,
+            diagnostics_json=json.dumps(
+                {
+                    "dataReadiness": {
+                        "state": "partial",
+                        "candidateGenerationState": "degraded",
+                        "candidateGenerationBlockers": [],
+                    }
+                },
+                ensure_ascii=False,
+            ),
         )
         candidate = MarketScannerCandidate(
             symbol="WULF",
@@ -523,6 +641,9 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["score_status"], "partial")
         self.assertEqual(item["score_reason"], "趋势结构和成交活跃度触发研究观察。")
         self.assertEqual(item["rowResearchPacket"]["scannerLineage"]["runId"], run_id)
+        self.assertEqual(item["research_readiness"]["state"], "partial")
+        self.assertEqual(item["research_readiness"]["scanner_evidence"]["state"], "partial")
+        self.assertEqual(item["intelligence"]["scanner"]["status"], "preview")
 
         lineage = item["intelligence"]["scanner"]["scanner_lineage_v1"]
         self.assertEqual(lineage["scanner_run_id"], run_id)
@@ -1191,9 +1312,10 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(scanner["data_quality"], "cached")
         item = payload["items"][0]
         self.assertEqual(item["symbol_status"], "ready")
-        self.assertEqual(item["research_status"], "stale_or_cached")
-        self.assertEqual(item["data_quality"], "stale_or_cached")
-        self.assertEqual(item["evidence_status"], "stale_or_cached")
+        self.assertEqual(item["research_status"], "no_evidence")
+        self.assertEqual(item["data_quality"], "no_evidence")
+        self.assertEqual(item["evidence_status"], "no_evidence")
+        self.assertEqual(item["research_readiness"]["scanner_evidence"]["state"], "unknown")
         self.assertTrue(item["last_reviewed_at"])
         _assert_safe_watchlist_research_context(item)
         _assert_no_forbidden_consumer_response_fields(payload)
@@ -1732,6 +1854,21 @@ class WatchlistApiTestCase(unittest.TestCase):
             final_equity=100000.0,
             summary_json='{"metrics":{"trade_count":0,"bars_used":0,"final_equity":100000.0,"total_return_pct":0.0},"data_quality":{"bar_count":0}}',
         )
+        valid_zero_trade = RuleBacktestRun(
+            owner_id="user-1",
+            code="WULF",
+            strategy_text="观察列表零交易有效回测",
+            parsed_strategy_json="{}",
+            strategy_hash="valid-zero-trade",
+            status="completed",
+            run_at=datetime(2026, 5, 4, 8, 0, 0),
+            completed_at=datetime(2026, 5, 4, 8, 1, 0),
+            trade_count=0,
+            total_return_pct=0.0,
+            max_drawdown_pct=0.0,
+            final_equity=100000.0,
+            summary_json='{"metrics":{"trade_count":0,"bars_used":252,"final_equity":100000.0,"total_return_pct":0.0,"max_drawdown_pct":0.0,"sharpe_ratio":0.0},"data_quality":{"bar_count":252}}',
+        )
         failed = RuleBacktestRun(
             owner_id="user-1",
             code="WULF",
@@ -1745,9 +1882,10 @@ class WatchlistApiTestCase(unittest.TestCase):
             total_return_pct=99.0,
         )
         with self.db.get_session() as session:
-            session.add_all([older, latest, legacy_unavailable, failed])
+            session.add_all([older, latest, legacy_unavailable, failed, valid_zero_trade])
             session.commit()
-            latest_id = latest.id
+            latest_id = valid_zero_trade.id
+            legacy_unavailable_id = legacy_unavailable.id
 
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
@@ -1755,16 +1893,20 @@ class WatchlistApiTestCase(unittest.TestCase):
         intelligence = item["intelligence"]
         self.assertEqual(intelligence["scanner"]["last_score"], 60.0)
         self.assertEqual(intelligence["scanner"]["last_rank"], 1)
-        self.assertEqual(intelligence["scanner"]["status"], "selected")
+        self.assertEqual(intelligence["scanner"]["status"], "unknown")
         self.assertEqual(intelligence["scanner"]["theme"], "crypto_miners")
         self.assertEqual(intelligence["scanner"]["profile"], None)
         self.assertEqual(intelligence["scanner"]["reason"], "趋势/动量通过")
         self.assertEqual(intelligence["strategy_simulation"]["status"], "unknown")
         self.assertEqual(intelligence["backtest"]["last_result_id"], latest_id)
-        self.assertEqual(intelligence["backtest"]["total_return_pct"], 24.6)
-        self.assertEqual(intelligence["backtest"]["max_drawdown_pct"], -8.2)
-        self.assertEqual(intelligence["backtest"]["sharpe"], 1.34)
-        self.assertEqual(intelligence["backtest"]["trade_count"], 6)
+        self.assertEqual(intelligence["backtest"]["total_return_pct"], 0.0)
+        self.assertEqual(intelligence["backtest"]["max_drawdown_pct"], 0.0)
+        self.assertEqual(intelligence["backtest"]["sharpe"], 0.0)
+        self.assertEqual(intelligence["backtest"]["trade_count"], 0)
+        self.assertTrue(intelligence["backtest"]["result_contract_available"])
+        self.assertNotEqual(intelligence["backtest"]["last_result_id"], legacy_unavailable_id)
+        self.assertEqual(item["research_readiness"]["backtest_result"]["state"], "available")
+        self.assertEqual(item["research_readiness"]["backtest_result"]["provenance_state"], "calculated")
 
         hk_add_resp = self.client.post(
             "/api/v1/watchlist/items",
@@ -1792,6 +1934,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         refreshed_items = self.client.get("/api/v1/watchlist/items").json()["items"]
         hk_item = next(item for item in refreshed_items if item["symbol"] == "HK00700")
         self.assertEqual(hk_item["intelligence"]["backtest"]["last_result_id"], legacy_hk_backtest_id)
+        self.assertTrue(hk_item["intelligence"]["backtest"]["result_contract_available"])
         self.assertEqual(hk_item["intelligence"]["backtest"]["total_return_pct"], 12.5)
         self.assertEqual(hk_item["intelligence"]["backtest"]["trade_count"], 3)
 
@@ -1843,8 +1986,8 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(intelligence["strategy_simulation"]["status"], "unknown")
         self.assertIsNone(intelligence["backtest"]["last_result_id"])
         item = list_resp.json()["items"][0]
-        self.assertEqual(item["symbol_status"], "symbol_unknown")
-        self.assertEqual(item["research_status"], "symbol_unknown")
+        self.assertEqual(item["symbol_status"], "ready")
+        self.assertEqual(item["research_status"], "no_evidence")
         self.assertEqual(item["data_quality"], "no_evidence")
         self.assertEqual(item["evidence_status"], "no_evidence")
         self.assertFalse(item["notes_available"])
@@ -1870,9 +2013,10 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(list_resp.status_code, 200)
         item = list_resp.json()["items"][0]
         self.assertEqual(item["symbol_status"], "unsupported_market")
-        self.assertEqual(item["research_status"], "unsupported_market")
-        self.assertEqual(item["data_quality"], "no_evidence")
-        self.assertEqual(item["evidence_status"], "no_evidence")
+        self.assertEqual(item["research_status"], "unavailable")
+        self.assertEqual(item["data_quality"], "unavailable")
+        self.assertEqual(item["evidence_status"], "unavailable")
+        self.assertEqual(item["research_readiness"]["identity_state"], "unsupported")
         self.assertTrue(item["notes_available"])
         self.assertTrue(item["user_note_present"])
         _assert_safe_watchlist_research_context(item)
@@ -1901,7 +2045,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(list_resp.status_code, 200)
         payload = list_resp.json()
         item = payload["items"][0]
-        self.assertEqual(item["symbol_status"], "symbol_unknown")
+        self.assertEqual(item["symbol_status"], "ready")
         self.assertEqual(item["research_status"], "unavailable")
         self.assertEqual(item["data_quality"], "unavailable")
         self.assertEqual(item["evidence_status"], "unavailable")

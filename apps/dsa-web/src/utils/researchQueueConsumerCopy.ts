@@ -1,6 +1,6 @@
 import { mapConsumerStatusText, normalizeConsumerStatusToken } from './consumerStatusLabels';
 import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
-import type { WatchlistRowResearchPacketResponse } from '../types/watchlist';
+import type { WatchlistResearchReadiness, WatchlistRowResearchPacketResponse } from '../types/watchlist';
 
 export type ResearchQueueConsumerLocale = 'zh' | 'en';
 
@@ -29,6 +29,8 @@ type WatchlistRowResearchPacketQuoteState = 'available' | 'missing' | 'stale' | 
 type WatchlistRowResearchPacketStatus = 'ready' | 'partial' | 'blocked' | 'unknown';
 
 export type WatchlistRowResearchPacketConsumerCopy = {
+  evidenceAvailable: boolean;
+  evidenceSummaryLabel: string;
   identityStateLabel: string | null;
   identityStateVariant: 'success' | 'info' | 'caution';
   freshnessStateLabel: string | null;
@@ -127,6 +129,44 @@ const PACKET_STATUS_LABELS: Record<WatchlistRowResearchPacketStatus, Record<Rese
     zh: '研究状态未知',
     en: 'Research status unknown',
   },
+};
+
+const PACKET_READINESS_LABELS: Record<string, Record<ResearchQueueConsumerLocale, string>> = {
+  available: {
+    zh: '研究证据可用',
+    en: 'Research evidence available',
+  },
+  partial: {
+    zh: '研究证据部分可用',
+    en: 'Research evidence partial',
+  },
+  stale: {
+    zh: '研究证据已过期',
+    en: 'Research evidence stale',
+  },
+  unavailable: {
+    zh: '研究证据不可用',
+    en: 'Research evidence unavailable',
+  },
+  pending: {
+    zh: '研究证据处理中',
+    en: 'Research evidence pending',
+  },
+  unknown: {
+    zh: '研究证据待补',
+    en: 'Research evidence needs data',
+  },
+};
+
+const PACKET_PROVENANCE_LABELS: Record<string, Record<ResearchQueueConsumerLocale, string>> = {
+  observed: { zh: '观测数据', en: 'observed data' },
+  delayed: { zh: '延迟数据', en: 'delayed data' },
+  calculated: { zh: '计算证据', en: 'calculated evidence' },
+  simulated: { zh: '模拟数据', en: 'simulated data' },
+  example: { zh: '示例数据', en: 'example data' },
+  fixture: { zh: '测试数据', en: 'fixture data' },
+  unavailable: { zh: '来源不可用', en: 'source unavailable' },
+  unknown: { zh: '来源未知', en: 'source unknown' },
 };
 
 function packetIdentityStateLabel(
@@ -251,6 +291,20 @@ function packetQuoteStateLabel(state: WatchlistRowResearchPacketQuoteState, loca
 
 function packetResearchStatusLabel(state: WatchlistRowResearchPacketStatus, locale: ResearchQueueConsumerLocale): string {
   return PACKET_STATUS_LABELS[state][locale];
+}
+
+function packetEvidenceSummaryLabel(
+  packet: WatchlistRowResearchPacketResponse,
+  locale: ResearchQueueConsumerLocale,
+): { available: boolean; label: string } {
+  const state = normalizeConsumerStatusToken(packet.researchReadiness?.state);
+  const provenance = normalizeConsumerStatusToken(packet.researchReadiness?.marketData?.provenanceState);
+  const readinessLabel = (PACKET_READINESS_LABELS[state] || PACKET_READINESS_LABELS.unknown)[locale];
+  const provenanceLabel = (PACKET_PROVENANCE_LABELS[provenance] || PACKET_PROVENANCE_LABELS.unknown)[locale];
+  return {
+    available: state === 'available',
+    label: `${readinessLabel} · ${provenanceLabel}`,
+  };
 }
 
 function packetScannerLineageLabel(
@@ -462,11 +516,16 @@ export function getResearchQueueConsumerCopy(
 export function getWatchlistRowResearchPacketConsumerCopy(
   packet: WatchlistRowResearchPacketResponse | null | undefined,
   locale: ResearchQueueConsumerLocale = 'zh',
+  readinessOverride?: WatchlistResearchReadiness | null,
 ): WatchlistRowResearchPacketConsumerCopy | null {
   if (!packet) return null;
 
   const quoteState = normalizePacketQuoteState(packet.quote?.state);
   const researchStatus = normalizePacketResearchStatus(packet.researchStatus);
+  const evidenceSummary = packetEvidenceSummaryLabel(
+    readinessOverride ? { ...packet, researchReadiness: readinessOverride } : packet,
+    locale,
+  );
   const scannerLineage = packetScannerLineageLabel(packet, locale);
   const identityState = packetIdentityStateLabel(
     packet.researchReadiness?.identityState || packet.identity?.identityState,
@@ -486,6 +545,8 @@ export function getWatchlistRowResearchPacketConsumerCopy(
     : null;
 
   return {
+    evidenceAvailable: evidenceSummary.available,
+    evidenceSummaryLabel: evidenceSummary.label,
     identityStateLabel: identityState.label,
     identityStateVariant: identityState.variant,
     freshnessStateLabel: freshnessState.label,

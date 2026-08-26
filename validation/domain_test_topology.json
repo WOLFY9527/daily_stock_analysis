@@ -43067,13 +43067,13 @@
       "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 68,
-      "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
-      "projectCaseCount": 740,
-      "projectCaseSha256": "125bde873404a03478e2d343328534188d56905eca326a10ab7aaaa0780c0e9a",
+      "specCount": 69,
+      "specSha256": "12630948660c8faca72da85fe398dda8318796786134cd16663d1101786707b3",
+      "projectCaseCount": 744,
+      "projectCaseSha256": "7f3963ff14a7f8c48cb4d7cff2fb621f196004ffb960588e077bf48d4ee67a9f",
       "projectCaseCounts": {
-        "chromium": 368,
-        "chromium-mobile": 368,
+        "chromium": 370,
+        "chromium-mobile": 370,
         "release-real-runtime": 4
       }
     },
@@ -43387,6 +43387,11 @@
         "path": "apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "path": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "path": "apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts",
@@ -45617,6 +45622,20 @@
         "project": "chromium-mobile",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › keeps an empty pool useful without inventing evidence",
+        "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › renders the filled-pool readiness matrix without provenance collapse",
+        "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",
@@ -48193,6 +48212,20 @@
         "project": "chromium",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › keeps an empty pool useful without inventing evidence",
+        "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › renders the filled-pool readiness matrix without provenance collapse",
+        "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",

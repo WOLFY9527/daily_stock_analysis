@@ -81,6 +81,121 @@ vi.mock('../../components/auth/AuthGuardOverlay', () => ({
 const writeTextMock = vi.fn();
 let resolvePendingListRules: Array<(value: ReturnType<typeof makeUserAlertRulesResponse>) => void> = [];
 
+function makeResearchReadiness(
+  overrides: Partial<NonNullable<WatchlistItem['researchReadiness']>> = {},
+): NonNullable<WatchlistItem['researchReadiness']> {
+  const base: NonNullable<WatchlistItem['researchReadiness']> = {
+    contractVersion: 'product_read_model_v1',
+    state: 'available',
+    freshnessState: 'available',
+    identityState: 'resolved',
+    lastReviewedAt: '2026-05-01T13:30:00',
+    scoreFreshnessImplied: false,
+    sourceAuthorityImplied: false,
+    marketData: {
+      state: 'available',
+      freshnessState: 'available',
+      sourceClass: 'market_observation',
+      provenanceState: 'observed',
+      asOf: '2026-05-01T12:30:00',
+    },
+    scannerEvidence: {
+      state: 'available',
+      freshnessState: 'available',
+      sourceClass: 'scanner_run',
+      provenanceState: 'calculated',
+      asOf: '2026-05-01T12:30:00',
+    },
+    backtestResult: {
+      state: 'available',
+      freshnessState: 'available',
+      sourceClass: 'rule_backtest_result',
+      provenanceState: 'calculated',
+      asOf: '2026-05-01T13:30:00',
+    },
+    blockedReasons: [],
+  };
+  return {
+    ...base,
+    ...overrides,
+    marketData: { ...base.marketData, ...overrides.marketData },
+    scannerEvidence: { ...base.scannerEvidence, ...overrides.scannerEvidence },
+    backtestResult: { ...base.backtestResult, ...overrides.backtestResult },
+  };
+}
+
+function makeUnknownResearchReadiness(): NonNullable<WatchlistItem['researchReadiness']> {
+  const unknownDimension = {
+    state: 'unknown' as const,
+    freshnessState: 'unknown' as const,
+    sourceClass: 'unknown' as const,
+    provenanceState: 'unknown' as const,
+    asOf: null,
+  };
+  return makeResearchReadiness({
+    state: 'unknown',
+    freshnessState: 'unknown',
+    lastReviewedAt: null,
+    marketData: unknownDimension,
+    scannerEvidence: unknownDimension,
+    backtestResult: unknownDimension,
+    blockedReasons: ['market_data_unavailable', 'scanner_evidence_unknown', 'backtest_result_unknown'],
+  });
+}
+
+function makeStaleResearchReadiness(): NonNullable<WatchlistItem['researchReadiness']> {
+  return makeResearchReadiness({
+    state: 'stale',
+    freshnessState: 'stale',
+    marketData: {
+      state: 'stale',
+      freshnessState: 'stale',
+      sourceClass: 'market_observation',
+      provenanceState: 'delayed',
+      asOf: '2026-04-20T12:30:00Z',
+    },
+    scannerEvidence: {
+      state: 'stale',
+      freshnessState: 'stale',
+      sourceClass: 'scanner_run',
+      provenanceState: 'calculated',
+      asOf: '2026-04-20T12:30:00Z',
+    },
+    backtestResult: {
+      state: 'unknown',
+      freshnessState: 'unknown',
+      sourceClass: 'unknown',
+      provenanceState: 'unknown',
+      asOf: null,
+    },
+    blockedReasons: ['market_data_stale', 'backtest_result_unknown'],
+  });
+}
+
+function makePartialPacketReadiness(asOf: string): NonNullable<WatchlistItem['researchReadiness']> {
+  const unknownDimension = {
+    state: 'unknown' as const,
+    freshnessState: 'unknown' as const,
+    sourceClass: 'unknown' as const,
+    provenanceState: 'unknown' as const,
+    asOf: null,
+  };
+  return makeResearchReadiness({
+    state: 'partial',
+    freshnessState: 'stale',
+    marketData: {
+      state: 'stale',
+      freshnessState: 'stale',
+      sourceClass: 'market_observation',
+      provenanceState: 'delayed',
+      asOf,
+    },
+    scannerEvidence: unknownDimension,
+    backtestResult: unknownDimension,
+    blockedReasons: ['market_data_stale', 'scanner_evidence_unknown', 'backtest_result_unknown'],
+  });
+}
+
 function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   const symbol = overrides.symbol ?? 'NVDA';
   const market = overrides.market ?? 'us';
@@ -110,6 +225,7 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
       sourceAuthorityImplied: false,
     },
     scoreError: null,
+    researchReadiness: makeResearchReadiness(),
     intelligence: {
       scanner: {
         lastScore: 94,
@@ -133,6 +249,7 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
       },
       backtest: {
         lastResultId: 33,
+        resultContractAvailable: true,
         totalReturnPct: 24.6,
         maxDrawdownPct: -8.2,
         sharpe: 1.34,
@@ -212,6 +329,9 @@ function makeRuleBacktestRun(overrides: Partial<RuleBacktestRunResponse> = {}): 
     warnings: [],
     runAt: '2026-05-03T09:00:00Z',
     completedAt: '2026-05-03T09:01:00Z',
+    executionReadiness: {
+      resultContractAvailable: true,
+    },
     status: 'completed',
     statusHistory: [],
     runTiming: {},
@@ -349,7 +469,7 @@ describe('WatchlistPage', () => {
     });
     getResearchOverlay.mockResolvedValue({
       schemaVersion: 'watchlist_research_overlay_v1',
-      overlayState: 'ready',
+      overlayState: 'available',
       researchSummary: 'Saved symbols are ready for observation.',
       researchPriorityQueue: [],
       observationOnly: true,
@@ -561,6 +681,7 @@ describe('WatchlistPage', () => {
           scannerScore: 81,
           scoreStatus: 'stale',
           scoreSource: 'proxy_fallback',
+          researchReadiness: makeStaleResearchReadiness(),
           intelligence: {
             scanner: { lastScore: 81, status: 'selected', reason: 'Fallback score snapshot.', lastScannedAt: '2026-04-20T12:30:00Z' },
             strategySimulation: { status: 'unknown' },
@@ -577,6 +698,7 @@ describe('WatchlistPage', () => {
           lastScoredAt: null,
           scoreSource: null,
           scoreStatus: null,
+          researchReadiness: makeUnknownResearchReadiness(),
           intelligence: undefined,
         }),
       ],
@@ -591,7 +713,7 @@ describe('WatchlistPage', () => {
     expect(band).toHaveTextContent('需要留意');
     expect(band).toHaveTextContent('观察标的 3');
     expect(band).toHaveTextContent('最新1');
-    expect(band).toHaveTextContent('需留意3');
+    expect(band).toHaveTextContent('需留意2');
     expect(band).toHaveTextContent(/当前数据置信度较低|历史观察|不代表实时信号/);
     expect(band).not.toHaveTextContent(/fallback|proxy|备用\/代理|备用数据|代理证据|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
@@ -612,6 +734,7 @@ describe('WatchlistPage', () => {
           lastScoredAt: null,
           scoreSource: null,
           scoreStatus: null,
+          researchReadiness: makePartialPacketReadiness('2026-05-01T11:00:00Z'),
           intelligence: undefined,
           rowResearchPacket: {
             symbol: 'AAPL',
@@ -662,6 +785,7 @@ describe('WatchlistPage', () => {
           lastScoredAt: null,
           scoreSource: null,
           scoreStatus: 'unknown',
+          researchReadiness: makeUnknownResearchReadiness(),
           themeId: null,
           universeType: null,
           intelligence: undefined,
@@ -680,7 +804,7 @@ describe('WatchlistPage', () => {
     expect(board).toHaveTextContent('AAPL');
     expect(board).toHaveTextContent('$190.3');
     expect(board).toHaveTextContent('-0.42%');
-    expect(board).toHaveTextContent('研究包部分可用');
+    expect(board).toHaveTextContent('研究证据部分可用 · 延迟数据');
     expect(board).toHaveTextContent('复核缺口：基本面、事件、同业');
     expect(board).toHaveTextContent('查看个股结构');
     expect(board).toHaveTextContent('SHOP');
@@ -856,7 +980,7 @@ describe('WatchlistPage', () => {
     getResearchOverlay
       .mockResolvedValueOnce({
         schemaVersion: 'watchlist_research_overlay_v1',
-        overlayState: 'ready',
+        overlayState: 'available',
         researchSummary: 'Saved symbols are ready for observation.',
         researchPriorityQueue: [
           {
@@ -925,6 +1049,7 @@ describe('WatchlistPage', () => {
           scannerScore: 81,
           scoreStatus: 'stale',
           scoreSource: 'proxy_fallback',
+          researchReadiness: makeStaleResearchReadiness(),
           intelligence: {
             scanner: { lastScore: 81, status: 'selected', reason: 'Fallback score snapshot.', lastScannedAt: '2026-04-20T12:30:00Z' },
             strategySimulation: { status: 'unknown' },
@@ -941,6 +1066,7 @@ describe('WatchlistPage', () => {
           lastScoredAt: null,
           scoreSource: null,
           scoreStatus: null,
+          researchReadiness: makeUnknownResearchReadiness(),
           intelligence: undefined,
         }),
       ],
@@ -953,7 +1079,7 @@ describe('WatchlistPage', () => {
     expect(band).toHaveTextContent('需要留意');
     expect(band).toHaveTextContent('观察标的 2');
     expect(band).toHaveTextContent('最新0');
-    expect(band).toHaveTextContent('需留意3');
+    expect(band).toHaveTextContent('需留意2');
     expect(band).toHaveTextContent('部分项目时效未知，先复核已保存研究上下文。');
   });
 
@@ -1250,6 +1376,7 @@ describe('WatchlistPage', () => {
         lastScoredAt: null,
         scoreSource: null,
         scoreStatus: null,
+        researchReadiness: makePartialPacketReadiness('2026-05-01T11:00:00Z'),
         intelligence: undefined,
         rowResearchPacket: {
           symbol: 'AAPL',
@@ -1423,6 +1550,7 @@ describe('WatchlistPage', () => {
         scannerRank: null,
         scannerScore: null,
         scoreStatus: null,
+        researchReadiness: makeUnknownResearchReadiness(),
         themeId: null,
         universeType: null,
         intelligence: undefined,
@@ -1719,6 +1847,7 @@ describe('WatchlistPage', () => {
         lastScoredAt: null,
         scoreSource: null,
         scoreStatus: 'unknown',
+        researchReadiness: makeUnknownResearchReadiness(),
         themeId: null,
         universeType: null,
         intelligence: undefined,
@@ -1823,6 +1952,7 @@ describe('WatchlistPage', () => {
         lastScoredAt: null,
         scoreSource: null,
         scoreStatus: null,
+        researchReadiness: makeUnknownResearchReadiness(),
         themeId: null,
         universeType: null,
         intelligence: undefined,

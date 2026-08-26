@@ -11,6 +11,11 @@ import type {
   WatchlistResearchPriorityEvidenceAge,
   WatchlistResearchPriorityQueueItem,
   WatchlistResearchPriorityTier,
+  WatchlistResearchDimension,
+  WatchlistResearchReadiness,
+  WatchlistResearchReadinessState,
+  WatchlistResearchProvenanceState,
+  WatchlistResearchSourceClass,
   WatchlistRowResearchPacketResponse,
   WatchlistScoreRefreshRequest,
   WatchlistScoreRefreshResponse,
@@ -51,6 +56,15 @@ const WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION = 'watchlist_research_overlay_v1
 const WATCHLIST_RESEARCH_OVERLAY_UNAVAILABLE_SUMMARY = 'Watchlist research follow-up is temporarily unavailable.';
 const SAFE_ROW_RESEARCH_QUOTE_STATES = new Set(['available', 'missing', 'stale', 'unknown']);
 const SAFE_ROW_RESEARCH_STATUS = new Set(['ready', 'partial', 'blocked', 'unknown']);
+const SAFE_RESEARCH_READINESS_STATES = new Set<WatchlistResearchReadinessState>([
+  'available', 'partial', 'stale', 'unavailable', 'pending', 'unknown',
+]);
+const SAFE_RESEARCH_PROVENANCE_STATES = new Set<WatchlistResearchProvenanceState>([
+  'observed', 'calculated', 'delayed', 'simulated', 'example', 'fixture', 'unavailable', 'unknown',
+]);
+const SAFE_RESEARCH_SOURCE_CLASSES = new Set<WatchlistResearchSourceClass>([
+  'market_observation', 'scanner_run', 'rule_backtest_result', 'simulated', 'example', 'fixture', 'unknown',
+]);
 
 function normalizeOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -100,6 +114,51 @@ function normalizeConsumerTextList(value: unknown): string[] {
       .map((entry) => normalizeOptionalText(entry))
       .filter((entry): entry is string => Boolean(entry)),
   ));
+}
+
+function normalizeReadinessState(value: unknown): WatchlistResearchReadinessState {
+  const normalized = normalizeOptionalText(value)?.toLowerCase() as WatchlistResearchReadinessState | undefined;
+  return normalized && SAFE_RESEARCH_READINESS_STATES.has(normalized) ? normalized : 'unknown';
+}
+
+function normalizeResearchSourceClass(value: unknown): WatchlistResearchSourceClass {
+  const normalized = normalizeOptionalText(value)?.toLowerCase() as WatchlistResearchSourceClass | undefined;
+  return normalized && SAFE_RESEARCH_SOURCE_CLASSES.has(normalized) ? normalized : 'unknown';
+}
+
+function normalizeResearchProvenanceState(value: unknown): WatchlistResearchProvenanceState {
+  const normalized = normalizeOptionalText(value)?.toLowerCase() as WatchlistResearchProvenanceState | undefined;
+  return normalized && SAFE_RESEARCH_PROVENANCE_STATES.has(normalized) ? normalized : 'unknown';
+}
+
+function normalizeResearchDimension(value: unknown): WatchlistResearchDimension {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    state: normalizeReadinessState(record.state),
+    freshnessState: normalizeReadinessState(record.freshnessState),
+    sourceClass: normalizeResearchSourceClass(record.sourceClass),
+    provenanceState: normalizeResearchProvenanceState(record.provenanceState),
+    asOf: normalizeOptionalText(record.asOf),
+    reason: normalizeOptionalText(record.reason),
+  };
+}
+
+function normalizeResearchReadiness(value: unknown): WatchlistResearchReadiness | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  return {
+    contractVersion: normalizeOptionalText(record.contractVersion),
+    state: normalizeReadinessState(record.state),
+    freshnessState: normalizeReadinessState(record.freshnessState),
+    identityState: normalizeOptionalText(record.identityState) ?? 'unknown',
+    lastReviewedAt: normalizeOptionalText(record.lastReviewedAt),
+    scoreFreshnessImplied: normalizeOptionalBoolean(record.scoreFreshnessImplied),
+    sourceAuthorityImplied: normalizeOptionalBoolean(record.sourceAuthorityImplied),
+    marketData: normalizeResearchDimension(record.marketData),
+    scannerEvidence: normalizeResearchDimension(record.scannerEvidence),
+    backtestResult: normalizeResearchDimension(record.backtestResult),
+    blockedReasons: normalizeConsumerTextList(record.blockedReasons),
+  };
 }
 
 function normalizeResearchPriorityTier(value: unknown): WatchlistResearchPriorityTier | null {
@@ -177,6 +236,7 @@ function normalizeRowResearchPacket(
   const market = normalizeOptionalText(record.market)?.toLowerCase();
   const identity = record.identity && typeof record.identity === 'object' ? record.identity as unknown as Record<string, unknown> : {};
   const quote = record.quote && typeof record.quote === 'object' ? record.quote as unknown as Record<string, unknown> : {};
+  const provenance = record.provenance && typeof record.provenance === 'object' ? record.provenance as unknown as Record<string, unknown> : {};
   const scannerLineage = record.scannerLineage && typeof record.scannerLineage === 'object'
     ? record.scannerLineage as unknown as Record<string, unknown>
     : {};
@@ -208,6 +268,12 @@ function normalizeRowResearchPacket(
       changePercent: normalizeOptionalNumber(quote.changePercent),
       asOf: normalizeOptionalText(quote.asOf),
     },
+    provenance: {
+      sourceClass: normalizeResearchSourceClass(provenance.sourceClass),
+      provenanceState: normalizeResearchProvenanceState(provenance.provenanceState),
+      asOf: normalizeOptionalText(provenance.asOf),
+      freshnessState: normalizeReadinessState(provenance.freshnessState),
+    },
     scannerLineage: {
       runId: normalizeOptionalNumber(scannerLineage.runId),
       rank: normalizeOptionalNumber(scannerLineage.rank),
@@ -218,15 +284,7 @@ function normalizeRowResearchPacket(
     researchStatus: SAFE_ROW_RESEARCH_STATUS.has(researchStatus)
       ? researchStatus as 'ready' | 'partial' | 'blocked' | 'unknown'
       : 'unknown',
-    researchReadiness: researchReadiness ? {
-      contractVersion: normalizeOptionalText(researchReadiness.contractVersion),
-      state: normalizeOptionalText(researchReadiness.state)?.toLowerCase() ?? 'unknown',
-      freshnessState: normalizeOptionalText(researchReadiness.freshnessState)?.toLowerCase() ?? 'unknown',
-      identityState: normalizeOptionalText(researchReadiness.identityState) ?? 'unknown',
-      lastReviewedAt: normalizeOptionalText(researchReadiness.lastReviewedAt),
-      scoreFreshnessImplied: normalizeOptionalBoolean(researchReadiness.scoreFreshnessImplied),
-      sourceAuthorityImplied: normalizeOptionalBoolean(researchReadiness.sourceAuthorityImplied),
-    } : null,
+    researchReadiness: normalizeResearchReadiness(researchReadiness),
     missingData: normalizeConsumerTextList(record.missingData),
     nextDataAction: normalizeOptionalText(record.nextDataAction) ?? '',
     observationOnly: true,
@@ -258,15 +316,9 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
       displayName: normalizeOptionalText(identity.displayName),
       identityState: normalizeOptionalText(identity.identityState) ?? 'unknown',
     } : item.identity,
-    researchReadiness: researchReadiness ? {
-      contractVersion: normalizeOptionalText(researchReadiness.contractVersion),
-      state: normalizeOptionalText(researchReadiness.state)?.toLowerCase() ?? 'unknown',
-      freshnessState: normalizeOptionalText(researchReadiness.freshnessState)?.toLowerCase() ?? 'unknown',
-      identityState: normalizeOptionalText(researchReadiness.identityState) ?? 'unknown',
-      lastReviewedAt: normalizeOptionalText(researchReadiness.lastReviewedAt),
-      scoreFreshnessImplied: normalizeOptionalBoolean(researchReadiness.scoreFreshnessImplied),
-      sourceAuthorityImplied: normalizeOptionalBoolean(researchReadiness.sourceAuthorityImplied),
-    } : rowResearchPacket?.researchReadiness ?? item.researchReadiness,
+    researchReadiness: normalizeResearchReadiness(researchReadiness)
+      ?? rowResearchPacket?.researchReadiness
+      ?? null,
     rowResearchPacket,
     intelligence: item.intelligence
       ? {

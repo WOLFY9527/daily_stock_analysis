@@ -4,6 +4,54 @@ import {
   getResearchQueueConsumerText,
   getWatchlistRowResearchPacketConsumerCopy,
 } from '../researchQueueConsumerCopy';
+import type { WatchlistResearchProvenanceState, WatchlistResearchReadinessState, WatchlistRowResearchPacketResponse } from '../../types/watchlist';
+
+function makeRowPacket(
+  state: WatchlistResearchReadinessState,
+  provenanceState: WatchlistResearchProvenanceState,
+): WatchlistRowResearchPacketResponse {
+  const dimension = {
+    state,
+    freshnessState: state,
+    sourceClass: provenanceState === 'fixture'
+      ? 'fixture' as const
+      : provenanceState === 'simulated'
+        ? 'simulated' as const
+        : provenanceState === 'example'
+          ? 'example' as const
+          : 'market_observation' as const,
+    provenanceState,
+    asOf: state === 'unknown' ? null : '2026-05-01T12:30:00Z',
+  };
+  return {
+    symbol: '600519',
+    market: 'cn',
+    identity: { name: null, exchange: null, sector: null, industry: null },
+    savedItemSource: 'manual',
+    quote: { state: 'missing', price: null, changePercent: null, asOf: null },
+    provenance: {
+      sourceClass: dimension.sourceClass,
+      provenanceState,
+      asOf: dimension.asOf,
+      freshnessState: state,
+    },
+    scannerLineage: { runId: null, rank: null, score: null, status: null, lastScoredAt: null },
+    researchStatus: 'blocked',
+    researchReadiness: {
+      state,
+      freshnessState: state,
+      identityState: 'resolved',
+      marketData: dimension,
+      scannerEvidence: { ...dimension, sourceClass: 'scanner_run', provenanceState: 'calculated' },
+      backtestResult: { ...dimension, sourceClass: 'rule_backtest_result', provenanceState: 'calculated' },
+      blockedReasons: state === 'available' ? [] : ['market_data_unavailable'],
+    },
+    missingData: ['quote'],
+    nextDataAction: 'Add quote.',
+    observationOnly: true,
+    noAdviceDisclosure: 'Observation only.',
+  };
+}
 
 describe('researchQueueConsumerCopy', () => {
   it('maps known English research queue phrases into consumer-safe Chinese copy', () => {
@@ -85,6 +133,12 @@ describe('researchQueueConsumerCopy', () => {
         changePercent: null,
         asOf: null,
       },
+      provenance: {
+        sourceClass: 'unknown',
+        provenanceState: 'unknown',
+        asOf: null,
+        freshnessState: 'unknown',
+      },
       scannerLineage: {
         runId: null,
         rank: null,
@@ -115,4 +169,22 @@ describe('researchQueueConsumerCopy', () => {
     expect(copy.noAdviceLabel).toBe('仅供观察');
     expect(Object.values(copy).filter((value) => typeof value === 'string').join(' ')).not.toMatch(/Missing evidence needs review|evidence_gap|missing|blocked|observationOnly|noAdviceDisclosure|not personalized financial advice/i);
   });
+
+  it.each([
+    ['available', 'observed', 'Research evidence available · observed data', true],
+    ['partial', 'delayed', 'Research evidence partial · delayed data', false],
+    ['stale', 'delayed', 'Research evidence stale · delayed data', false],
+    ['available', 'simulated', 'Research evidence available · simulated data', true],
+    ['available', 'fixture', 'Research evidence available · fixture data', true],
+    ['unavailable', 'unavailable', 'Research evidence unavailable · source unavailable', false],
+    ['unknown', 'unknown', 'Research evidence needs data · source unknown', false],
+  ] as const)(
+    'preserves canonical %s readiness with %s provenance',
+    (state, provenance, label, available) => {
+      const copy = getWatchlistRowResearchPacketConsumerCopy(makeRowPacket(state, provenance), 'en');
+
+      expect(copy?.evidenceSummaryLabel).toBe(label);
+      expect(copy?.evidenceAvailable).toBe(available);
+    },
+  );
 });
