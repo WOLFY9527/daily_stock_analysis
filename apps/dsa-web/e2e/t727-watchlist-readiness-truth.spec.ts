@@ -298,7 +298,7 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await openSignedInRoute(page, '/zh/watchlist');
     const emptyState = page.getByTestId('watchlist-compact-empty-state');
     await appExpect(emptyState).toBeVisible();
-    await appExpect(emptyState).toContainText('暂无观察列表');
+    await appExpect(emptyState).toContainText('还没有观察标的');
     await appExpect(emptyState).toContainText('不会自动创建任务');
     await expectNoHorizontalOverflow(page);
     pwExpect(unhandledApiRoutes).toEqual([]);
@@ -309,19 +309,19 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await openSignedInRoute(page, '/zh/watchlist');
     await appExpect(page.getByTestId('watchlist-page')).toBeVisible();
 
-    await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('研究证据可用');
+    await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('研究包可用');
     await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('观测数据');
-    await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('研究证据不可用');
-    await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('研究证据已过期');
-    await appExpect(page.getByTestId('watchlist-row-PART')).toContainText('研究证据部分可用');
-    await appExpect(page.getByTestId('watchlist-row-BLOCK')).toContainText('研究证据不可用');
-    await appExpect(page.getByTestId('watchlist-row-ZERO')).toContainText('研究证据可用');
-    await appExpect(page.getByTestId('watchlist-row-CONTRA')).toContainText('研究证据不可用');
-    await appExpect(page.getByTestId('watchlist-row-SCNEMPTY')).toContainText('研究证据部分可用');
-    await appExpect(page.getByTestId('watchlist-row-SCNFAIL')).toContainText('研究证据部分可用');
+    await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('研究包待生成');
+    await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('研究包部分可用');
+    await appExpect(page.getByTestId('watchlist-row-PART')).toContainText('研究包部分可用');
+    await appExpect(page.getByTestId('watchlist-row-BLOCK')).toContainText('研究包待生成');
+    await appExpect(page.getByTestId('watchlist-row-ZERO')).toContainText('研究包可用');
+    await appExpect(page.getByTestId('watchlist-row-CONTRA')).toContainText('研究包待生成');
+    await appExpect(page.getByTestId('watchlist-row-SCNEMPTY')).toContainText('研究包部分可用');
+    await appExpect(page.getByTestId('watchlist-row-SCNFAIL')).toContainText('研究包部分可用');
     await appExpect(page.getByTestId('watchlist-row-SIM')).toContainText('模拟数据');
     await appExpect(page.getByTestId('watchlist-row-FIX')).toContainText('测试数据');
-    await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('研究证据待补');
+    await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('研究包待生成');
 
     await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('Review the missing market evidence');
     await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('Confirm the observation time');
