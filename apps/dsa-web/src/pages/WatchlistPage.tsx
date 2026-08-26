@@ -3461,7 +3461,7 @@ const WatchlistPage: React.FC = () => {
                                     <BarChart3 className="h-3.5 w-3.5" />
                                     {copy.backtest}
                                   </TerminalButton>
-                                  {backtest?.lastResultId != null ? (
+                                  {hasBacktestEvidence(item) && backtest?.lastResultId != null ? (
                                     <TerminalButton
                                       type="button"
                                       variant="compact"

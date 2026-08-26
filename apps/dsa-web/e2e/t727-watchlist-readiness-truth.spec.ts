@@ -336,6 +336,9 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await page.getByRole('button', { name: '查看详情 CONTRA' }).click();
     await appExpect(page.getByTestId('watchlist-detail-rail')).toContainText('未回测');
     await appExpect(page.getByRole('button', { name: '结果 703' })).not.toBeVisible();
+    const contradictoryRow = page.getByTestId('watchlist-row-CONTRA');
+    await contradictoryRow.getByRole('button', { name: '更多操作 CONTRA' }).click();
+    await appExpect(contradictoryRow.getByRole('menuitem', { name: '结果 703' })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     pwExpect(unhandledApiRoutes).toEqual([]);
   });
