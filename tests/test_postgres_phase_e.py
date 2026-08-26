@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +21,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from src.config import Config
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.postgres_backtest_store import (
     PhaseEBacktestArtifact,
     PhaseEBacktestRun,
@@ -145,18 +147,18 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
                     StockDaily(
                         code=code,
                         date=analysis_date,
-                        open=100.0,
-                        high=101.0,
-                        low=99.0,
-                        close=100.0,
+                        open=Decimal("100.0"),
+                        high=Decimal("101.0"),
+                        low=Decimal("99.0"),
+                        close=Decimal("100.0"),
                         data_source="DatabaseCache",
                     )
                 )
                 session.add_all(
                     [
-                        StockDaily(code=code, date=analysis_date + timedelta(days=1), high=111.0, low=100.0, close=105.0, data_source="DatabaseCache"),
-                        StockDaily(code=code, date=analysis_date + timedelta(days=2), high=108.0, low=103.0, close=106.0, data_source="DatabaseCache"),
-                        StockDaily(code=code, date=analysis_date + timedelta(days=3), high=109.0, low=104.0, close=107.0, data_source="DatabaseCache"),
+                        StockDaily(code=code, date=analysis_date + timedelta(days=1), high=Decimal("111.0"), low=Decimal("100.0"), close=Decimal("105.0"), data_source="DatabaseCache"),
+                        StockDaily(code=code, date=analysis_date + timedelta(days=2), high=Decimal("108.0"), low=Decimal("103.0"), close=Decimal("106.0"), data_source="DatabaseCache"),
+                        StockDaily(code=code, date=analysis_date + timedelta(days=3), high=Decimal("109.0"), low=Decimal("104.0"), close=Decimal("107.0"), data_source="DatabaseCache"),
                     ]
                 )
             session.commit()
@@ -164,9 +166,9 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
     def _seed_rule_backtest_prices(self, *, code: str = "600519") -> None:
         with self._db().get_session() as session:
             closes = [
-                10.0, 10.2, 10.1, 10.5, 11.0, 11.6, 11.8, 11.2,
-                10.8, 10.2, 9.9, 10.3, 10.9, 11.4, 11.9, 12.1,
-                11.7, 11.1, 10.7, 10.4, 10.8, 11.3, 11.8, 12.2,
+                Decimal("10.0"), Decimal("10.2"), Decimal("10.1"), Decimal("10.5"), Decimal("11.0"), Decimal("11.6"), Decimal("11.8"), Decimal("11.2"),
+                Decimal("10.8"), Decimal("10.2"), Decimal("9.9"), Decimal("10.3"), Decimal("10.9"), Decimal("11.4"), Decimal("11.9"), Decimal("12.1"),
+                Decimal("11.7"), Decimal("11.1"), Decimal("10.7"), Decimal("10.4"), Decimal("10.8"), Decimal("11.3"), Decimal("11.8"), Decimal("12.2"),
             ]
             for index, close in enumerate(closes):
                 current_date = date(2024, 1, 1) + timedelta(days=index)
@@ -174,10 +176,10 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
                     StockDaily(
                         code=code,
                         date=current_date,
-                        open=close - 0.1,
-                        high=close + 0.2,
-                        low=close - 0.3,
-                        close=float(close),
+                        open=close - Decimal("0.1"),
+                        high=close + Decimal("0.2"),
+                        low=close - Decimal("0.3"),
+                        close=close,
                         data_source="DatabaseCache",
                     )
                 )
@@ -229,6 +231,48 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
         self.assertEqual(summary_artifact.payload_json["stock_summary"]["code"], "600519")
         self.assertEqual(summary_artifact.payload_json["overall_summary"]["scope"], "overall")
 
+        self._seed_historical_eval_fixture(
+            owner_id="phase-e-user",
+            code="600520",
+            include_stock_rows=False,
+        )
+        blocked_stats = service.run_backtest(
+            code="600520",
+            force=False,
+            eval_window_days=3,
+            min_age_days=0,
+            limit=10,
+        )
+        self.assertEqual(blocked_stats["saved"], 1)
+        self.assertEqual(blocked_stats["completed"], 0)
+        self.assertEqual(blocked_stats["insufficient"], 1)
+        self.assertEqual(blocked_stats["status"], "blocked")
+
+        with db.get_session() as session:
+            blocked_sqlite_run = session.query(BacktestRun).filter(BacktestRun.code == "600520").one()
+        self.assertEqual(blocked_sqlite_run.status, "blocked")
+
+        with db._phase_e_store.session_scope() as session:
+            blocked_pg_run = (
+                session.query(PhaseEBacktestRun)
+                .filter(
+                    PhaseEBacktestRun.id
+                    == phase_e_shadow_run_id("analysis_eval", int(blocked_sqlite_run.id))
+                )
+                .one()
+            )
+        self.assertEqual(blocked_pg_run.status, "blocked")
+        self.assertEqual(blocked_pg_run.metrics_json["completed"], 0)
+        self.assertEqual(blocked_pg_run.metrics_json["insufficient"], 1)
+
+        with db.get_session() as session:
+            blocked_sqlite_run.status = "completed"
+            session.commit()
+        db.sync_phase_e_analysis_backtest_shadow(int(blocked_sqlite_run.id))
+        with db._phase_e_store.session_scope() as session:
+            legacy_shadow = session.query(PhaseEBacktestRun).filter(PhaseEBacktestRun.id == blocked_pg_run.id).one()
+        self.assertEqual(legacy_shadow.status, "blocked")
+
     def test_phase_e_records_local_parquet_usage_refs_only_when_runtime_source_is_concrete(self) -> None:
         db = self._db()
         self._create_user()
@@ -250,6 +294,12 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
                 "volume": [1000, 1000, 1000, 1000],
             }
         )
+        fixture_df.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+            "2024-01-01": "100.0",
+            "2024-01-02": "105.0",
+            "2024-01-03": "106.0",
+            "2024-01-04": "107.0",
+        }
 
         with patch(
             "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",

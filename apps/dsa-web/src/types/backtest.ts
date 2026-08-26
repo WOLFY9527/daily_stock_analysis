@@ -146,6 +146,7 @@ export interface BacktestRunRequest {
 
 export interface BacktestRunResponse extends BacktestResponseContractFields {
   runId?: number;
+  status?: string;
   runAt?: string | null;
   processed: number;
   saved: number;

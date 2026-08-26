@@ -24,6 +24,7 @@ from src.services.backtest_response_contract import (
     build_standard_result_contract,
     build_standard_run_contract,
 )
+from src.services.backtest_status import effective_backtest_run_status
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_reproducibility_manifest import (
@@ -91,6 +92,16 @@ class BacktestService:
             "owner_id": self.owner_id,
             "include_all_owners": self.include_all_owners,
         }
+
+    @classmethod
+    def _effective_run_status(
+        cls,
+        row: BacktestRun,
+        *,
+        summary: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Fail closed for legacy completed rows without calculation evidence."""
+        return effective_backtest_run_status(row, summary=summary)
 
     def run_backtest(
         self,
@@ -346,7 +357,7 @@ class BacktestService:
                 engine_version=settings.engine_version,
             )
 
-        if saved == 0:
+        if completed == 0:
             no_result_reason, no_result_message = self._resolve_run_no_result(
                 code=code,
                 processed=processed,
@@ -376,7 +387,11 @@ class BacktestService:
             result_count=saved,
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
-            status="completed" if errors == 0 else "error",
+            status=(
+                "error"
+                if errors > 0
+                else ("completed" if completed > 0 else "blocked")
+            ),
             total_evaluations=summary_snapshot.get("total_evaluations") or 0,
             completed_count=summary_snapshot.get("completed_count") or 0,
             insufficient_count=summary_snapshot.get("insufficient_count") or 0,
@@ -408,6 +423,7 @@ class BacktestService:
             "insufficient": insufficient,
             "errors": errors,
             "candidate_count": len(candidates),
+            "status": run_record.status,
             "no_result_reason": no_result_reason,
             "no_result_message": no_result_message,
             "latest_prepared_sample_date": sample_observability.get("latest_prepared_sample_date"),
@@ -2483,6 +2499,8 @@ class BacktestService:
                 summary = json.loads(row.summary_json)
             except Exception:
                 summary = {}
+        status = self._effective_run_status(row, summary=summary)
+        no_result_reason = row.no_result_reason
         payload = {
             "id": row.id,
             "code": row.code,
@@ -2500,9 +2518,9 @@ class BacktestService:
             "errors": row.errors,
             "candidate_count": row.candidate_count,
             "result_count": row.result_count,
-            "no_result_reason": row.no_result_reason,
+            "no_result_reason": no_result_reason,
             "no_result_message": row.no_result_message,
-            "status": row.status,
+            "status": status,
             "total_evaluations": row.total_evaluations,
             "completed_count": row.completed_count,
             "insufficient_count": row.insufficient_count,

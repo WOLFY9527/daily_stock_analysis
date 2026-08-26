@@ -397,6 +397,30 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertTrue(stats["execution_readiness"]["observation_only"])
         self.assertIn("Research diagnostic only", stats["no_advice_disclosure"])
 
+    def test_execution_error_without_completed_calculation_is_not_research_ready(self) -> None:
+        service = BacktestService(self.db)
+
+        with patch(
+            "src.services.backtest_service.BacktestEngine.evaluate_single",
+            side_effect=RuntimeError("fixture evaluation failure"),
+        ):
+            stats = service.run_backtest(code="600519", force=True, eval_window_days=3, min_age_days=0, limit=10)
+
+        self.assertEqual(stats["saved"], 1)
+        self.assertEqual(stats["completed"], 0)
+        self.assertEqual(stats["errors"], 1)
+        self.assertEqual(stats["status"], "error")
+        self.assertEqual(stats["no_result_reason"], "execution_failed")
+        self.assertEqual(stats["calculation_status"], "calculation_unavailable")
+        self.assertFalse(stats["execution_readiness"]["result_contract_available"])
+        self.assertEqual(stats["execution_readiness"]["state"], "calculation_unavailable")
+        self.assertIn("execution_failed", stats["execution_readiness"]["reason_codes"])
+
+        history = service.list_backtest_runs(code="600519", page=1, limit=10)
+        self.assertEqual(history["items"][0]["status"], "error")
+        self.assertEqual(history["items"][0]["calculation_status"], "calculation_unavailable")
+        self.assertFalse(history["items"][0]["execution_readiness"]["result_contract_available"])
+
     def test_sample_status_is_passive_with_cached_ohlcv_and_does_not_prepare_samples(self) -> None:
         self._insert_cached_ohlcv_rows()
         service = BacktestService(self.db)
@@ -1194,6 +1218,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats["evaluation_window_trading_bars"], 3)
         self.assertEqual(stats["maturity_calendar_days"], 0)
         self.assertIn("execution_assumptions", stats)
+        self.assertEqual(stats["status"], "completed")
 
         history = service.list_backtest_runs(code="600519", page=1, limit=10)
         self.assertEqual(history["total"], 1)
@@ -1204,6 +1229,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(item["evaluation_mode"], "historical_analysis_evaluation")
         self.assertEqual(item["evaluation_window_trading_bars"], 3)
         self.assertEqual(item["maturity_calendar_days"], 0)
+        self.assertEqual(item["status"], "completed")
 
         run_results = service.get_run_results(run_id=item["id"], page=1, limit=10)
         self.assertEqual(run_results["total"], 1)
@@ -1440,6 +1466,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats["processed"], 1)
         self.assertEqual(stats["completed"], 0)
         self.assertEqual(stats["insufficient"], 1)
+        self.assertEqual(stats["status"], "blocked")
         self.assertFalse(stats["fallback_used"])
         self.assertEqual(stats["data_status"], "data_unavailable")
         self.assertEqual(stats["calculation_status"], "insufficient_sample")
@@ -1453,6 +1480,24 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         self.assertEqual(daily_rows, [])
         self.assertEqual(result.stock_return_pct, None)
+
+        with self.db.get_session() as session:
+            persisted_run = session.query(BacktestRun).filter(BacktestRun.code == "AAPL").one()
+            self.assertEqual(persisted_run.status, "blocked")
+            # Reproduce the frozen-candidate legacy row: no completed calculation,
+            # but an old writer had persisted it as completed.
+            persisted_run.status = "completed"
+            session.commit()
+
+        history = service.list_backtest_runs(code="AAPL", page=1, limit=10)
+        self.assertEqual(history["total"], 1)
+        self.assertEqual(history["items"][0]["status"], "blocked")
+        self.assertEqual(history["items"][0]["completed"], 0)
+
+        run_results = service.get_run_results(run_id=history["items"][0]["id"], page=1, limit=10)
+        self.assertIsNotNone(run_results)
+        self.assertEqual(run_results["total"], 1)
+        self.assertEqual(run_results["items"][0]["eval_status"], "insufficient_data")
 
         recent = service.get_recent_evaluations(code="AAPL", eval_window_days=3, limit=10, page=1)
         item = recent["items"][0]

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-08-19",
+  "capturedOn": "2026-08-26",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8315,
-      "sha256": "70c8a07e525a47fcc654d5020a9217cb37126c192a7837b8ce4c8649f10e0c2c"
+      "count": 8316,
+      "sha256": "3c2001058689d27ae211d7d23947071bdf1de030632c51410e1d755a59ea6018"
     },
     "tests": [
       {
@@ -13577,6 +13577,11 @@
         "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_engine_disabled_returns_distinct_readiness_without_processing_samples",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_execution_error_without_completed_calculation_is_not_research_ready",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_fixture_local_bars_return_executable_readiness_and_safe_result_contract",
@@ -42959,8 +42964,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/BacktestPage.test.tsx",
         "owner": "backtest",
-        "bytes": 114657,
-        "lines": 2555
+        "bytes": 116088,
+        "lines": 2592
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/DeterministicBacktestResultPage.test.tsx",
@@ -43064,11 +43069,11 @@
     "inventory": {
       "specCount": 68,
       "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
-      "projectCaseCount": 738,
-      "projectCaseSha256": "6c041780160bf423a690d04dad5be737b5debc3f45734d4512106bba376ead37",
+      "projectCaseCount": 740,
+      "projectCaseSha256": "125bde873404a03478e2d343328534188d56905eca326a10ab7aaaa0780c0e9a",
       "projectCaseCounts": {
-        "chromium": 367,
-        "chromium-mobile": 367,
+        "chromium": 368,
+        "chromium-mobile": 368,
         "release-real-runtime": 4
       }
     },
@@ -43614,6 +43619,13 @@
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/ai-research-entry-launch.spec.ts::ai-research-entry-launch.spec.ts › AI research entry launch surfaces › Home report drawer preserves evidence, export, print, Escape, and overflow contracts across viewports",
         "spec": "apps/dsa-web/e2e/ai-research-entry-launch.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/backtest-visual-result.smoke.spec.ts::backtest-visual-result.smoke.spec.ts › Backtest visual result smoke › renders a blocked historical evaluation as incomplete on desktop and mobile",
+        "spec": "apps/dsa-web/e2e/backtest-visual-result.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
         "mandatory": false
@@ -46183,6 +46195,13 @@
       {
         "id": "chromium::apps/dsa-web/e2e/ai-research-entry-launch.spec.ts::ai-research-entry-launch.spec.ts › AI research entry launch surfaces › Home report drawer preserves evidence, export, print, Escape, and overflow contracts across viewports",
         "spec": "apps/dsa-web/e2e/ai-research-entry-launch.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/backtest-visual-result.smoke.spec.ts::backtest-visual-result.smoke.spec.ts › Backtest visual result smoke › renders a blocked historical evaluation as incomplete on desktop and mobile",
+        "spec": "apps/dsa-web/e2e/backtest-visual-result.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
         "mandatory": false

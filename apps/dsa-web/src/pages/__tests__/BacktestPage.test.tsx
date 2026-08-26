@@ -2341,19 +2341,56 @@ describe('BacktestPage', () => {
   });
 
   it('reveals the right-side KPI console after a historical run starts', async () => {
+    runBacktest.mockResolvedValue(makeRunResponse({
+      status: 'blocked',
+      completed: 0,
+      insufficient: 1,
+      noResultReason: 'insufficient_history',
+      noResultMessage: '历史 OHLCV 窗口不足，未完成任何计算。',
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'data_insufficient',
+        resultContractAvailable: false,
+        engineState: 'enabled',
+        dataStatus: 'data_unavailable',
+        calculationStatus: 'insufficient_sample',
+        sampleStatus: 'insufficient_sample',
+        benchmarkState: 'not_requested',
+        reasonCodes: ['insufficient_history'],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+    }));
+    getHistory.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [{
+        ...makeHistoryItem(),
+        completed: 0,
+        insufficient: 1,
+        status: 'blocked',
+        noResultReason: 'insufficient_history',
+        noResultMessage: '历史 OHLCV 窗口不足，未完成任何计算。',
+      }],
+    });
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('tab', { name: '历史评估' }));
     fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
-    fireEvent.click(screen.getByRole('button', { name: '运行历史评估' }));
+    fireEvent.click(await screen.findByRole('button', { name: '运行历史评估' }));
 
     await waitFor(() => expect(runBacktest).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId('historical-display-section-summary')).toBeInTheDocument();
     expect(screen.getByTestId('historical-inspection-panel')).toBeInTheDocument();
     expect(screen.getByText('评估概览')).toBeInTheDocument();
+    const historyPanel = screen.getByTestId('historical-display-section-history');
+    expect(historyPanel).toHaveTextContent('未完成计算');
+    expect(historyPanel).not.toHaveTextContent('已完成');
   });
 
   it('shows a unified message when the historical page fails to load', async () => {

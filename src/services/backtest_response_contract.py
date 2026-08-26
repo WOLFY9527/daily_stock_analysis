@@ -267,6 +267,7 @@ def build_standard_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     processed = _safe_int(payload.get("processed"))
     completed = _safe_int(payload.get("completed"))
     insufficient = _safe_int(payload.get("insufficient"))
+    errors = _safe_int(payload.get("errors"))
     source_window = {
         "code": payload.get("code"),
         "eval_window_days": payload.get("eval_window_days") or payload.get("evaluation_window_trading_bars"),
@@ -289,6 +290,11 @@ def build_standard_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         calculation_status = "calculation_unavailable"
         sample_status = "data_unavailable"
         limitations.append("No eligible backtest candidates were processed; performance metrics are unavailable.")
+    elif completed <= 0 and errors > 0:
+        data_status = "data_unavailable"
+        calculation_status = "calculation_unavailable"
+        sample_status = "data_unavailable"
+        limitations.append("Backtest evaluation failed before producing a completed calculation; performance metrics are unavailable.")
     elif completed <= 0 and insufficient > 0:
         data_status = "data_unavailable"
         calculation_status = "insufficient_sample"

@@ -868,6 +868,7 @@ export const enCatalog = {
       },
       historicalStatus: {
         completed: 'Completed',
+        blocked: 'No calculation completed',
         error: 'Error',
         insufficient_data: 'Insufficient data',
       },

@@ -857,6 +857,7 @@ export const zhCatalog = {
       },
       historicalStatus: {
         completed: '已完成',
+        blocked: '未完成计算',
         error: '执行异常',
         insufficient_data: '样本不足',
       },

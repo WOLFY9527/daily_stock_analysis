@@ -40,6 +40,7 @@ from src.postgres_store_utils import (
     load_baseline_sql_statements,
     managed_session_scope,
 )
+from src.services.backtest_status import effective_backtest_run_status
 
 logger = logging.getLogger(__name__)
 
@@ -494,7 +495,7 @@ class PostgresPhaseEStore:
             row.canonical_symbol = str(getattr(run_row, "code", "") or "").strip().upper() or None
             row.strategy_family = "historical_analysis_evaluation"
             row.strategy_hash = None
-            row.status = str(getattr(run_row, "status", "") or "").strip().lower() or "completed"
+            row.status = effective_backtest_run_status(run_row, summary=summary_json)
             row.request_payload = request_payload
             row.metrics_json = metrics_json
             row.parsed_strategy_json = {}

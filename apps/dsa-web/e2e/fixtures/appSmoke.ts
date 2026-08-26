@@ -5,6 +5,7 @@ type AppSmokeFixtures = {
   consoleErrors: string[];
   unhandledApiRoutes: string[];
   allowKnownGuestPreviewRejectionConsole: boolean;
+  blockedHistoricalRun: boolean;
 };
 
 const timestamp = '2026-05-02T09:00:00Z';
@@ -961,6 +962,78 @@ function backtestRunsPayload() {
   };
 }
 
+function blockedHistoricalRunPayload() {
+  return {
+    run_id: 728,
+    status: 'blocked',
+    run_at: '2026-08-26T07:45:00Z',
+    processed: 1,
+    saved: 1,
+    completed: 0,
+    insufficient: 1,
+    errors: 0,
+    candidate_count: 1,
+    no_result_reason: 'insufficient_history',
+    no_result_message: '历史 OHLCV 窗口不足，未完成任何计算。',
+    execution_readiness: {
+      contract_version: 'backtest_execution_readiness_v1',
+      state: 'data_insufficient',
+      result_contract_available: false,
+      engine_state: 'enabled',
+      data_status: 'data_unavailable',
+      calculation_status: 'insufficient_sample',
+      sample_status: 'insufficient_sample',
+      benchmark_state: 'not_requested',
+      reason_codes: ['insufficient_history'],
+      observation_only: true,
+      consumer_safe: true,
+      no_advice_disclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+    },
+    no_advice_disclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+    execution_assumptions: {
+      module_type: 'historical_analysis_evaluation',
+      price_basis: 'close',
+    },
+  };
+}
+
+function blockedHistoricalRunsPayload() {
+  return {
+    total: 1,
+    page: 1,
+    limit: 10,
+    items: [{
+      id: 728,
+      code: 'ORCL',
+      eval_window_days: 10,
+      evaluation_window_trading_bars: 10,
+      min_age_days: 14,
+      maturity_calendar_days: 14,
+      force: false,
+      completed_at: '2026-08-26T07:45:00Z',
+      ...blockedHistoricalRunPayload(),
+      result_count: 0,
+      total_evaluations: 1,
+      completed_count: 0,
+      insufficient_count: 1,
+      long_count: 0,
+      cash_count: 0,
+      win_count: 0,
+      loss_count: 0,
+      neutral_count: 0,
+      win_rate_pct: null,
+      avg_stock_return_pct: null,
+      avg_simulated_return_pct: null,
+      direction_accuracy_pct: null,
+      summary: {},
+      evaluation_mode: 'historical_analysis_evaluation',
+      requested_mode: 'mocked_playwright',
+      resolved_source: 'playwright_fixture',
+      fallback_used: false,
+    }],
+  };
+}
+
 function backtestResultsPayload() {
   return {
     total: 0,
@@ -1065,7 +1138,11 @@ export function deterministicStockValidationFixture(encodedSymbol: string) {
   };
 }
 
-async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
+async function installMockApi(
+  page: Page,
+  unhandledApiRoutes: string[],
+  { blockedHistoricalRun = false }: { blockedHistoricalRun?: boolean } = {},
+) {
   let isLoggedIn = false;
 
   await page.addInitScript((eventSourcePayload) => {
@@ -1317,8 +1394,12 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, backtestResultsPayload());
     }
 
+    if (blockedHistoricalRun && method === 'POST' && path === '/api/v1/backtest/run') {
+      return fulfillJson(route, blockedHistoricalRunPayload());
+    }
+
     if (method === 'GET' && path === '/api/v1/backtest/runs') {
-      return fulfillJson(route, backtestRunsPayload());
+      return fulfillJson(route, blockedHistoricalRun ? blockedHistoricalRunsPayload() : backtestRunsPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/history') {
@@ -1638,6 +1719,7 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
 export const test = base.extend<AppSmokeFixtures>({
   allowKnownGuestPreviewRejectionConsole: [false, { option: true }],
+  blockedHistoricalRun: [false, { option: true }],
 
   consoleErrors: [async ({ page, allowKnownGuestPreviewRejectionConsole }, use, testInfo) => {
     const consoleErrors: string[] = [];
@@ -1666,9 +1748,9 @@ export const test = base.extend<AppSmokeFixtures>({
     expect(consoleErrors).toEqual([]);
   }, { auto: true }],
 
-  unhandledApiRoutes: [async ({ page }, use) => {
+  unhandledApiRoutes: [async ({ page, blockedHistoricalRun }, use) => {
     const unhandledApiRoutes: string[] = [];
-    await installMockApi(page, unhandledApiRoutes);
+    await installMockApi(page, unhandledApiRoutes, { blockedHistoricalRun });
     await use(unhandledApiRoutes);
     expect(unhandledApiRoutes).toEqual([]);
   }, { auto: true }],

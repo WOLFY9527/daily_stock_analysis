@@ -1,6 +1,8 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
+const blockedHistoricalRunTest = test.extend({ blockedHistoricalRun: true });
+
 const desktopViewport = { width: 1440, height: 1000 };
 const narrowViewport = { width: 390, height: 844 };
 
@@ -58,6 +60,30 @@ async function expectConsumerSafeText(locator: ReturnType<Parameters<typeof test
 }
 
 test.describe('Backtest visual result smoke', () => {
+  blockedHistoricalRunTest('renders a blocked historical evaluation as incomplete on desktop and mobile', async ({ page, blockedHistoricalRun }) => {
+    expect(blockedHistoricalRun).toBe(true);
+    for (const viewport of [desktopViewport, narrowViewport]) {
+      await page.setViewportSize(viewport);
+      await installSignedInSessionRoutes(page);
+      await page.goto('/zh/backtest');
+      await page.waitForLoadState('domcontentloaded');
+
+      await page.getByRole('tab', { name: '历史评估' }).click();
+      await page.getByRole('tab', { name: '研究诊断' }).click();
+      await page.getByRole('button', { name: '运行历史评估' }).click();
+
+      const historyPanel = page.getByTestId('historical-display-section-history');
+      await expect(historyPanel).toContainText('ORCL');
+      await expect(historyPanel).toContainText('未完成计算');
+      await expect(historyPanel).not.toContainText('已完成');
+
+      if (viewport.width <= 390) {
+        await expectNoHorizontalOverflow(page);
+      }
+
+    }
+  });
+
   test('shows research-only result visuals without leakage or trading CTA copy', async ({ page }) => {
     for (const viewport of [desktopViewport, narrowViewport]) {
       await page.setViewportSize(viewport);

@@ -105,6 +105,7 @@ class BacktestRunRequest(BaseModel):
 
 class BacktestRunResponse(BacktestResponseContractFields):
     run_id: Optional[int] = Field(None, description="回测运行记录ID")
+    status: str = Field("blocked", description="回测终态")
     run_at: Optional[str] = Field(None, description="回测运行时间")
     processed: int = Field(..., description="候选记录数")
     saved: int = Field(..., description="写入回测结果数")
