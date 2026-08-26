@@ -323,9 +323,9 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await appExpect(page.getByTestId('watchlist-row-FIX')).toContainText('测试数据');
     await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('研究包待生成');
 
-    await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('Review the missing market evidence');
-    await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('Confirm the observation time');
-    await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('Review stock structure');
+    await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('补报价与历史');
+    await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('确认报价');
+    await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('查看个股结构');
     await appExpect(page.getByTestId('watchlist-research-queue')).toContainText('研究上下文待补');
 
     await page.getByRole('button', { name: '查看详情 OBS' }).click();
