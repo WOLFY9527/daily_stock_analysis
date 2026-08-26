@@ -3279,6 +3279,7 @@ const WatchlistPage: React.FC = () => {
                                     <TerminalChip variant={rowPacketView.identityStateVariant}>{rowPacketView.identityStateLabel}</TerminalChip>
                                   ) : null}
                                   <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
+                                  <TerminalChip variant={rowPacketView.evidenceAvailable ? 'info' : 'caution'}>{rowPacketView.evidenceSummaryLabel}</TerminalChip>
                                   <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
                                   {rowPacketView.noAdviceLabel ? (
                                     <TerminalChip variant="neutral">{rowPacketView.noAdviceLabel}</TerminalChip>
