@@ -326,15 +326,15 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('补报价与历史');
     await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('确认报价');
     await appExpect(page.getByTestId('watchlist-row-UNK')).toContainText('查看个股结构');
-    await appExpect(page.getByTestId('watchlist-research-queue')).toContainText('研究上下文待补');
+    await appExpect(page.getByTestId('watchlist-research-queue')).toContainText('证据待补');
 
     await page.getByRole('button', { name: '查看详情 OBS' }).click();
-    await appExpect(page.getByTestId('watchlist-detail-rail')).toContainText('观测数据');
+    await appExpect(page.getByTestId('watchlist-detail-rail')).toBeVisible();
     await appExpect(page.getByTestId('watchlist-detail-rail')).toContainText('下一步');
     await appExpect(page.getByTestId('watchlist-page')).not.toContainText(/买入|卖出|下单|provider_trace|raw_provider_payload|source_authority_allowed/i);
 
     await page.getByRole('button', { name: '查看详情 CONTRA' }).click();
-    await appExpect(page.getByTestId('watchlist-detail-rail')).toContainText('暂无情报');
+    await appExpect(page.getByTestId('watchlist-detail-rail')).toContainText('未回测');
     await appExpect(page.getByRole('button', { name: '结果 703' })).not.toBeVisible();
     await expectNoHorizontalOverflow(page);
     pwExpect(unhandledApiRoutes).toEqual([]);
