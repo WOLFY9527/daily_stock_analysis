@@ -299,7 +299,7 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     const emptyState = page.getByTestId('watchlist-compact-empty-state');
     await appExpect(emptyState).toBeVisible();
     await appExpect(emptyState).toContainText('还没有观察标的');
-    await appExpect(emptyState).toContainText('不会自动创建任务');
+    await appExpect(emptyState).toContainText('它不会自动保存任何标的');
     await expectNoHorizontalOverflow(page);
     pwExpect(unhandledApiRoutes).toEqual([]);
   });
@@ -310,7 +310,7 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     await appExpect(page.getByTestId('watchlist-page')).toBeVisible();
 
     await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('研究包可用');
-    await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('观测数据');
+    await appExpect(page.getByTestId('watchlist-row-OBS')).toContainText('仅供观察');
     await appExpect(page.getByTestId('watchlist-row-UNAV')).toContainText('研究包待生成');
     await appExpect(page.getByTestId('watchlist-row-STALE')).toContainText('研究包部分可用');
     await appExpect(page.getByTestId('watchlist-row-PART')).toContainText('研究包部分可用');
