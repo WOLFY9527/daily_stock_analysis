@@ -2205,6 +2205,50 @@ describe('MarketRotationRadarPage', () => {
     ]);
   });
 
+  it('keeps stale contradictory themes out of quantitative visual ranking', async () => {
+    const base = radarFixture();
+    const staleContradictoryTheme = {
+      ...base.themes[0],
+      id: 'stale_contradictory',
+      name: '过期矛盾主题',
+      rotationScore: 88,
+      confidence: 0.8,
+      stage: 'early_watch' as const,
+      freshness: 'stale' as const,
+      isStale: true,
+      rankEligible: false,
+      scoreContributionAllowed: false,
+      signalType: 'insufficient_evidence' as const,
+      evidenceQuality: 'insufficient' as const,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: 3.2,
+      },
+    };
+
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
+      ...base,
+      themes: [staleContradictoryTheme],
+      summary: {
+        ...base.summary,
+        strongestThemes: [],
+        acceleratingThemes: [],
+        fadingThemes: [],
+        observationThemes: [staleContradictoryTheme],
+        taxonomyThemes: [],
+        headlineEligibleThemeCount: 0,
+        observationThemeCount: 1,
+        noHeadlineReason: 'observation_only_surface',
+      },
+    });
+
+    render(<MarketRotationRadarPage />);
+
+    expect(await screen.findByTestId('rotation-radar-visual-unavailable')).toHaveTextContent('矩阵暂不可用');
+    expect(screen.queryByTestId('rotation-radar-ranking-bar-stale_contradictory')).not.toBeInTheDocument();
+    expect(screen.queryByText('88', { exact: true })).not.toBeInTheDocument();
+  });
+
   it('keeps all-unknown score sets deterministic without pretending null is weakest observed evidence', async () => {
     const base = radarFixture();
     const alpha = {

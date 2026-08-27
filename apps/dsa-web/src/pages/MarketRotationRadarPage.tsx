@@ -647,13 +647,12 @@ function formatRelativeStrengthValue(value?: number | null): string {
   return formatRotationRelativeStrengthValue(value);
 }
 
-function themeConfidenceSummary(theme?: MarketRotationTheme): string {
-  if (!theme) {
-    return '待确认';
+function themeSupportsQuantitativePrecision(theme?: MarketRotationTheme): theme is MarketRotationTheme {
+  if (!theme || isTaxonomyOnlyTheme(theme)) {
+    return false;
   }
-  if (
-    isTaxonomyOnlyTheme(theme)
-    || theme.isFallback
+  return !(
+    theme.isFallback
     || theme.isStale
     || theme.isPartial
     || theme.freshness === 'fallback'
@@ -661,7 +660,11 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
     || theme.freshness === 'partial'
     || resolveSignalType(theme) === 'insufficient_evidence'
     || resolveEvidenceQuality(theme) === 'insufficient'
-  ) {
+  );
+}
+
+function themeConfidenceSummary(theme?: MarketRotationTheme): string {
+  if (!themeSupportsQuantitativePrecision(theme)) {
     return '信号待确认';
   }
   return `信号 ${formatConfidenceValue(theme.confidence)}`;
@@ -841,7 +844,7 @@ function observationThemeSummary(theme?: MarketRotationTheme): string | null {
 }
 
 function themeSupportsVisualMatrix(theme?: MarketRotationTheme): theme is MarketRotationTheme {
-  if (!theme || isTaxonomyOnlyTheme(theme)) {
+  if (!themeSupportsQuantitativePrecision(theme)) {
     return false;
   }
   return themeRelativeStrengthValue(theme) !== null && Boolean(theme.stage);
