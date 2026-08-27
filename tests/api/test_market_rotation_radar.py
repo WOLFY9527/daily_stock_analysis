@@ -307,7 +307,7 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         consumer_snapshot = payload["consumerEvidenceSnapshot"]
         assert consumer_snapshot["market"] == "US"
         assert consumer_snapshot["generatedAt"] == payload["generatedAt"]
-        assert consumer_snapshot["asOf"] == payload["generatedAt"]
+        assert consumer_snapshot["asOf"] is None
         assert consumer_snapshot["freshness"] == "fallback"
         assert consumer_snapshot["isFallback"] is True
         assert consumer_snapshot["isStale"] is False
