@@ -200,6 +200,8 @@ def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[
 
 def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool:
     normalized_key = _normalize_key(key)
+    if surface == "research-queue" and normalized_key == "schemaversion":
+        return value == "research_queue_v1"
     if surface == "market-overview-macro":
         if normalized_key in {"sourceauthorityallowed", "scorecontributionallowed"}:
             return isinstance(value, bool)

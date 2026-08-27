@@ -71,7 +71,7 @@ function driverLabel(key: string, language: 'zh' | 'en') {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
-const RESEARCH_QUEUE_SOURCE_ORDER: UnifiedResearchQueueItem['sourceSurface'][] = ['watchlist', 'scanner', 'market', 'manual_gap'];
+const RESEARCH_QUEUE_SOURCE_ORDER: UnifiedResearchQueueItem['sourceSurface'][] = ['watchlist', 'scanner', 'market'];
 const ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
 const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|queueItemId|provider|cache|runtime|debug|raw|json|schemaVersion|admin|diagnostic|payload|backend snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b|clean research handoff|evidence famil(?:y|ies)|business-quality review|peer group metadata|daily ohlcv|observation-only research readiness|personalized financial advice/i;
 
@@ -103,7 +103,6 @@ function sourceSurfaceLabel(surface: UnifiedResearchQueueItem['sourceSurface'], 
     watchlist: { zh: '观察列表', en: 'Watchlist' },
     scanner: { zh: '扫描器', en: 'Scanner' },
     market: { zh: '市场背景', en: 'Market' },
-    manual_gap: { zh: '证据补缺', en: 'Evidence follow-up' },
   };
   return labels[surface]?.[locale] || (locale === 'en' ? 'Research' : '研究');
 }
@@ -251,6 +250,21 @@ function candidateSymbol(item: ResearchRadarItem): string {
   return String(item.ticker || item.symbol || '').trim();
 }
 
+function unifiedQueueItemToRadarItem(item: UnifiedResearchQueueItem, locale: 'zh' | 'en'): ResearchRadarItem {
+  return {
+    symbol: item.symbol,
+    priority: item.priorityTier,
+    whyOnRadar: item.whyQueued.map((value) => mapConsumerStatusText(value, locale)),
+    whatToVerify: item.evidenceGaps.length ? item.evidenceGaps : item.whyQueued,
+    invalidationObservations: item.freshness.state === 'current' ? [] : [item.freshness.state],
+    riskFlags: item.readiness.state === 'research_ready' ? [] : [item.readiness.state],
+    evidenceQuality: {
+      status: item.readiness.evidenceState,
+      score: null,
+    },
+  };
+}
+
 function candidateLimitationSource(item: ResearchRadarItem): string[] {
   if (item.riskFlags?.length) return item.riskFlags;
   if (item.invalidationObservations?.length) return item.invalidationObservations;
@@ -317,6 +331,7 @@ function ResearchRadarQueueOverview({
   data,
   items,
   unifiedQueueSize,
+  queueQualityOverride,
   market,
   locale,
   linkLocale,
@@ -324,12 +339,13 @@ function ResearchRadarQueueOverview({
   data: ResearchRadarResponse;
   items: ResearchRadarItem[];
   unifiedQueueSize: number;
+  queueQualityOverride?: string | null;
   market: string | undefined;
   locale: 'zh' | 'en';
   linkLocale: 'zh' | 'en';
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const queueQuality = data.aggregateSummary.queueQuality;
+  const queueQuality = queueQualityOverride ?? data.aggregateSummary.queueQuality;
   const selectedItem = useMemo(() => {
     if (!items.length) return null;
     return items.find((item, index) => `${candidateSymbol(item) || 'candidate'}-${index}` === selectedKey) ?? items[0];
@@ -805,7 +821,7 @@ function buildResearchRadarDerivedGuidance({
     || conditions.some((item) => normalizeRadarGapKey(item).includes('low_evidence'));
 
   expectedSurfaces.forEach((surface) => {
-    if (surface === 'manual_gap' || availableSurfaces.has(surface)) return;
+    if (availableSurfaces.has(surface)) return;
     if (surface === 'scanner') {
       conditions.push(locale === 'en' ? 'Scanner candidates have not been created yet.' : '扫描器候选尚未建立。');
     } else if (surface === 'watchlist') {
@@ -1302,10 +1318,20 @@ export default function ResearchRadarPage() {
     void load();
   }, [load]);
 
-  const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
-  const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? unifiedQueue?.researchQueue.length ?? queueItems.length;
-  const hasMarketLevelFallback = Boolean(data?.marketLevelFallback?.available && queueItems.length === 0 && (unifiedQueue?.researchQueue.length ?? 0) === 0);
-  const showOnboardingCta = Boolean(data && queueItems.length === 0 && (data.emptyStateActions.length || data.starterResearchWorkflow.length));
+  const queueItems = useMemo(
+    () => (unifiedQueue?.researchQueue ?? []).map((item) => unifiedQueueItemToRadarItem(item, locale)),
+    [locale, unifiedQueue?.researchQueue],
+  );
+  const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? queueItems.length;
+  const hasMarketLevelFallback = Boolean(data?.marketLevelFallback?.available && queueItems.length === 0);
+  const showOnboardingCta = Boolean(
+    data
+    && (queueItems.length === 0 || (
+      ['thin', 'low_evidence'].includes(normalizeRadarGapKey(data.aggregateSummary.queueQuality || ''))
+      && unifiedQueue?.dataQuality.state !== 'ready'
+    ))
+    && (data.emptyStateActions.length || data.starterResearchWorkflow.length),
+  );
   const dataHealthSummary = useMemo(
     () => buildResearchRadarDataHealthSummary({ data, unifiedQueue, locale }),
     [data, unifiedQueue, locale],
@@ -1434,6 +1460,7 @@ export default function ResearchRadarPage() {
                   data={data}
                   items={queueItems}
                   unifiedQueueSize={unifiedQueueSize}
+                  queueQualityOverride={unifiedQueue?.dataQuality.state}
                   market={market}
                   locale={locale}
                   linkLocale={routeLocale || locale}

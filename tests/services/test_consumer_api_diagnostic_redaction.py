@@ -148,6 +148,13 @@ def test_project_consumer_api_payload_recursively_removes_forbidden_diagnostic_k
     assert projected["observationBoundary"]
     assert projected["researchNextSteps"]
 
+    queue_projected = project_consumer_api_payload(
+        {"schemaVersion": "research_queue_v1", "provider": "private"},
+        surface="research-queue",
+    )
+    assert queue_projected["schemaVersion"] == "research_queue_v1"
+    assert "provider" not in queue_projected
+
 
 def test_project_consumer_api_payload_redacts_adversarial_values_without_dropping_safe_context() -> None:
     from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload

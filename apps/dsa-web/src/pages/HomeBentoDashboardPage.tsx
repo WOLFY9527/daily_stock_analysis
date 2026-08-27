@@ -10,6 +10,7 @@ import {
   type DashboardOverviewStatus,
   type DashboardPublicState,
 } from '../api/dashboardOverview';
+import { researchRadarApi, type UnifiedResearchQueueResponse } from '../api/researchRadar';
 import ProductReadModelStatusStrip from '../components/common/ProductReadModelStatusStrip';
 import type { ProductReadModel } from '../types/productReadModel';
 import {
@@ -5102,20 +5103,23 @@ function buildHomeDailyResearchView(
   locale: DashboardLocale,
   brief: MemberMarketBriefView,
   overview: DashboardMarketIntelligenceOverview | null,
+  unifiedQueue: UnifiedResearchQueueResponse | null,
 ): HomeDailyResearchView {
   const isEnglish = locale === 'en';
   const marketPulse = overview?.marketPulse;
-  const queue = (overview?.researchQueue.items || [])
+  const queue = (unifiedQueue?.researchQueue || [])
     .map((item) => {
       const title = isEnglish ? localizeNarrativeText(locale, item.title, 'Research item') : normalizeHomeDailyText(item.title);
-      const summary = isEnglish ? localizeNarrativeText(locale, item.summary, 'Supporting details are unavailable.') : normalizeHomeDailyText(item.summary);
+      const summary = isEnglish
+        ? localizeNarrativeText(locale, item.whyQueued[0] || item.evidenceGaps[0], 'Supporting details are unavailable.')
+        : normalizeHomeDailyText(item.whyQueued[0] || item.evidenceGaps[0]);
       return {
         title,
         summary,
-        action: isEnglish ? localizeMetricValue(locale, item.action, 'Review') : normalizeHomeDailyText(item.action),
-        priority: normalizeHomeDailyText(item.priority),
-        symbol: undefined,
-        href: undefined,
+        action: item.readiness.state === 'research_ready' ? (isEnglish ? 'Review evidence' : '复核证据') : (isEnglish ? 'Resolve evidence limits' : '补齐证据限制'),
+        priority: normalizeHomeDailyText(item.priorityTier),
+        symbol: item.symbol,
+        href: item.suggestedResearchPath[0]?.route,
       };
     })
     .filter((item) => item.title || item.summary || item.action)
@@ -5186,7 +5190,7 @@ function buildHomeDailyResearchView(
     nextCheck: queue[0]?.action || (isEnglish ? 'Start with the market path, then open Research Radar if a candidate appears.' : '先复核市场路径；若出现真实候选，再进入研究雷达继续检查。'),
     queue,
     queueEmptyTitle: isEnglish ? 'No real research candidates yet' : '当前没有真实研究候选',
-    queueEmptyDetail: overview?.researchQueue.status === 'ready'
+    queueEmptyDetail: unifiedQueue?.dataQuality.state === 'ready'
       ? (isEnglish ? 'The queue returned empty, so this surface stays bounded and points to the market path instead.' : '研究队列已返回但没有候选；本页呈现有界空状态，并先指向市场路径复核。')
       : (isEnglish ? 'The queue is not usable yet; use the market path and data ledger before opening symbol research.' : '研究队列暂不可用；先查看市场路径与数据账本，再进入个股研究。'),
     watchChanges,
@@ -6646,6 +6650,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isMemberMarketBriefingLoading, setMemberMarketBriefingLoading] = useState(false);
   const [isMemberMarketBriefingUnavailable, setMemberMarketBriefingUnavailable] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<DashboardMarketIntelligenceOverview | null>(null);
+  const [unifiedResearchQueue, setUnifiedResearchQueue] = useState<UnifiedResearchQueueResponse | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
@@ -6906,6 +6911,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         setMemberMarketBriefingUnavailable(false);
       }
       setDashboardOverview(null);
+      setUnifiedResearchQueue(null);
       return;
     }
 
@@ -6916,8 +6922,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     void Promise.allSettled([
       marketApi.getMarketBriefing(),
       dashboardOverviewApi.getMarketIntelligenceOverview(),
+      researchRadarApi.getResearchQueue({ queueLimit: 4 }),
     ])
-      .then(([briefingResult, overviewResult]) => {
+      .then(([briefingResult, overviewResult, queueResult]) => {
         if (isCancelled) {
           return;
         }
@@ -6928,6 +6935,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           setMemberMarketBriefingUnavailable(true);
         }
         setDashboardOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null);
+        setUnifiedResearchQueue(queueResult.status === 'fulfilled' ? queueResult.value : null);
       })
       .finally(() => {
         if (!isCancelled) {
@@ -7522,7 +7530,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       )
     : null;
   const homeDailyResearch = memberMarketBrief
-    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview)
+    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview, unifiedResearchQueue)
     : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {

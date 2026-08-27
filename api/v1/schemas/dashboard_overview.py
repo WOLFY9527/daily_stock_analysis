@@ -10,20 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DashboardOverviewStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
 DashboardPublicState = Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
-ResearchQueueAction = Literal[
-    "观察",
-    "复核",
-    "研究",
-    "证据",
-    "走强",
-    "走弱",
-    "扩散",
-    "收敛",
-    "分歧",
-    "暂无证据",
-    "适合研究观察",
-]
-ResearchQueuePriority = Literal["high", "medium", "low"]
 
 _FORBIDDEN_TEXT_MARKERS = (
     "买入",
@@ -130,18 +116,6 @@ class DashboardSectorThemeRotation(_DashboardOverviewBase):
     status: DashboardOverviewStatus
 
 
-class DashboardResearchQueueItem(_DashboardOverviewBase):
-    title: str
-    summary: str
-    action: ResearchQueueAction
-    priority: ResearchQueuePriority
-
-
-class DashboardResearchQueue(_DashboardOverviewBase):
-    status: DashboardOverviewStatus
-    items: list[DashboardResearchQueueItem] = Field(default_factory=list)
-
-
 class DashboardDataQuality(_DashboardOverviewBase):
     state: DashboardPublicState
     label: str
@@ -157,7 +131,6 @@ class DashboardMarketIntelligenceOverviewResponse(_DashboardOverviewBase):
     moneyFlow: DashboardMoneyFlow
     liquidityRisk: DashboardLiquidityRisk
     sectorThemeRotation: DashboardSectorThemeRotation
-    researchQueue: DashboardResearchQueue
     dataQuality: DashboardDataQuality
     productReadModel: dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str

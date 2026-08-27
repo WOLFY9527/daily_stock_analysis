@@ -227,7 +227,11 @@ describe('researchRadarApi', () => {
             why_queued: ['Missing evidence needs review.'],
             evidence_used: ['Technicals available'],
             evidence_gaps: ['Price-history evidence'],
+            readiness: { state: 'needs_evidence', evidence_state: 'partial' },
+            provenance: { source_surface: 'watchlist', state: 'partial' },
+            data_as_of: '2026-06-15T09:30:00Z',
             freshness: { state: 'needs_review', last_reviewed_at: null },
+            material_change: { state: 'unknown', asserted: false },
             suggested_research_path: [
               {
                 label: 'Stock Structure',
@@ -269,6 +273,8 @@ describe('researchRadarApi', () => {
     expect(payload.schemaVersion).toBe('research_queue_v1');
     expect(payload.researchQueue[0]?.sourceSurface).toBe('watchlist');
     expect(payload.researchQueue[0]?.freshness.state).toBe('needs_review');
+    expect(payload.researchQueue[0]?.readiness.state).toBe('needs_evidence');
+    expect(payload.researchQueue[0]?.provenance.state).toBe('partial');
     expect(payload.aggregateSummary.bySourceSurface?.watchlist).toBe(1);
     expect(payload.aggregateSummary.byPriorityTier?.urgent_review).toBe(1);
     expect(payload.sourceSurfacesAggregated).toEqual(['watchlist']);

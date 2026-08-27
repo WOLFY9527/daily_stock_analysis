@@ -57,15 +57,6 @@ export type DashboardMarketIntelligenceOverview = {
     summary: string;
     status: DashboardOverviewStatus;
   };
-  researchQueue: {
-    status: DashboardOverviewStatus;
-    items: Array<{
-      title: string;
-      summary: string;
-      action: string;
-      priority: string;
-    }>;
-  };
   dataQuality: {
     state: DashboardPublicState;
     label: string;

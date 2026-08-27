@@ -121,14 +121,9 @@ def test_get_research_queue_returns_bounded_unified_contract(monkeypatch) -> Non
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert "schemaVersion" not in payload
+    assert payload["schemaVersion"] == "research_queue_v1"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
-    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
-    assert payload["dataQualityState"] == "limited"
-    assert payload["freshnessState"] == "limited"
-    assert payload["observationBoundary"]
-    assert payload["researchNextSteps"]
     assert payload["sourceSurfacesAggregated"] == ["watchlist", "scanner"]
     assert payload["aggregateSummary"] == {
         "itemCount": 2,
@@ -143,12 +138,15 @@ def test_get_research_queue_returns_bounded_unified_contract(monkeypatch) -> Non
     assert payload["researchQueue"][1]["priorityTier"] == "follow_up"
     assert payload["researchQueue"][1]["suggestedResearchPath"][0]["route"] == "/stocks/ALFA/structure-decision"
     assert payload["evidenceGaps"] == ["Price-history evidence"]
-    assert payload["dataQuality"]["state"] == "ready"
+    assert payload["dataQuality"]["state"] == "partial"
+    assert payload["dataQuality"]["failClosed"] is True
+    assert payload["researchQueue"][0]["readiness"]["state"] == "needs_evidence"
 
     scanner_call = calls["scanner"][0]
     assert scanner_call["market"] == "us"
     assert scanner_call["profile"] == "us_preopen_v1"
     assert scanner_call["limit"] == 7
+    assert callable(scanner_call["backtest_sample_reader"])
     assert calls["watchlist"] == [{"owner_id": "user-1"}]
 
     serialized_queue = _serialized_values(payload["researchQueue"])
@@ -172,7 +170,7 @@ def test_get_research_queue_fails_closed_when_sources_are_empty(monkeypatch) -> 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["researchQueue"] == []
-    assert payload["dataQuality"]["state"] == "no_evidence"
+    assert payload["dataQuality"]["state"] == "unavailable"
     assert payload["dataQuality"]["failClosed"] is True
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False

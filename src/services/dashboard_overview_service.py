@@ -11,7 +11,6 @@ from src.services.market_pulse_service import MarketPulseService
 from src.services.money_flow_service import MoneyFlowService
 from src.services.product_read_model import aggregate_product_readiness
 from src.services.public_data_quality_service import build_public_data_quality_summary
-from src.services.research_queue_service import ResearchQueueService
 from src.services.sector_theme_strength_service import SectorThemeStrengthService
 
 
@@ -28,13 +27,6 @@ _STATE_TO_PUBLIC = {
     "暂无证据": "no_evidence",
     "暂不可用": "unavailable",
 }
-_RESEARCH_ACTION_BY_STATUS = {
-    "high_attention": "复核",
-    "review": "复核",
-    "observe": "观察",
-    "no_evidence": "暂无证据",
-    "unavailable": "暂无证据",
-}
 
 
 class DashboardOverviewService:
@@ -46,7 +38,6 @@ class DashboardOverviewService:
         market_pulse = _as_dict(MarketPulseService().build_snapshot())
         money_flow = _as_dict(MoneyFlowService().build_homepage_money_flow_proxy())
         sector_theme = _as_dict(SectorThemeStrengthService().build_summary())
-        research_queue = _as_dict(ResearchQueueService().build_queue())
 
         section_states = {
             "marketPulse": _overview_status(market_pulse.get("status")),
@@ -54,7 +45,6 @@ class DashboardOverviewService:
             "moneyFlow": _overview_status(money_flow.get("status")),
             "liquidityRisk": "ready",
             "sectorThemeRotation": _overview_status(sector_theme.get("status")),
-            "researchQueue": _overview_status(research_queue.get("status")),
         }
         public_quality = _as_dict(
             build_public_data_quality_summary(
@@ -74,7 +64,6 @@ class DashboardOverviewService:
             moneyFlow=_project_money_flow(money_flow),
             liquidityRisk=_liquidity_risk(market_pulse),
             sectorThemeRotation=_project_sector_theme_rotation(sector_theme),
-            researchQueue=_project_research_queue(research_queue),
             dataQuality=_project_data_quality(public_quality, section_states),
             productReadModel=_dashboard_product_read_model(section_states, as_of=as_of),
             noAdviceDisclosure="本概览仅用于市场研究观察，不构成投资建议或交易指令。",
@@ -135,23 +124,6 @@ def _project_sector_theme_rotation(summary: Mapping[str, Any]) -> dict[str, Any]
         "diffusion": _text(diffusion.get("status")) or status,
         "summary": _text(diffusion.get("observation")) or "主题轮动暂无可复用证据，当前仅保留观察口径。",
         "status": status,
-    }
-
-
-def _project_research_queue(queue: Mapping[str, Any]) -> dict[str, Any]:
-    items = []
-    for item in _mapping_list(queue.get("items"))[:4]:
-        items.append(
-            {
-                "title": _text(item.get("title")) or "研究观察",
-                "summary": _text(item.get("reason")) or "当前仅保留研究观察，等待更多证据。",
-                "action": _RESEARCH_ACTION_BY_STATUS.get(_text(item.get("status")), "观察"),
-                "priority": _priority_label(item.get("priority")),
-            }
-        )
-    return {
-        "status": _overview_status(queue.get("status")),
-        "items": items,
     }
 
 
@@ -301,16 +273,6 @@ def _dashboard_state(value: Any) -> str:
     if text in _DASHBOARD_STATES:
         return text
     return _STATE_TO_PUBLIC.get(text, "no_evidence")
-
-
-def _priority_label(value: Any) -> str:
-    if isinstance(value, int):
-        if value <= 1:
-            return "high"
-        if value <= 3:
-            return "medium"
-        return "low"
-    return "medium"
 
 
 def _as_dict(value: Any) -> dict[str, Any]:

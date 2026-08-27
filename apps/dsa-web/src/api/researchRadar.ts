@@ -132,13 +132,23 @@ export type ResearchRadarResponse = {
   suggestedResearchEntrypoints: ResearchRadarSuggestedResearchEntrypoint[];
 };
 
-export type UnifiedResearchQueueSourceSurface = 'scanner' | 'watchlist' | 'market' | 'manual_gap';
+export type UnifiedResearchQueueSourceSurface = 'scanner' | 'watchlist' | 'market';
 export type UnifiedResearchQueuePriorityTier = 'urgent_review' | 'follow_up' | 'monitor';
 export type UnifiedResearchQueueFreshnessState = 'current' | 'needs_review' | 'unavailable' | 'unknown';
 
 export type UnifiedResearchQueueFreshness = {
   state: UnifiedResearchQueueFreshnessState;
   lastReviewedAt?: string | null;
+};
+
+export type UnifiedResearchQueueReadiness = {
+  state: 'research_ready' | 'needs_evidence' | 'blocked' | 'unavailable';
+  evidenceState: 'available' | 'partial' | 'no_evidence' | 'unavailable';
+};
+
+export type UnifiedResearchQueueProvenance = {
+  sourceSurface: UnifiedResearchQueueSourceSurface;
+  state: 'current' | 'partial' | 'fallback' | 'fixture' | 'simulated' | 'unavailable' | 'unknown';
 };
 
 export type UnifiedResearchQueueSuggestedResearchPath = {
@@ -157,7 +167,11 @@ export type UnifiedResearchQueueItem = {
   whyQueued: string[];
   evidenceUsed: string[];
   evidenceGaps: string[];
+  readiness: UnifiedResearchQueueReadiness;
+  provenance: UnifiedResearchQueueProvenance;
+  dataAsOf?: string | null;
   freshness: UnifiedResearchQueueFreshness;
+  materialChange: { state: 'unknown' | 'asserted'; asserted: boolean };
   suggestedResearchPath: UnifiedResearchQueueSuggestedResearchPath[];
   observationOnly: boolean;
 };
@@ -179,6 +193,7 @@ export type UnifiedResearchQueueResponse = {
     itemCount: number;
     sourceSurfacesAvailable: string[];
     sourceSurfacesExpected: string[];
+    sourceSurfacesUnavailable?: string[];
     failClosed: boolean;
   };
   noAdviceDisclosure?: string | null;
@@ -187,6 +202,18 @@ export type UnifiedResearchQueueResponse = {
 };
 
 const UNIFIED_RESEARCH_QUEUE_SCHEMA_VERSION = 'research_queue_v1';
+
+const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => (
+  typeof value === 'string' && values.includes(value as T)
+);
+
+const QUEUE_SOURCE_SURFACES = ['scanner', 'watchlist', 'market'] as const;
+const QUEUE_PRIORITY_TIERS = ['urgent_review', 'follow_up', 'monitor'] as const;
+const QUEUE_READINESS_STATES = ['research_ready', 'needs_evidence', 'blocked', 'unavailable'] as const;
+const QUEUE_EVIDENCE_STATES = ['available', 'partial', 'no_evidence', 'unavailable'] as const;
+const QUEUE_PROVENANCE_STATES = ['current', 'partial', 'fallback', 'fixture', 'simulated', 'unavailable', 'unknown'] as const;
+const QUEUE_FRESHNESS_STATES = ['current', 'needs_review', 'unavailable', 'unknown'] as const;
+const QUEUE_MATERIAL_CHANGE_STATES = ['unknown', 'asserted'] as const;
 
 function normalizeStringList(payload: unknown): string[] {
   return Array.isArray(payload)
@@ -355,7 +382,20 @@ function normalizeUnifiedResearchQueueResponse(payload: unknown): UnifiedResearc
   ) {
     throw new Error('Unsafe research queue boundary');
   }
-  if (Array.isArray(normalized.researchQueue) && normalized.researchQueue.some((item) => item?.observationOnly !== true)) {
+  if (!Array.isArray(normalized.researchQueue) || normalized.researchQueue.some((item) => (
+    item?.observationOnly !== true
+    || !item?.queueItemId
+    || !item?.symbol
+    || !isOneOf(item?.sourceSurface, QUEUE_SOURCE_SURFACES)
+    || !isOneOf(item?.priorityTier, QUEUE_PRIORITY_TIERS)
+    || !isOneOf(item?.readiness?.state, QUEUE_READINESS_STATES)
+    || !isOneOf(item?.readiness?.evidenceState, QUEUE_EVIDENCE_STATES)
+    || !isOneOf(item?.provenance?.sourceSurface, QUEUE_SOURCE_SURFACES)
+    || !isOneOf(item?.provenance?.state, QUEUE_PROVENANCE_STATES)
+    || !isOneOf(item?.freshness?.state, QUEUE_FRESHNESS_STATES)
+    || !isOneOf(item?.materialChange?.state, QUEUE_MATERIAL_CHANGE_STATES)
+    || typeof item?.materialChange?.asserted !== 'boolean'
+  ))) {
     throw new Error('Unsafe research queue boundary');
   }
   return {
@@ -363,16 +403,29 @@ function normalizeUnifiedResearchQueueResponse(payload: unknown): UnifiedResearc
     researchQueue: Array.isArray(normalized.researchQueue)
       ? normalized.researchQueue.map((item) => ({
         queueItemId: String(item?.queueItemId ?? ''),
-        sourceSurface: (item?.sourceSurface || 'manual_gap') as UnifiedResearchQueueSourceSurface,
+        sourceSurface: item.sourceSurface as UnifiedResearchQueueSourceSurface,
         symbol: String(item?.symbol ?? '').trim(),
         title: String(item?.title ?? '').trim(),
         priorityTier: (item?.priorityTier || 'monitor') as UnifiedResearchQueuePriorityTier,
         whyQueued: normalizeStringList(item?.whyQueued),
         evidenceUsed: normalizeStringList(item?.evidenceUsed),
         evidenceGaps: normalizeStringList(item?.evidenceGaps),
+        readiness: {
+          state: item.readiness.state,
+          evidenceState: item.readiness.evidenceState,
+        },
+        provenance: {
+          sourceSurface: item.provenance.sourceSurface,
+          state: item.provenance.state,
+        },
+        dataAsOf: item.dataAsOf ?? null,
         freshness: {
           state: (item?.freshness?.state || 'unknown') as UnifiedResearchQueueFreshnessState,
           lastReviewedAt: item?.freshness?.lastReviewedAt ?? null,
+        },
+        materialChange: {
+          state: item.materialChange.state,
+          asserted: item.materialChange.asserted,
         },
         suggestedResearchPath: Array.isArray(item?.suggestedResearchPath)
           ? item.suggestedResearchPath.map((path) => ({
@@ -399,6 +452,7 @@ function normalizeUnifiedResearchQueueResponse(payload: unknown): UnifiedResearc
       itemCount: Number(normalized.dataQuality?.itemCount ?? 0) || 0,
       sourceSurfacesAvailable: normalizeStringList(normalized.dataQuality?.sourceSurfacesAvailable),
       sourceSurfacesExpected: normalizeStringList(normalized.dataQuality?.sourceSurfacesExpected),
+      sourceSurfacesUnavailable: normalizeStringList(normalized.dataQuality?.sourceSurfacesUnavailable),
       failClosed: true,
     },
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,

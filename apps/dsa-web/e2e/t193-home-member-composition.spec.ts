@@ -110,6 +110,60 @@ function dashboardOverviewPayload(mode: QueueMode) {
   };
 }
 
+function researchQueuePayload(mode: QueueMode) {
+  return {
+    schemaVersion: 'research_queue_v1',
+    researchQueue: mode === 'candidate'
+      ? [
+          {
+            queueItemId: 'market-semiconductor-breadth',
+            sourceSurface: 'market',
+            symbol: 'SEMIS',
+            title: 'Review semiconductor breadth follow-through',
+            priorityTier: 'follow_up',
+            whyQueued: ['Open Research Radar to compare breadth evidence'],
+            evidenceUsed: ['Returned market breadth evidence'],
+            evidenceGaps: [],
+            readiness: { state: 'research_ready', evidenceState: 'available' },
+            provenance: { sourceSurface: 'market', state: 'current' },
+            dataAsOf: '2026-07-07T09:30:00Z',
+            freshness: { state: 'current', lastReviewedAt: '2026-07-07T09:30:00Z' },
+            materialChange: { state: 'unknown', asserted: false },
+            suggestedResearchPath: [
+              {
+                label: 'Research Radar',
+                route: '/zh/research-radar',
+                section: 'researchQueue',
+                reason: 'Open Research Radar to compare breadth evidence',
+              },
+            ],
+            observationOnly: true,
+          },
+        ]
+      : [],
+    aggregateSummary: {
+      itemCount: mode === 'candidate' ? 1 : 0,
+      limit: 4,
+      bounded: false,
+      bySourceSurface: mode === 'candidate' ? { market: 1 } : {},
+      byPriorityTier: mode === 'candidate' ? { follow_up: 1 } : {},
+    },
+    sourceSurfacesAggregated: mode === 'candidate' ? ['market'] : [],
+    evidenceGaps: [],
+    dataQuality: {
+      state: 'ready',
+      itemCount: mode === 'candidate' ? 1 : 0,
+      sourceSurfacesAvailable: ['scanner', 'watchlist', 'market'],
+      sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
+      sourceSurfacesUnavailable: [],
+      failClosed: true,
+    },
+    noAdviceDisclosure: 'Research observation only.',
+    observationOnly: true,
+    decisionGrade: false,
+  };
+}
+
 async function installT193MemberHomeFixture(page: Page, mode: QueueMode, requests: string[]) {
   await page.route('**/api/v1/auth/status**', async (route) => {
     requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
@@ -141,6 +195,11 @@ async function installT193MemberHomeFixture(page: Page, mode: QueueMode, request
   await page.route('**/api/v1/dashboard/market-intelligence-overview**', async (route) => {
     requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
     await fulfillJson(route, dashboardOverviewPayload(mode));
+  });
+
+  await page.route('**/api/v1/research/queue**', async (route) => {
+    requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    await fulfillJson(route, researchQueuePayload(mode));
   });
 
   await page.route('**/api/v1/market/data-readiness**', async (route) => {

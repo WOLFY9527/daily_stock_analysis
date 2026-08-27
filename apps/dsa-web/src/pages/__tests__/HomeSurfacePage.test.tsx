@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
 import { dashboardOverviewApi } from '../../api/dashboardOverview';
+import { researchRadarApi } from '../../api/researchRadar';
 import { marketApi } from '../../api/market';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
@@ -92,6 +93,12 @@ vi.mock('../../api/market', () => ({
 vi.mock('../../api/dashboardOverview', () => ({
   dashboardOverviewApi: {
     getMarketIntelligenceOverview: vi.fn(),
+  },
+}));
+
+vi.mock('../../api/researchRadar', () => ({
+  researchRadarApi: {
+    getResearchQueue: vi.fn(),
   },
 }));
 
@@ -381,7 +388,6 @@ function createReadyDashboardOverview(): Awaited<ReturnType<typeof dashboardOver
     },
     liquidityRisk: { summary: 'Stable', volatilityTone: 'calm', fundingStress: 'low', dollarRatePressure: 'low', status: 'ready' },
     sectorThemeRotation: { leadingThemes: ['Software'], laggingThemes: [], diffusion: 'broadening', summary: 'Rotation improving.', status: 'ready' },
-    researchQueue: { status: 'ready', items: [] },
     dataQuality: {
       state: 'ready',
       label: 'Ready',
@@ -401,6 +407,20 @@ function createReadyDashboardOverview(): Awaited<ReturnType<typeof dashboardOver
       provenance: { sourceClass: 'dashboard_read_models', asOf: '2026-06-08T08:00:00Z', freshness: 'available', quality: 'available' },
     },
     noAdviceDisclosure: 'Research observation only.',
+  };
+}
+
+function createReadyUnifiedResearchQueue(): Awaited<ReturnType<typeof researchRadarApi.getResearchQueue>> {
+  return {
+    schemaVersion: 'research_queue_v1',
+    researchQueue: [],
+    aggregateSummary: { itemCount: 0, limit: 4, bounded: false, bySourceSurface: {}, byPriorityTier: {} },
+    sourceSurfacesAggregated: [],
+    evidenceGaps: [],
+    dataQuality: { state: 'ready', itemCount: 0, sourceSurfacesAvailable: [], sourceSurfacesExpected: [], failClosed: true },
+    noAdviceDisclosure: 'Research observation only.',
+    observationOnly: true,
+    decisionGrade: false,
   };
 }
 
@@ -599,6 +619,7 @@ describe('HomeSurfacePage', () => {
       ],
     });
     vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockResolvedValue(createReadyDashboardOverview());
+    vi.mocked(researchRadarApi.getResearchQueue).mockResolvedValue(createReadyUnifiedResearchQueue());
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 3,
       page: 1,

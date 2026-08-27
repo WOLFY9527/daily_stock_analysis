@@ -151,7 +151,6 @@ def test_dashboard_overview_endpoint_returns_stable_top_level_sections() -> None
         "moneyFlow",
         "liquidityRisk",
         "sectorThemeRotation",
-        "researchQueue",
         "dataQuality",
         "productReadModel",
         "noAdviceDisclosure",
@@ -167,7 +166,7 @@ def test_dashboard_overview_endpoint_returns_stable_top_level_sections() -> None
     assert isinstance(payload["moneyFlow"]["topOutflows"], list)
     assert isinstance(payload["sectorThemeRotation"]["leadingThemes"], list)
     assert isinstance(payload["sectorThemeRotation"]["laggingThemes"], list)
-    assert isinstance(payload["researchQueue"]["items"], list)
+    assert "researchQueue" not in payload
     assert payload["dataQuality"]["state"] in ALLOWED_DATA_QUALITY_STATES
     read_model = payload["productReadModel"]
     assert read_model["contractVersion"] == "product_read_model_v1"
@@ -346,34 +345,6 @@ def test_dashboard_overview_uses_bounded_scaffold_compatible_subcontracts() -> N
                 "noAdviceDisclosure": "仅用于观察行业与主题强弱变化，非交易建议。",
             }
 
-    class FakeResearchQueueService:
-        def build_queue(self):
-            return {
-                "status": "ready",
-                "items": [
-                    {
-                        "id": "market-1",
-                        "priority": 1,
-                        "title": "广度复核",
-                        "reason": "市场观察信号需要复核后再继续研究。",
-                        "category": "market",
-                        "reviewModule": "market_overview",
-                        "status": "review",
-                        "relatedSymbols": [],
-                        "relatedThemes": [],
-                        "evidenceStatus": "available",
-                        "noAdviceDisclosure": "This queue is for research review only and offers no advice.",
-                    }
-                ],
-                "dataQuality": {
-                    "status": "ready",
-                    "summary": "研究队列条目已生成，可按优先级继续复核。",
-                    "availableDomains": ["market"],
-                    "missingDomains": [],
-                },
-                "noAdviceDisclosure": "This queue is for research review only and offers no advice.",
-            }
-
     class FakePublicDataQualityService:
         def __call__(self, value):
             return {
@@ -389,12 +360,11 @@ def test_dashboard_overview_uses_bounded_scaffold_compatible_subcontracts() -> N
     with patch("src.services.dashboard_overview_service.MarketPulseService", FakeMarketPulseService):
         with patch("src.services.dashboard_overview_service.MoneyFlowService", FakeMoneyFlowService):
             with patch("src.services.dashboard_overview_service.SectorThemeStrengthService", FakeSectorThemeStrengthService):
-                with patch("src.services.dashboard_overview_service.ResearchQueueService", FakeResearchQueueService):
-                    with patch("src.services.dashboard_overview_service.build_public_data_quality_summary", FakePublicDataQualityService()):
-                        try:
-                            response = client.get(ROUTE_PATH)
-                        finally:
-                            client.close()
+                with patch("src.services.dashboard_overview_service.build_public_data_quality_summary", FakePublicDataQualityService()):
+                    try:
+                        response = client.get(ROUTE_PATH)
+                    finally:
+                        client.close()
 
     assert response.status_code == 200
     payload = response.json()
@@ -411,18 +381,12 @@ def test_dashboard_overview_uses_bounded_scaffold_compatible_subcontracts() -> N
     assert payload["sectorThemeRotation"]["leadingThemes"] == ["防御质量"]
     assert payload["sectorThemeRotation"]["laggingThemes"] == []
     assert payload["sectorThemeRotation"]["diffusion"] == "diffusing"
-    assert payload["researchQueue"]["items"][0] == {
-        "title": "广度复核",
-        "summary": "市场观察信号需要复核后再继续研究。",
-        "action": "复核",
-        "priority": "high",
-    }
+    assert "researchQueue" not in payload
     assert payload["dataQuality"]["state"] == "ready"
     assert payload["dataQuality"]["label"] == "正常"
     assert payload["dataQuality"]["sections"]["marketPulse"] == "partial"
     assert payload["dataQuality"]["sections"]["moneyFlow"] == "partial"
     assert payload["dataQuality"]["sections"]["sectorThemeRotation"] == "ready"
-    assert payload["dataQuality"]["sections"]["researchQueue"] == "ready"
 
 
 def test_dashboard_overview_default_response_is_consumer_safe_and_no_advice() -> None:
@@ -451,12 +415,7 @@ def test_dashboard_overview_research_queue_uses_safe_language_only() -> None:
         client.close()
 
     assert response.status_code == 200
-    items = response.json()["researchQueue"]["items"]
-    for item in items:
-        assert item["action"] in ALLOWED_RESEARCH_ACTIONS
-        for field in ("title", "summary", "action"):
-            for term in FORBIDDEN_ADVICE_TERMS:
-                assert term not in str(item[field])
+    assert "researchQueue" not in response.json()
 
 
 def test_dashboard_overview_data_quality_fields_are_bounded() -> None:
@@ -476,7 +435,6 @@ def test_dashboard_overview_data_quality_fields_are_bounded() -> None:
         "moneyFlow",
         "liquidityRisk",
         "sectorThemeRotation",
-        "researchQueue",
     }
     assert payload["dataQuality"]["sections"]["marketBrief"] == "ready"
     assert payload["dataQuality"]["sections"]["liquidityRisk"] == "ready"

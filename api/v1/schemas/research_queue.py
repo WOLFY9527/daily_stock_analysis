@@ -92,6 +92,21 @@ class UnifiedResearchQueueFreshnessResponse(_ResearchQueueModel):
     lastReviewedAt: str | None = None
 
 
+class UnifiedResearchQueueReadinessResponse(_ResearchQueueModel):
+    state: Literal["research_ready", "needs_evidence", "blocked", "unavailable"]
+    evidenceState: Literal["available", "partial", "no_evidence", "unavailable"]
+
+
+class UnifiedResearchQueueProvenanceResponse(_ResearchQueueModel):
+    sourceSurface: Literal["scanner", "watchlist", "market"]
+    state: Literal["current", "partial", "fallback", "fixture", "simulated", "unavailable", "unknown"]
+
+
+class UnifiedResearchQueueMaterialChangeResponse(_ResearchQueueModel):
+    state: Literal["unknown", "asserted"] = "unknown"
+    asserted: bool = False
+
+
 class UnifiedResearchQueueSuggestedResearchPathResponse(_ResearchQueueModel):
     label: str
     route: str
@@ -101,15 +116,19 @@ class UnifiedResearchQueueSuggestedResearchPathResponse(_ResearchQueueModel):
 
 class UnifiedResearchQueueItemResponse(_ResearchQueueModel):
     queueItemId: str
-    sourceSurface: Literal["scanner", "watchlist", "market", "manual_gap"]
+    sourceSurface: Literal["scanner", "watchlist", "market"]
     symbol: str
     title: str
     priorityTier: Literal["urgent_review", "follow_up", "monitor"]
     whyQueued: list[str] = Field(default_factory=list)
     evidenceUsed: list[str] = Field(default_factory=list)
     evidenceGaps: list[str] = Field(default_factory=list)
+    readiness: UnifiedResearchQueueReadinessResponse
+    provenance: UnifiedResearchQueueProvenanceResponse
+    dataAsOf: str | None = None
     freshness: UnifiedResearchQueueFreshnessResponse
-    suggestedResearchPath: list[UnifiedResearchQueueSuggestedResearchPathResponse] = Field(default_factory=list)
+    materialChange: UnifiedResearchQueueMaterialChangeResponse = Field(default_factory=UnifiedResearchQueueMaterialChangeResponse)
+    suggestedResearchPath: list[UnifiedResearchQueueSuggestedResearchPathResponse] = Field(default_factory=list, max_length=1)
     observationOnly: Literal[True] = True
 
 
@@ -122,20 +141,21 @@ class UnifiedResearchQueueAggregateSummaryResponse(_ResearchQueueModel):
 
 
 class UnifiedResearchQueueDataQualityResponse(_ResearchQueueModel):
-    state: Literal["ready", "no_evidence"]
+    state: Literal["ready", "partial", "no_evidence", "unavailable"]
     itemCount: int = 0
     sourceSurfacesAvailable: list[str] = Field(default_factory=list)
-    sourceSurfacesExpected: list[Literal["scanner", "watchlist", "market", "manual_gap"]] = Field(
+    sourceSurfacesExpected: list[Literal["scanner", "watchlist", "market"]] = Field(
         default_factory=list
     )
-    failClosed: bool = True
+    sourceSurfacesUnavailable: list[Literal["scanner", "watchlist", "market"]] = Field(default_factory=list)
+    failClosed: Literal[True] = True
 
 
 class UnifiedResearchQueueResponse(_ResearchQueueModel):
     schemaVersion: Literal["research_queue_v1"] = UNIFIED_RESEARCH_QUEUE_RESPONSE_SCHEMA_VERSION
     researchQueue: list[UnifiedResearchQueueItemResponse] = Field(default_factory=list, max_length=10)
     aggregateSummary: UnifiedResearchQueueAggregateSummaryResponse
-    sourceSurfacesAggregated: list[Literal["scanner", "watchlist", "market", "manual_gap"]] = Field(
+    sourceSurfacesAggregated: list[Literal["scanner", "watchlist", "market"]] = Field(
         default_factory=list
     )
     evidenceGaps: list[str] = Field(default_factory=list)
@@ -160,6 +180,9 @@ __all__ = [
     "UnifiedResearchQueueDataQualityResponse",
     "UnifiedResearchQueueFreshnessResponse",
     "UnifiedResearchQueueItemResponse",
+    "UnifiedResearchQueueMaterialChangeResponse",
+    "UnifiedResearchQueueProvenanceResponse",
+    "UnifiedResearchQueueReadinessResponse",
     "UnifiedResearchQueueResponse",
     "UnifiedResearchQueueSuggestedResearchPathResponse",
 ]

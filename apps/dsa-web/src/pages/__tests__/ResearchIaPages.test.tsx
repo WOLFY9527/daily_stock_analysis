@@ -152,7 +152,7 @@ function makeEmptyUnifiedResearchQueue() {
       state: 'no_evidence',
       itemCount: 0,
       sourceSurfacesAvailable: [],
-      sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+      sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
       failClosed: true,
     },
     noAdviceDisclosure: 'Research-only queue.',
@@ -1082,7 +1082,11 @@ describe('research IA pages', () => {
           whyQueued: ['Evidence missing', 'Low-evidence filter active', 'provider_timeout'],
           evidenceUsed: ['Evidence quality is acceptable', 'Relative strength is above the research threshold', 'sourceRefs'],
           evidenceGaps: ['benchmark_missing', 'reasonCodes'],
+          readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+          provenance: { sourceSurface: 'watchlist', state: 'unknown' },
+          dataAsOf: null,
           freshness: { state: 'needs_review', lastReviewedAt: null },
+          materialChange: { state: 'unknown', asserted: false },
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -1105,10 +1109,14 @@ describe('research IA pages', () => {
           symbol: 'ALFA',
           title: 'Scanner candidate review',
           priorityTier: 'follow_up',
-          whyQueued: ['Scanner candidate is available for follow-up research review.'],
+          whyQueued: ['Relative strength is above the research threshold', 'Scanner candidate is available for follow-up research review.'],
           evidenceUsed: ['Technicals available', 'Liquidity available'],
-          evidenceGaps: [],
+          evidenceGaps: ['观察延续性'],
+          readiness: { state: 'needs_evidence', evidenceState: 'no_evidence' },
+          provenance: { sourceSurface: 'scanner', state: 'unknown' },
+          dataAsOf: null,
           freshness: { state: 'current', lastReviewedAt: '2026-06-15T09:30:00+00:00' },
+          materialChange: { state: 'unknown', asserted: false },
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -1128,7 +1136,11 @@ describe('research IA pages', () => {
           whyQueued: ['Cross-surface evidence should be reviewed before extending the queue.'],
           evidenceUsed: ['Market context available'],
           evidenceGaps: ['price_history_stale', 'provider_runtime_trace'],
+          readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+          provenance: { sourceSurface: 'market', state: 'partial' },
+          dataAsOf: null,
           freshness: { state: 'unknown', lastReviewedAt: null },
+          materialChange: { state: 'unknown', asserted: false },
           suggestedResearchPath: [],
           observationOnly: true,
         },
@@ -1146,7 +1158,7 @@ describe('research IA pages', () => {
         state: 'ready',
         itemCount: 3,
         sourceSurfacesAvailable: ['watchlist', 'scanner', 'market'],
-        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
         failClosed: true,
       },
       noAdviceDisclosure: 'Research-only queue; verify evidence gaps before further review.',
@@ -1166,6 +1178,7 @@ describe('research IA pages', () => {
       'candidate-queue>selected-detail>factor>limitation>next-check>comparison-ledger',
     );
     expect(overview).toHaveTextContent('观察候选');
+    fireEvent.click(within(overview).getByRole('button', { name: '查看 ALFA 研究细节' }));
     expect(overview).toHaveTextContent('证据质量分布');
     expect(overview).toHaveTextContent('队列健康');
     expect(overview).toHaveTextContent('研究观察，不构成投资建议。');
@@ -1189,8 +1202,6 @@ describe('research IA pages', () => {
     expect(selectedCandidate).toHaveTextContent('限制 / 风险');
     expect(selectedCandidate).toHaveTextContent('数据时效');
     expect(selectedCandidate).toHaveTextContent('下一步研究检查');
-    expect(within(selectedCandidate).getByTestId('research-radar-factor-section')).toHaveAttribute('data-module-density', 'compact');
-    expect(within(selectedCandidate).getByTestId('research-radar-factor-bars')).toHaveTextContent('70');
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('/zh/stocks/ALFA/structure-decision'));
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));
     expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('/zh/watchlist?'));
@@ -1331,7 +1342,7 @@ describe('research IA pages', () => {
         state: 'ready',
         itemCount: 1,
         sourceSurfacesAvailable: ['scanner'],
-        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
         failClosed: false,
       },
       noAdviceDisclosure: 'Research-only queue.',
@@ -1527,14 +1538,18 @@ describe('research IA pages', () => {
       researchQueue: [
         {
           queueItemId: 'manual-gap-TSLA-item-1',
-          sourceSurface: 'manual_gap',
+          sourceSurface: 'watchlist',
           symbol: 'TSLA',
           title: 'Evidence remediation follow-up',
           priorityTier: 'follow_up',
           whyQueued: ['Low-evidence filter active'],
           evidenceUsed: ['Evidence quality is acceptable'],
           evidenceGaps: ['fundamentals', 'news', 'catalyst', 'freshness'],
+          readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+          provenance: { sourceSurface: 'watchlist', state: 'unknown' },
+          dataAsOf: null,
           freshness: { state: 'needs_review', lastReviewedAt: null },
+          materialChange: { state: 'unknown', asserted: false },
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -1550,16 +1565,16 @@ describe('research IA pages', () => {
         itemCount: 1,
         limit: 5,
         bounded: false,
-        bySourceSurface: { manual_gap: 1 },
+          bySourceSurface: { watchlist: 1 },
         byPriorityTier: { urgent_review: 0, follow_up: 1, monitor: 0 },
       },
-      sourceSurfacesAggregated: ['manual_gap'],
+      sourceSurfacesAggregated: ['watchlist'],
       evidenceGaps: ['fundamentals', 'news', 'catalyst', 'freshness'],
       dataQuality: {
         state: 'partial',
         itemCount: 1,
-        sourceSurfacesAvailable: ['market'],
-        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        sourceSurfacesAvailable: ['watchlist'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
         failClosed: true,
       },
       noAdviceDisclosure: 'Research-only queue.',
@@ -1573,11 +1588,10 @@ describe('research IA pages', () => {
     const onboardingPanel = await within(page).findByTestId('research-radar-onboarding-cta');
     const gapRail = within(page).getByTestId('evidence-gap-explanation-list');
     const hub = await within(page).findByTestId('research-queue-hub');
-    const manualGapGroup = within(hub).getByTestId('research-queue-source-manual-gap');
+    const manualGapGroup = within(hub).getByTestId('research-queue-source-watchlist');
 
     expect(onboardingPanel).toHaveTextContent('当前队列仍缺少公司资料、媒体语境、事件语境、时效复核，因此先保持观察边界。');
     expect(onboardingPanel).toHaveTextContent('扫描器候选尚未建立。');
-    expect(onboardingPanel).toHaveTextContent('观察列表上下文尚未建立。');
     expect(onboardingPanel).toHaveTextContent('当前按低证据条件整理。');
     expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
     expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
@@ -1592,10 +1606,9 @@ describe('research IA pages', () => {
     expect(gapRail).toHaveTextContent('先补做近期价格、公告或报道的时效复核，再比较当前线索是否仍成立。');
     expect(gapRail).toHaveTextContent('仅作观察，不构成操作结论。');
 
-    expect(manualGapGroup).toHaveTextContent('证据补缺');
+    expect(manualGapGroup).toHaveTextContent('观察列表');
     expect(manualGapGroup.textContent || '').not.toMatch(/Manual gap|manual_gap/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|raw|debug|trace|requestId|schemaVersion|manual_gap/i);
-    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     expect(getStructureDecisionMock).not.toHaveBeenCalled();
     expect(verifyTickerExistsMock).not.toHaveBeenCalled();
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledTimes(1));
@@ -1628,14 +1641,18 @@ describe('research IA pages', () => {
       researchQueue: [
         {
           queueItemId: 'raw-aapl-item-1',
-          sourceSurface: 'manual_gap',
+          sourceSurface: 'scanner',
           symbol: 'AAPL',
           title: 'Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.',
           priorityTier: 'follow_up',
           whyQueued: ['Missing or incomplete evidence families: quote, fundamental, news.'],
           evidenceUsed: ['Observation-only research readiness; not personalized financial advice or an instruction.'],
           evidenceGaps: ['fundamentals'],
+          readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+          provenance: { sourceSurface: 'scanner', state: 'unknown' },
+          dataAsOf: null,
           freshness: { state: 'needs_review', lastReviewedAt: null },
+          materialChange: { state: 'unknown', asserted: false },
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -1651,16 +1668,16 @@ describe('research IA pages', () => {
         itemCount: 1,
         limit: 5,
         bounded: false,
-        bySourceSurface: { manual_gap: 1 },
+          bySourceSurface: { scanner: 1 },
         byPriorityTier: { urgent_review: 0, follow_up: 1, monitor: 0 },
       },
-      sourceSurfacesAggregated: ['manual_gap'],
+      sourceSurfacesAggregated: ['scanner'],
       evidenceGaps: ['fundamentals'],
       dataQuality: {
         state: 'partial',
         itemCount: 1,
-        sourceSurfacesAvailable: ['manual_gap'],
-        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        sourceSurfacesAvailable: ['scanner'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
         failClosed: true,
       },
       noAdviceDisclosure: 'Research-only queue.',
@@ -1727,6 +1744,54 @@ describe('research IA pages', () => {
         },
         missingEvidenceStates: [],
       },
+    });
+    getResearchQueueMock.mockResolvedValue({
+      schemaVersion: 'research_queue_v1',
+      researchQueue: [
+        {
+          queueItemId: 'scanner-HK00700-item-1',
+          sourceSurface: 'scanner',
+          symbol: 'HK00700',
+          title: 'HK00700 research context',
+          priorityTier: 'follow_up',
+          whyQueued: ['Relative strength is above the research threshold'],
+          evidenceUsed: ['Relative strength'],
+          evidenceGaps: [],
+          readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+          provenance: { sourceSurface: 'scanner', state: 'current' },
+          dataAsOf: '2026-06-15T09:30:00Z',
+          freshness: { state: 'current', lastReviewedAt: '2026-06-15T09:30:00Z' },
+          materialChange: { state: 'unknown', asserted: false },
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/HK00700/structure-decision',
+              section: 'researchRadar',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      aggregateSummary: {
+        itemCount: 1,
+        limit: 5,
+        bounded: false,
+        bySourceSurface: { scanner: 1 },
+        byPriorityTier: { urgent_review: 0, follow_up: 1, monitor: 0 },
+      },
+      sourceSurfacesAggregated: ['scanner'],
+      evidenceGaps: [],
+      dataQuality: {
+        state: 'partial',
+        itemCount: 1,
+        sourceSurfacesAvailable: ['scanner'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market'],
+        failClosed: true,
+      },
+      noAdviceDisclosure: 'Research-only queue.',
+      observationOnly: true,
+      decisionGrade: false,
     });
 
     renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=hk');

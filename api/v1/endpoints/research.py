@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -32,6 +33,7 @@ from src.storage import DatabaseManager
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _latest_scanner_research_payload(
@@ -41,6 +43,7 @@ def _latest_scanner_research_payload(
     market: str | None,
     profile: str | None,
     limit: int,
+    backtest_sample_reader: object | None = None,
 ) -> dict[str, object] | None:
     owner_id = get_current_user_id(current_user)
     if not owner_id:
@@ -67,9 +70,27 @@ def _latest_scanner_research_payload(
             if payload is None:
                 continue
             typed_payload = ScannerRunDetailResponse(**payload).model_dump()
-            return sanitize_scanner_consumer_payload(typed_payload)
+            safe_payload = sanitize_scanner_consumer_payload(typed_payload)
+            if callable(backtest_sample_reader):
+                for candidate in safe_payload.get("shortlist") or safe_payload.get("selected") or []:
+                    if not isinstance(candidate, dict):
+                        continue
+                    symbol = str(candidate.get("symbol") or candidate.get("ticker") or "").strip()
+                    if not symbol:
+                        continue
+                    try:
+                        candidate["backtest"] = backtest_sample_reader(symbol)
+                    except Exception as exc:
+                        logger.warning("backtest sample status unavailable for research queue symbol=%s", symbol, exc_info=exc)
+                        candidate["backtest"] = {
+                            "execution_readiness": {
+                                "state": "calculation_unavailable",
+                                "result_contract_available": False,
+                            }
+                        }
+            return safe_payload
     except Exception:
-        return None
+        return {"sourceState": "unavailable"}
     return None
 
 
@@ -79,7 +100,7 @@ def _watchlist_research_overlay_payload(*, owner_id: str | None) -> dict[str, ob
     try:
         return WatchlistResearchOverlayService().build_overlay(owner_id=owner_id)
     except Exception:
-        return None
+        return {"sourceState": "unavailable"}
 
 
 def _optional_query_token(value: object) -> str | None:
@@ -87,7 +108,7 @@ def _optional_query_token(value: object) -> str | None:
     return token or None
 
 
-def _market_regime_read_model_payload() -> dict[str, object] | None:
+def _market_regime_read_model_payload() -> dict[str, object]:
     try:
         return build_market_regime_read_model(
             market="US",
@@ -100,7 +121,7 @@ def _market_regime_read_model_payload() -> dict[str, object] | None:
             require_adjusted=True,
         )
     except Exception:
-        return None
+        return {"sourceState": "unavailable"}
 
 
 @router.get(
@@ -154,8 +175,8 @@ def get_research_radar(
     response_model=UnifiedResearchQueueResponse,
     summary="Get unified research queue",
     description=(
-        "Build a bounded, observation-only research queue from already available scanner "
-        "candidate packets and watchlist priority signals. The endpoint does not run scanners, "
+        "Build a bounded, observation-only research queue from already available market, scanner, "
+        "backtest, and watchlist projections. The endpoint does not run scanners, "
         "create jobs, mutate watchlists, or call external data sources."
     ),
 )
@@ -168,17 +189,31 @@ def get_research_queue(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> UnifiedResearchQueueResponse:
     owner_id = get_current_user_id(current_user)
+    backtest_service = (
+        BacktestService(db_manager, owner_id=owner_id, include_all_owners=False)
+        if owner_id
+        else None
+    )
+
+    def _backtest_sample_status(symbol: str) -> dict[str, object] | None:
+        if backtest_service is None:
+            return None
+        return backtest_service.get_sample_status(code=symbol)
+
     scanner_payload = _latest_scanner_research_payload(
         db_manager=db_manager,
         current_user=current_user,
         market=market,
         profile=profile,
         limit=scanner_limit,
+        backtest_sample_reader=_backtest_sample_status if backtest_service is not None else None,
     )
     watchlist_overlay = _watchlist_research_overlay_payload(owner_id=owner_id)
+    market_payload = _market_regime_read_model_payload()
     payload = ResearchQueueAggregatorService().build_queue(
         scanner_payload=scanner_payload,
         watchlist_overlay=watchlist_overlay,
+        market_payload=market_payload,
         limit=queue_limit,
     )
     return consumer_safe_json_response(
