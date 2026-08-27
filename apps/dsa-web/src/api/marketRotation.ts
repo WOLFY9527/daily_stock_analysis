@@ -93,6 +93,8 @@ export type MarketRotationSummaryItem = {
   stageExplanation?: string | null;
   freshness: MarketDataFreshness;
   isFallback: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
   riskLabels: MarketRotationRiskLabel[];
   riskExplanations?: string[];
   rankEligible?: boolean;

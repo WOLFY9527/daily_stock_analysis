@@ -651,7 +651,17 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
   if (!theme) {
     return '待确认';
   }
-  if (isTaxonomyOnlyTheme(theme)) {
+  if (
+    isTaxonomyOnlyTheme(theme)
+    || theme.isFallback
+    || theme.isStale
+    || theme.isPartial
+    || theme.freshness === 'fallback'
+    || theme.freshness === 'stale'
+    || theme.freshness === 'partial'
+    || resolveSignalType(theme) === 'insufficient_evidence'
+    || resolveEvidenceQuality(theme) === 'insufficient'
+  ) {
     return '信号待确认';
   }
   return `信号 ${formatConfidenceValue(theme.confidence)}`;
