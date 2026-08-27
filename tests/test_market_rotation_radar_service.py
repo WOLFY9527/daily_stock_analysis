@@ -1192,6 +1192,14 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
+            self.assertIsNone(theme["breadth"]["percentUp"])
+            self.assertIsNone(theme["breadth"]["percentOutperformingBenchmark"])
+            self.assertIsNone(theme["synchronization"]["sameDirectionPercent"])
+            self.assertIsNone(theme["synchronization"]["aboveVwapPercent"])
+            self.assertIsNone(theme["synchronization"]["persistencePercent"])
+            self.assertIsNone(theme["leadership"]["leadershipConcentrationPercent"])
+            self.assertIsNone(theme["leadership"]["broadParticipationPercent"])
+
 
     def test_consumer_evidence_snapshot_whitelists_provider_state_without_admin_fields(self) -> None:
         def provider(symbols):

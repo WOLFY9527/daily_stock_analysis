@@ -3277,19 +3277,20 @@ class MarketRotationRadarService:
                 "observedMembers": 0,
                 "configuredMembers": len(theme.members),
                 "coveragePercent": 0,
-                "percentUp": 0,
-                "percentOutperformingBenchmark": 0,
+                # No observations means these percentages are unknown, not zero.
+                "percentUp": None,
+                "percentOutperformingBenchmark": None,
             },
             "synchronization": {
-                "sameDirectionPercent": 0,
-                "aboveVwapPercent": 0,
-                "persistencePercent": 0,
+                "sameDirectionPercent": None,
+                "aboveVwapPercent": None,
+                "persistencePercent": None,
                 "persistenceScore": 0.0,
                 "label": "同步性证据不足",
             },
             "leadership": {
-                "leadershipConcentrationPercent": 0,
-                "broadParticipationPercent": 0,
+                "leadershipConcentrationPercent": None,
+                "broadParticipationPercent": None,
                 "topMembers": leaders,
             },
             "themeDetail": self._theme_detail(
