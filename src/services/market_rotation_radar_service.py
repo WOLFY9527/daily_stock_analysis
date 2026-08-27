@@ -1587,7 +1587,7 @@ class MarketRotationRadarService:
             raw_snapshot=raw_snapshot,
             is_partial=is_partial,
         )
-        as_of = source_meta.get("asOf") or payload.get("generatedAt")
+        as_of = source_meta.get("asOf")
         authority_grant = raw_snapshot.get("authorityGrant")
         score_contribution_allowed = any(
             self._is_headline_ranked_theme(theme)
