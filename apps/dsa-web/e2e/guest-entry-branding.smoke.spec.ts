@@ -120,9 +120,8 @@ appTest('guest first fold stays honest when the public market snapshot is unavai
   await expectNoConsumerRawLeakage(page.locator('body'), { label: '/en/guest unavailable snapshot' });
 });
 
-appTest('guest search navigation is not blocked when preview stalls', async ({ page }) => {
+appTest('guest search keeps the preview host while rendering a valid public preview', async ({ page }) => {
   await page.route('**/api/v1/analysis/preview', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -140,10 +139,13 @@ appTest('guest search navigation is not blocked when preview stalls', async ({ p
             created_at: '2026-06-08T00:00:00Z',
           },
           summary: {
-            analysis_summary: 'This delayed preview should never replace the bounded fallback snapshot.',
-            operation_advice: 'Wait',
-            trend_prediction: 'Neutral',
+            analysis_summary: 'Public preview retains observation-only information; full research requires sign-in.',
+            trend_prediction: 'Observation only',
             sentiment_score: 51,
+            sentiment_label: 'Observation only',
+            observation_scope: 'Observation only',
+            key_price_reference: 'Price references require the complete research packet after sign-in.',
+            evidence_boundary: 'Public preview does not include internal reasoning or execution guidance.',
           },
         },
       }),
@@ -156,14 +158,36 @@ appTest('guest search navigation is not blocked when preview stalls', async ({ p
   await page.getByTestId('home-bento-omnibar-input').fill('TSLA');
   await page.getByRole('button', { name: '分析' }).click();
 
-  await appExpect(page).toHaveURL(/\/zh\/stocks\/TSLA\/structure-decision\?symbol=TSLA&source=manual$/);
+  await appExpect(page).toHaveURL(/\/zh\/guest$/);
+  await appExpect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
   await appExpect(page.getByTestId('guest-preview-unavailable-state')).toHaveCount(0);
-  await appExpect(page.getByTestId('guest-home-clean-search')).toHaveCount(0);
-  await appExpect(page.getByTestId('home-research-console')).toHaveCount(0);
-  await appExpect(page.getByTestId('home-research-score-strip')).toHaveCount(0);
-  await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI|本地研究快照|本地快照|Tesla, Inc\.|NVIDIA Corporation|目标价|止损|买入|卖出|持有|仓位建议/i);
+  await appExpect(page.getByTestId('home-research-console')).toBeVisible();
+  await appExpect(page.getByTestId('guest-home-frosted-lock')).toHaveCount(2);
+  await appExpect(page.getByTestId('home-bento-decision-signal-hero')).toContainText(/仅观察|Observation only/);
+  await appExpect(page.getByTestId('home-research-readiness-strip')).toContainText(/仅观察|Observation only/);
+  await appExpect(page.getByText(/解锁完整研究框架、价格观察与技术形态解读|Unlock the full research framework, price observations, and technical context/).first()).toBeVisible();
+  await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI|本地研究快照|本地快照|目标价|止损|买入|卖出|持有|仓位建议/i);
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
   await expectNoConsumerRawLeakage(page.locator('body'), { label: '/zh/guest preview unavailable' });
+
+  await page.getByRole('link', { name: /打开结构面板|Open stock structure/ }).click();
+  await appExpect(page).toHaveURL(/\/zh\/stocks\/TSLA\/structure-decision$/);
+  await appExpect(page.getByTestId('auth-guard-overlay')).toBeVisible();
+  await appExpect(page.getByRole('link', { name: /前往登录|Sign in/ })).toHaveAttribute(
+    'href',
+    '/zh/login?redirect=%2Fzh%2Fstocks%2FTSLA%2Fstructure-decision',
+  );
+
+  await page.goBack();
+  await appExpect(page).toHaveURL(/\/zh\/guest$/);
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
+
+  await page.reload();
+  await appExpect(page).toHaveURL(/\/zh\/guest$/);
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByTestId('home-research-console')).toHaveCount(0);
+  await appExpect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
 });

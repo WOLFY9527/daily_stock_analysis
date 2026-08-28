@@ -4508,7 +4508,7 @@ describe('HomeSurfacePage', () => {
     expect(within(commandPlane).getByTestId('home-bento-analyze-button')).toBeEnabled();
   });
 
-  it('hands a valid home search submission to the server-validated canonical stock structure route', async () => {
+  it('keeps a valid guest home search on its public preview host after canonical validation', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
       stockCode: 'AAPL',
@@ -4526,13 +4526,13 @@ describe('HomeSurfacePage', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
-      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+      '/',
     ));
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('AAPL');
     expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'AAPL' }));
   });
 
-  it('uses the server validation canonical HK identity while preview remains enrichment', async () => {
+  it('uses the server validation canonical HK identity while rendering the public preview', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
       stockCode: '0700.HK',
@@ -4549,7 +4549,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
-      '/stocks/HK00700/structure-decision?symbol=HK00700&source=manual',
+      '/',
     ));
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('0700.HK');
     expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'HK00700' }));
@@ -4558,7 +4558,7 @@ describe('HomeSurfacePage', () => {
   it.each([
     ['A-share', '600519', '600519'],
     ['Hong Kong', '0700.HK', 'HK00700'],
-  ])('uses the server validation canonical %s identity before routing', async (_market, query, normalized) => {
+  ])('uses the server validation canonical %s identity before rendering the public preview', async (_market, query, normalized) => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
       stockCode: query,
@@ -4575,7 +4575,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
-      `/stocks/${normalized}/structure-decision?symbol=${normalized}&source=manual`,
+      '/',
     ));
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith(query);
     expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: normalized }));
@@ -4609,7 +4609,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.submit(form);
     expect(await screen.findByTestId('guest-preview-unavailable-state')).toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent(
-      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+      '/market-overview',
     );
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('AAPL');
     expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'AAPL' }));
@@ -4630,7 +4630,7 @@ describe('HomeSurfacePage', () => {
     expect(input).toHaveAttribute('aria-describedby', 'home-bento-omnibar-error');
     expect(screen.queryByTestId('home-bento-fallback-toast')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent(
-      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+      '/market-overview',
     );
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('not-a-symbol!');
     expect(publicAnalysisApi.preview).toHaveBeenCalledTimes(1);

@@ -68,11 +68,17 @@ vi.mock('../../hooks/useTaskStream', () => ({
 const GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN =
   /\b(buy|sell|hold|target price|stop loss|position sizing|recommendation|action grade|local research snapshot|local snapshot|leadership trend|momentum still driving|high-volatility|trend up|constructive consolidation|conviction|score)\b|买入|卖出|持有|目标价|止损|仓位建议|推荐|本地研究快照|本地快照|趋势上行|偏强震荡|高波动震荡|置信度|评分/i;
 
+const GuestLocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="guest-location-path">{location.pathname}</div>;
+};
+
 const renderGuest = (initialEntries = ['/guest']) => render(
   <MemoryRouter initialEntries={initialEntries}>
     <UiPreferencesProvider>
       <GuestHomePage />
     </UiPreferencesProvider>
+    <GuestLocationProbe />
   </MemoryRouter>,
 );
 
@@ -131,10 +137,13 @@ describe('GuestHomePage', () => {
           createdAt: '2026-04-14T10:00:00Z',
         },
         summary: {
-          analysisSummary: '趋势延续但需要等待更好的介入点。',
-          operationAdvice: '等待回踩',
-          trendPrediction: '偏强震荡',
+          analysisSummary: '公开预览仅保留观察性信息，完整研究需登录后查看。',
+          trendPrediction: '仅观察',
           sentimentScore: 72,
+          sentimentLabel: '仅观察',
+          observationScope: '仅观察',
+          keyPriceReference: '关键价位参考需要登录后结合完整研究包确认。',
+          evidenceBoundary: '公开预览不展示内部推演细节。',
         },
       },
     });
@@ -196,13 +205,15 @@ describe('GuestHomePage', () => {
       });
     });
 
+    expect(screen.getByTestId('guest-location-path')).toHaveTextContent(/^\/(?:zh\/)?guest$/);
     expect(await screen.findByTestId('home-research-console')).toBeInTheDocument();
     expect(screen.queryByTestId('guest-home-clean-search')).not.toBeInTheDocument();
     expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
     expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('可信度');
+    expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('证据不足');
+    expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('可信度 · 待补充数据');
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
-    expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('公开预览仅保留观察性信息，完整研究需登录后查看。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
     const paywall = screen.getAllByTestId('guest-home-frosted-lock')[0];
     expect(paywall.className).not.toMatch(/from-blue|to-purple|backdrop-blur/);

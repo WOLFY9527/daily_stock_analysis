@@ -6144,15 +6144,17 @@ function buildGuestDashboardFromPreview(
   const stockCode = normalizeTickerQuery(preview.report.meta.stockCode || preview.stockCode || 'AAPL');
   const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
   const summary = preview.report.summary;
-  const score = typeof summary.sentimentScore === 'number' ? summary.sentimentScore : 68;
-  const sentimentTone = toneFromScore(score);
-  const scoreText = (score / 10).toFixed(1);
   const rawCompany = getCompanyDisplayName(preview.report) || preview.stockName || stockCode;
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
   const priceDisplayContext = resolveHomePriceDisplayContext(preview.report);
+  const observationScope = localizeNarrativeText(
+    locale,
+    summary.observationScope,
+    locale === 'en' ? 'Observation only' : '仅观察',
+  );
   const actionText = polishHomeNarrativeCopy(
     locale,
-    localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue),
+    observationScope,
     priceDisplayContext,
   );
   const trendText = polishHomeNarrativeCopy(
@@ -6174,11 +6176,11 @@ function buildGuestDashboardFromPreview(
       ...seed.decision,
       company: companyProfile.company,
       sector: companyProfile.sector,
-      heroValue: scoreText,
-      heroUnit: '/10',
-      heroLabel: locale === 'en' ? 'Conviction' : '置信度',
+      heroValue: locale === 'en' ? 'Needs confirmation' : '需要确认',
+      heroUnit: '',
+      heroLabel: locale === 'en' ? 'Preview status' : '预览状态',
       signalLabel: actionText,
-      signalTone: sentimentTone,
+      signalTone: 'neutral',
       scoreValue: trendText,
       badge: locale === 'en' ? 'Guest preview · research preview' : '游客预览 · 研究预览',
       chartLabel: locale === 'en' ? 'Preview generated' : '预览已生成',
@@ -7251,15 +7253,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         return;
       }
 
-      const builtPath = stockSearchRouteAuthority('stock-structure', language, {
-        symbol: canonicalSymbol.symbol,
-        source: 'manual',
-      });
-      const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
       setSearchFieldError(null);
       setStatusToast(null);
       setSearchQuery('');
-      navigate(target);
       void handleAnalyze(rawQuery, canonicalSymbol.symbol);
       return;
     }
