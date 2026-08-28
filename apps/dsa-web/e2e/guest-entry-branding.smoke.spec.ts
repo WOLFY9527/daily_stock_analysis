@@ -164,7 +164,8 @@ appTest('guest search keeps the preview host while rendering a valid public prev
   await appExpect(page.getByTestId('home-research-console')).toBeVisible();
   await appExpect(page.getByTestId('guest-home-frosted-lock')).toHaveCount(2);
   await appExpect(page.getByTestId('home-bento-decision-signal-hero')).toContainText(/仅观察|Observation only/);
-  await appExpect(page.getByTestId('home-research-readiness-strip')).toContainText(/仅观察|Observation only/);
+  await page.getByTestId('home-research-boundary-disclosure').click();
+  await appExpect(page.getByTestId('home-research-readiness-strip')).toContainText(/证据不足|Evidence insufficient/);
   await appExpect(page.getByText(/解锁完整研究框架、价格观察与技术形态解读|Unlock the full research framework, price observations, and technical context/).first()).toBeVisible();
   await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI|本地研究快照|本地快照|目标价|止损|买入|卖出|持有|仓位建议/i);
   await baseExpect
