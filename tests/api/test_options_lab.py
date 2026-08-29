@@ -1379,6 +1379,11 @@ def test_analyze_endpoint_returns_ranked_call_candidates() -> None:
         assert payload["metadata"]["forceRefreshIgnored"] is True
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["scoringEngine"] == "deterministic_fixture_scoring_v1"
+        assert all(
+            item["scoring"]["subScores"]["dataFreshnessConfidence"] is None
+            and item["scoring"]["dataConfidence"] == "unavailable"
+            for item in payload["candidateContracts"]
+        )
     finally:
         client.close()
 

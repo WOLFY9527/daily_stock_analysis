@@ -256,12 +256,13 @@ export type OptionsZeroDteConcentration = {
   expiration?: string | null;
   dte?: number | null;
   contractCount: number;
-  callOpenInterest: number;
-  putOpenInterest: number;
-  callVolume: number;
-  putVolume: number;
+  callOpenInterest: number | null;
+  putOpenInterest: number | null;
+  callVolume: number | null;
+  putVolume: number | null;
   openInterestShare?: number | null;
   volumeShare?: number | null;
+  missingInputs?: string[] | null;
 };
 
 export type OptionsGammaFlipLevel = {
@@ -274,10 +275,10 @@ export type OptionsStrikeExposureSummary = {
   strike?: number | null;
   expiration?: string | null;
   contractCount: number;
-  callOpenInterest: number;
-  putOpenInterest: number;
-  callVolume: number;
-  putVolume: number;
+  callOpenInterest: number | null;
+  putOpenInterest: number | null;
+  callVolume: number | null;
+  putVolume: number | null;
   callDealerGammaExposure?: number | null;
   putDealerGammaExposure?: number | null;
   netDealerGammaExposure?: number | null;
@@ -291,10 +292,10 @@ export type OptionsExpirationExposureSummary = {
   isZeroDte: boolean;
   strikeCount: number;
   contractCount: number;
-  callOpenInterest: number;
-  putOpenInterest: number;
-  callVolume: number;
-  putVolume: number;
+  callOpenInterest: number | null;
+  putOpenInterest: number | null;
+  callVolume: number | null;
+  putVolume: number | null;
   netDealerGammaExposure?: number | null;
   calculationState: OptionsStructureCalculationState;
   missingInputs?: string[] | null;
@@ -814,12 +815,13 @@ function normalizeZeroDte(value: unknown): OptionsZeroDteConcentration {
     expiration: bucket.expiration ?? null,
     dte: normalizeNumberOrNull(bucket.dte),
     contractCount: normalizeNumberOrNull(bucket.contractCount) ?? 0,
-    callOpenInterest: normalizeNumberOrNull(bucket.callOpenInterest) ?? 0,
-    putOpenInterest: normalizeNumberOrNull(bucket.putOpenInterest) ?? 0,
-    callVolume: normalizeNumberOrNull(bucket.callVolume) ?? 0,
-    putVolume: normalizeNumberOrNull(bucket.putVolume) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(bucket.callOpenInterest),
+    putOpenInterest: normalizeNumberOrNull(bucket.putOpenInterest),
+    callVolume: normalizeNumberOrNull(bucket.callVolume),
+    putVolume: normalizeNumberOrNull(bucket.putVolume),
     openInterestShare: normalizeNumberOrNull(bucket.openInterestShare),
     volumeShare: normalizeNumberOrNull(bucket.volumeShare),
+    missingInputs: normalizeStringList(bucket.missingInputs),
   };
 }
 
@@ -841,10 +843,10 @@ function normalizeStrikeSummary(value: unknown): OptionsStrikeExposureSummary | 
     strike: normalizeNumberOrNull(row.strike),
     expiration: row.expiration ?? null,
     contractCount: normalizeNumberOrNull(row.contractCount) ?? 0,
-    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest) ?? 0,
-    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest) ?? 0,
-    callVolume: normalizeNumberOrNull(row.callVolume) ?? 0,
-    putVolume: normalizeNumberOrNull(row.putVolume) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest),
+    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest),
+    callVolume: normalizeNumberOrNull(row.callVolume),
+    putVolume: normalizeNumberOrNull(row.putVolume),
     callDealerGammaExposure: normalizeNumberOrNull(row.callDealerGammaExposure),
     putDealerGammaExposure: normalizeNumberOrNull(row.putDealerGammaExposure),
     netDealerGammaExposure: normalizeNumberOrNull(row.netDealerGammaExposure),
@@ -862,10 +864,10 @@ function normalizeExpirationSummary(value: unknown): OptionsExpirationExposureSu
     isZeroDte: Boolean(row.isZeroDte),
     strikeCount: normalizeNumberOrNull(row.strikeCount) ?? 0,
     contractCount: normalizeNumberOrNull(row.contractCount) ?? 0,
-    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest) ?? 0,
-    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest) ?? 0,
-    callVolume: normalizeNumberOrNull(row.callVolume) ?? 0,
-    putVolume: normalizeNumberOrNull(row.putVolume) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest),
+    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest),
+    callVolume: normalizeNumberOrNull(row.callVolume),
+    putVolume: normalizeNumberOrNull(row.putVolume),
     netDealerGammaExposure: normalizeNumberOrNull(row.netDealerGammaExposure),
     calculationState: row.calculationState ?? 'not_available',
     missingInputs: normalizeStringList(row.missingInputs),

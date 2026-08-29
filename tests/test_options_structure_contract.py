@@ -225,7 +225,7 @@ def test_aggregation_helper_degrades_when_greeks_or_oi_are_missing() -> None:
                 strike=50.0,
                 multiplier=100,
                 openInterest=None,
-                volume=4,
+                volume=None,
                 gamma=0.02,
             ),
             OptionContractStructureRow(
@@ -234,8 +234,8 @@ def test_aggregation_helper_degrades_when_greeks_or_oi_are_missing() -> None:
                 expiration="2026-06-19",
                 strike=50.0,
                 multiplier=100,
-                openInterest=5,
-                volume=3,
+                openInterest=0,
+                volume=0,
                 gamma=None,
             ),
         ],
@@ -247,11 +247,20 @@ def test_aggregation_helper_degrades_when_greeks_or_oi_are_missing() -> None:
     assert payload["calculationState"] == "not_available"
     assert payload["totalDealerGammaExposure"] is None
     assert "missing_open_interest" in payload["blockingReasons"]
+    assert "missing_volume" in payload["blockingReasons"]
     assert "missing_gamma" in payload["blockingReasons"]
     strike = payload["strikeSummaries"][0]
-    assert strike["callOpenInterest"] == 0
-    assert strike["putOpenInterest"] == 5
+    expiration = payload["expirationSummaries"][0]
+    assert strike["callOpenInterest"] is None
+    assert strike["callVolume"] is None
+    assert strike["putOpenInterest"] == 0
+    assert strike["putVolume"] == 0
     assert strike["netDealerGammaExposure"] is None
+    assert {"missing_open_interest", "missing_volume"}.issubset(expiration["missingInputs"])
+    assert payload["zeroDte"]["callOpenInterest"] is None
+    assert payload["zeroDte"]["putOpenInterest"] == 0
+    assert payload["zeroDte"]["openInterestShare"] is None
+    assert {"missing_open_interest", "missing_volume"}.issubset(payload["zeroDte"]["missingInputs"])
 
 
 def test_zero_dte_bucket_detection_uses_snapshot_date_and_expiration_dates() -> None:

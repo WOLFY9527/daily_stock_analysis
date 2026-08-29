@@ -146,8 +146,23 @@ def _dte(expiration: str | None, as_of: str | None) -> int | None:
     return max(0, (expiration_date - snapshot_date).days)
 
 
-def _safe_sum(values: Iterable[int | None]) -> int:
-    return sum(int(value) for value in values if value is not None)
+def _safe_sum(values: Iterable[int | None]) -> int | None:
+    present = [int(value) for value in values if value is not None]
+    return sum(present) if present else None
+
+
+def _field_missing_inputs(contracts: Iterable[OptionContractStructureRow]) -> list[str]:
+    rows = list(contracts)
+    missing: list[str] = []
+    if any(contract.open_interest is None for contract in rows):
+        missing.append("missing_open_interest")
+    if any(contract.volume is None for contract in rows):
+        missing.append("missing_volume")
+    return missing
+
+
+def _sum_known(values: Iterable[int | None]) -> int | None:
+    return _safe_sum(values)
 
 
 def _round_optional(value: float | None) -> float | None:
@@ -216,6 +231,8 @@ def _summarize_strikes(snapshot: OptionChainSnapshot) -> tuple[list[OptionsStrik
         group_missing_inputs: list[str] = []
         call_contracts = [contract for contract in contracts if contract.side == "call"]
         put_contracts = [contract for contract in contracts if contract.side == "put"]
+        group_missing_inputs.extend(_field_missing_inputs(contracts))
+        missing_inputs.extend(group_missing_inputs)
         call_exposures: list[float | None] = []
         put_exposures: list[float | None] = []
         for contract in contracts:
@@ -258,6 +275,8 @@ def _summarize_expirations(snapshot: OptionChainSnapshot) -> tuple[list[OptionsE
         group_missing_inputs: list[str] = []
         call_contracts = [contract for contract in contracts if contract.side == "call"]
         put_contracts = [contract for contract in contracts if contract.side == "put"]
+        group_missing_inputs.extend(_field_missing_inputs(contracts))
+        missing_inputs.extend(group_missing_inputs)
         exposures: list[float | None] = []
         for contract in contracts:
             exposure, missing = _contract_gamma_exposure(contract, spot_price=snapshot.spot_price)
@@ -304,13 +323,24 @@ def _nearest_expirations(snapshot: OptionChainSnapshot, *, limit: int = 3) -> li
 def _zero_dte_bucket(
     expiration_summaries: list[OptionsExpirationExposureSummary],
 ) -> OptionsZeroDteConcentration:
-    total_oi = sum(item.call_open_interest + item.put_open_interest for item in expiration_summaries)
-    total_volume = sum(item.call_volume + item.put_volume for item in expiration_summaries)
+    all_missing_inputs = _dedupe_codes(
+        input_code for item in expiration_summaries for input_code in item.missing_inputs
+    )
+    total_oi = _sum_known(
+        value
+        for item in expiration_summaries
+        for value in (item.call_open_interest, item.put_open_interest)
+    )
+    total_volume = _sum_known(
+        value
+        for item in expiration_summaries
+        for value in (item.call_volume, item.put_volume)
+    )
     bucket = next((item for item in expiration_summaries if item.dte == 0), None)
     if bucket is None:
         return OptionsZeroDteConcentration(state="not_available")
-    bucket_oi = bucket.call_open_interest + bucket.put_open_interest
-    bucket_volume = bucket.call_volume + bucket.put_volume
+    bucket_oi = _sum_known((bucket.call_open_interest, bucket.put_open_interest))
+    bucket_volume = _sum_known((bucket.call_volume, bucket.put_volume))
     return OptionsZeroDteConcentration(
         state="available",
         expiration=bucket.expiration,
@@ -320,8 +350,17 @@ def _zero_dte_bucket(
         putOpenInterest=bucket.put_open_interest,
         callVolume=bucket.call_volume,
         putVolume=bucket.put_volume,
-        openInterestShare=round(bucket_oi / total_oi, 4) if total_oi else None,
-        volumeShare=round(bucket_volume / total_volume, 4) if total_volume else None,
+        openInterestShare=(
+            round(bucket_oi / total_oi, 4)
+            if bucket_oi is not None and total_oi not in (None, 0) and "missing_open_interest" not in all_missing_inputs
+            else None
+        ),
+        volumeShare=(
+            round(bucket_volume / total_volume, 4)
+            if bucket_volume is not None and total_volume not in (None, 0) and "missing_volume" not in all_missing_inputs
+            else None
+        ),
+        missingInputs=all_missing_inputs,
     )
 
 

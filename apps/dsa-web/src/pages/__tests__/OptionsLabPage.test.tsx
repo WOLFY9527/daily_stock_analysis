@@ -3248,6 +3248,9 @@ describe('OptionsLabPage', () => {
         noExternalCallsInTests: true,
         limitations: ['mocked_frontend_shell'],
       },
+      optionsStructureSignalPacket: {
+        staleOrDemoBoundary: { state: 'demo_or_stale' },
+      },
     } as never);
 
     renderPage();
@@ -3267,6 +3270,38 @@ describe('OptionsLabPage', () => {
     expect(callsDesktopTable).not.toHaveTextContent('演示待补');
     expect(callsTable).toHaveTextContent('演示链未提供真实敏感度数值');
     expect(within(callsDesktopTable).queryByText(/^--$/)).not.toBeInTheDocument();
+  });
+
+  it('uses neutral missing-Greek copy for a provider-backed chain', async () => {
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: { price: 52.34, source: 'provider', freshness: 'live' },
+      calls: [{
+        contractSymbol: 'TEM260619C00055000', side: 'call', strike: 55, bid: 4.1, ask: 4.35, mid: 4.23,
+        volume: 830, openInterest: 6120, impliedVolatility: 0.54,
+        delta: null, theta: null, gamma: null, vega: null, rho: null, spreadPct: 5.9, moneyness: 'otm', liquidityScore: 82,
+      }],
+      puts: [], filtersApplied: {}, chainAsOf: '2026-06-19T13:45:00Z', source: 'provider', limitations: [],
+      metadata: { readOnly: true, fixtureBacked: false, syntheticData: false },
+      optionsStructureSignalPacket: { staleOrDemoBoundary: { state: 'live' } },
+    } as never);
+
+    renderPage();
+
+    const callsTable = await screen.findByTestId('options-lab-calls-table');
+    expect(callsTable).toHaveTextContent('敏感度暂未提供');
+    expect(callsTable).toHaveTextContent('敏感度不可用。');
+    expect(callsTable).not.toHaveTextContent('演示链未提供真实敏感度数值');
+  });
+
+  it('marks all Options Lab analysis controls as passive research actions', async () => {
+    renderPage();
+
+    await screen.findByTestId('options-lab-page-root');
+    ['运行结构比较', '运行策略分析', '评估情景准备度'].forEach((name) => {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('data-action-intent', 'passive');
+    });
   });
 
   it('keeps research-trust copy sentinels analytical and no-decision grade', () => {

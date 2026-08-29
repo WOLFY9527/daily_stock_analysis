@@ -129,7 +129,7 @@ const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用�
 const OPTIONS_DEMO_FIXTURE_SOURCE = 'synthetic_options_lab_fixture';
 const OPTIONS_DEMO_FIXTURE_VERSION = 'options_lab_synthetic_v1';
 const OPTIONS_DEMO_FIXTURE_TIMESTAMP = '2026-05-06T13:45:00Z';
-const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
+const OPTIONS_GREEKS_UNAVAILABLE_COPY = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 const OPTIONS_IV_GREEKS_LABEL = 'IV / 希腊值';
 const STRATEGY_ANALYZER_BLOCKED_COPY = '策略分析器保持阻断';
@@ -162,7 +162,7 @@ function number(value?: number | null, digits = 0): string {
 }
 
 function greekNumber(value?: number | null, digits = 0): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return OPTIONS_GREEKS_UNAVAILABLE_COPY;
   return formatNumber(value, digits);
 }
 
@@ -2108,7 +2108,13 @@ const ChainMetric: React.FC<{ label: string; value: string; className?: string }
   </div>
 );
 
-const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string; className?: string }> = ({ title, contracts, testId, className }) => (
+const ChainTable: React.FC<{
+  title: string;
+  contracts: OptionContract[];
+  testId: string;
+  demoOrStaleProvenance: boolean;
+  className?: string;
+}> = ({ title, contracts, testId, demoOrStaleProvenance, className }) => (
   <section className={cn('min-h-[280px] min-w-0', className)} data-testid="options-lab-chain-panel">
     <div className="mb-3">
       <SectionHeader eyebrow="期权链" title={title} icon={BarChart3} />
@@ -2172,11 +2178,13 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                         />
                       ))
                     ) : (
-                      <ChainMetric label="希腊值" value={OPTIONS_DEMO_GREEKS_PLACEHOLDER} className="col-span-2" />
+                      <ChainMetric label="希腊值" value={OPTIONS_GREEKS_UNAVAILABLE_COPY} className="col-span-2" />
                     )}
                   </div>
                   {!hasGreekValue ? (
-                    <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{OPTIONS_DEMO_GREEKS_EXPLANATION}</p>
+                    <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {demoOrStaleProvenance ? OPTIONS_DEMO_GREEKS_EXPLANATION : '敏感度不可用。'}
+                    </p>
                   ) : null}
                 </article>
               );
@@ -2220,7 +2228,9 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
           </table>
         </div>
         {hasUnavailableGreekContracts ? (
-          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{OPTIONS_DEMO_GREEKS_EXPLANATION}</p>
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {demoOrStaleProvenance ? OPTIONS_DEMO_GREEKS_EXPLANATION : '敏感度不可用。'}
+          </p>
         ) : null}
             </>
           );
@@ -2373,7 +2383,6 @@ const StrategyComparisonPanel: React.FC<{
           <TerminalButton
             type="button"
             variant="secondary"
-            data-action-intent="execute"
             disabled={runDisabled || comparisonState.loading}
             onClick={onRun}
           >
@@ -2566,7 +2575,6 @@ const StrategyAnalyzerPanel: React.FC<{
           <TerminalButton
             type="button"
             variant="secondary"
-            data-action-intent="execute"
             disabled={runDisabled || analyzerState.loading}
             onClick={onRun}
           >
@@ -2874,7 +2882,6 @@ const DecisionPanel: React.FC<{
           <TerminalButton
             type="button"
             variant="secondary"
-            data-action-intent="execute"
             disabled={runDisabled || decisionState.loading}
             onClick={onRun}
           >
@@ -3878,8 +3885,18 @@ const OptionsLabPageContent: React.FC = () => {
                   ) : null}
                   {!state.loading && !state.error && hasChainRows ? (
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                      <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" />
-                      <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" />
+                      <ChainTable
+                        title="Call 链"
+                        contracts={calls}
+                        testId="options-lab-calls-table"
+                        demoOrStaleProvenance={state.chain?.optionsStructureSignalPacket?.staleOrDemoBoundary?.state === 'demo_or_stale'}
+                      />
+                      <ChainTable
+                        title="Put 链"
+                        contracts={puts}
+                        testId="options-lab-puts-table"
+                        demoOrStaleProvenance={state.chain?.optionsStructureSignalPacket?.staleOrDemoBoundary?.state === 'demo_or_stale'}
+                      />
                     </div>
                   ) : null}
                   {!state.loading && !state.error && !hasChainRows ? (

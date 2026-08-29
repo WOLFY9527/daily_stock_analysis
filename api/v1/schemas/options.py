@@ -488,12 +488,13 @@ class OptionsZeroDteConcentration(_OptionsModel):
     expiration: Optional[str] = None
     dte: Optional[int] = None
     contract_count: int = Field(default=0, alias="contractCount")
-    call_open_interest: int = Field(default=0, alias="callOpenInterest")
-    put_open_interest: int = Field(default=0, alias="putOpenInterest")
-    call_volume: int = Field(default=0, alias="callVolume")
-    put_volume: int = Field(default=0, alias="putVolume")
+    call_open_interest: Optional[int] = Field(default=None, alias="callOpenInterest")
+    put_open_interest: Optional[int] = Field(default=None, alias="putOpenInterest")
+    call_volume: Optional[int] = Field(default=None, alias="callVolume")
+    put_volume: Optional[int] = Field(default=None, alias="putVolume")
     open_interest_share: Optional[float] = Field(default=None, alias="openInterestShare")
     volume_share: Optional[float] = Field(default=None, alias="volumeShare")
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
 
 
 class OptionsGammaFlipLevel(_OptionsModel):
@@ -506,10 +507,10 @@ class OptionsStrikeExposureSummary(_OptionsModel):
     strike: float
     expiration: Optional[str] = None
     contract_count: int = Field(default=0, alias="contractCount")
-    call_open_interest: int = Field(default=0, alias="callOpenInterest")
-    put_open_interest: int = Field(default=0, alias="putOpenInterest")
-    call_volume: int = Field(default=0, alias="callVolume")
-    put_volume: int = Field(default=0, alias="putVolume")
+    call_open_interest: Optional[int] = Field(default=None, alias="callOpenInterest")
+    put_open_interest: Optional[int] = Field(default=None, alias="putOpenInterest")
+    call_volume: Optional[int] = Field(default=None, alias="callVolume")
+    put_volume: Optional[int] = Field(default=None, alias="putVolume")
     call_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="callDealerGammaExposure")
     put_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="putDealerGammaExposure")
     net_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="netDealerGammaExposure")
@@ -523,10 +524,10 @@ class OptionsExpirationExposureSummary(_OptionsModel):
     is_zero_dte: bool = Field(default=False, alias="isZeroDte")
     strike_count: int = Field(default=0, alias="strikeCount")
     contract_count: int = Field(default=0, alias="contractCount")
-    call_open_interest: int = Field(default=0, alias="callOpenInterest")
-    put_open_interest: int = Field(default=0, alias="putOpenInterest")
-    call_volume: int = Field(default=0, alias="callVolume")
-    put_volume: int = Field(default=0, alias="putVolume")
+    call_open_interest: Optional[int] = Field(default=None, alias="callOpenInterest")
+    put_open_interest: Optional[int] = Field(default=None, alias="putOpenInterest")
+    call_volume: Optional[int] = Field(default=None, alias="callVolume")
+    put_volume: Optional[int] = Field(default=None, alias="putVolume")
     net_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="netDealerGammaExposure")
     calculation_state: OptionsStructureCalculationState = Field(alias="calculationState")
     missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
@@ -1566,7 +1567,7 @@ class OptionScoringSubScores(_OptionsModel):
     target_scenario_payoff: float = Field(alias="targetScenarioPayoff")
     max_loss_budget_fit: float = Field(alias="maxLossBudgetFit")
     oi_volume_confidence: float = Field(alias="oiVolumeConfidence")
-    data_freshness_confidence: float = Field(alias="dataFreshnessConfidence")
+    data_freshness_confidence: Optional[float] = Field(default=None, alias="dataFreshnessConfidence")
 
 
 class OptionContractScoring(_OptionsModel):

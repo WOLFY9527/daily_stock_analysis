@@ -288,7 +288,7 @@ class AnalyzeSubScoresModel:
     target_scenario_payoff: float
     max_loss_budget_fit: float
     oi_volume_confidence: float
-    data_freshness_confidence: float
+    data_freshness_confidence: Optional[float]
 
 
 @dataclass

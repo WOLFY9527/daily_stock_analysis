@@ -432,6 +432,59 @@ describe('optionsLabApi fail-closed boundaries', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/options/underlyings/AAPL/structure');
   });
 
+  it('preserves unavailable aggregate OI and volume instead of coercing them to zero', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        status: 'degraded',
+        calculation_state: 'degraded',
+        observation_only: true,
+        decision_grade: false,
+        provider_configured: true,
+        snapshot: { contracts: [] },
+        strike_summaries: [{
+          strike: 50,
+          contract_count: 2,
+          call_open_interest: null,
+          put_open_interest: 0,
+          call_volume: 'not-a-number',
+          put_volume: 0,
+          calculation_state: 'degraded',
+          missing_inputs: ['missing_open_interest', 'missing_volume'],
+        }],
+        expiration_summaries: [],
+        nearest_expirations: [],
+        zero_dte: {
+          state: 'available',
+          contract_count: 2,
+          call_open_interest: null,
+          put_open_interest: 0,
+          call_volume: null,
+          put_volume: 0,
+          missing_inputs: ['missing_open_interest', 'missing_volume'],
+        },
+        blocking_reasons: ['missing_open_interest', 'missing_volume'],
+      },
+    } as never);
+
+    await expect(optionsLabApi.getOptionsStructure('tem')).resolves.toMatchObject({
+      strikeSummaries: [{
+        callOpenInterest: null,
+        putOpenInterest: 0,
+        callVolume: null,
+        putVolume: 0,
+        missingInputs: ['missing_open_interest', 'missing_volume'],
+      }],
+      zeroDte: {
+        callOpenInterest: null,
+        putOpenInterest: 0,
+        callVolume: null,
+        putVolume: 0,
+        missingInputs: ['missing_open_interest', 'missing_volume'],
+      },
+    });
+  });
+
   it('maps demo sample options chain readiness to observation labels', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: {

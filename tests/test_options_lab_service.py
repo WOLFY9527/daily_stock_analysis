@@ -418,6 +418,8 @@ def test_analyze_bullish_tem_returns_ranked_call_candidates() -> None:
     assert isinstance(response.metadata, OptionsLabMetadataModel)
     assert response.metadata.scoring_engine == "deterministic_fixture_scoring_v1"
     assert "phase4_spreads_deferred" in response.limitations
+    assert all(candidate.sub_scores.data_freshness_confidence is None for candidate in response.candidate_contracts)
+    assert all(candidate.data_confidence == "unavailable" for candidate in response.candidate_contracts)
 
 
 def test_analyze_bearish_tem_returns_ranked_put_candidates() -> None:

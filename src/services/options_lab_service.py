@@ -303,6 +303,7 @@ class OptionsLabService:
         parsed = self._parse_analyze_request(request)
         fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        data_quality = self._decision_data_quality(fixture, contracts)
         target_date = self._parse_date(parsed.target_date)
         strategies = self._supported_strategies(parsed.strategies)
         candidate_sides = self._candidate_sides(parsed.direction, strategies)
@@ -325,6 +326,7 @@ class OptionsLabService:
                     max_premium=parsed.max_premium,
                     risk_profile=parsed.risk_profile,
                     underlying_price=float((fixture.get("underlying") or {}).get("price") or 0),
+                    data_quality=data_quality,
                 )
             )
 
@@ -1775,6 +1777,7 @@ class OptionsLabService:
         max_premium: Optional[float],
         risk_profile: str,
         underlying_price: float,
+        data_quality: DecisionDataQualityAssessment | None = None,
     ) -> AnalyzeCandidateModel:
         premium_at_risk = self._premium_at_risk(contract)
         breakeven = self._breakeven(contract)
@@ -1793,7 +1796,7 @@ class OptionsLabService:
             target_scenario_payoff=self._target_payoff_score(target_payoff, premium_at_risk),
             max_loss_budget_fit=self._budget_fit(premium_at_risk, max_premium),
             oi_volume_confidence=self._oi_volume_confidence(contract),
-            data_freshness_confidence=100,
+            data_freshness_confidence=self._freshness_confidence(data_quality),
         )
         score = self._weighted_score(sub_scores)
         grade = self._grade_label(score)
@@ -1953,7 +1956,7 @@ class OptionsLabService:
             "oi_volume_confidence": 0.03,
             "data_freshness_confidence": 0.01,
         }
-        raw = sum(float(getattr(sub_scores, key)) * weight for key, weight in weights.items())
+        raw = sum(float(getattr(sub_scores, key) or 0.0) * weight for key, weight in weights.items())
         return round(max(0.0, min(100.0, raw)), 2)
 
     @staticmethod
@@ -1991,6 +1994,8 @@ class OptionsLabService:
 
     @staticmethod
     def _data_confidence(sub_scores: AnalyzeSubScoresModel) -> str:
+        if sub_scores.data_freshness_confidence is None:
+            return "unavailable"
         average = (
             sub_scores.liquidity_score
             + sub_scores.oi_volume_confidence
@@ -2001,6 +2006,16 @@ class OptionsLabService:
         if average >= 50:
             return "moderate"
         return "low"
+
+    @staticmethod
+    def _freshness_confidence(data_quality: DecisionDataQualityAssessment | None) -> float | None:
+        """Expose freshness only when the existing quality authority proves live usability."""
+
+        if data_quality is None:
+            return None
+        if data_quality.source_type == "live" and data_quality.data_quality_tier == "live_usable":
+            return 100.0
+        return None
 
     @staticmethod
     def _bounded(value: float) -> float:
