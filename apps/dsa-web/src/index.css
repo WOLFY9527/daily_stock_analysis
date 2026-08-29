@@ -8340,7 +8340,8 @@ html[data-theme-style='paper'] .shell-header-links {
   min-width: 0;
   align-items: center;
   gap: 0.2rem;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-padding-inline: 0.75rem;
   padding: 4px 0.75rem;
@@ -8826,7 +8827,7 @@ html[data-theme-style='paper'] .shell-stock-search {
 }
 
 html[data-theme-style='paper'] .shell-stock-search--header {
-  width: min(18rem, 24vw);
+  width: clamp(11rem, 17vw, 18rem);
 }
 
 html[data-theme-style='paper'] .shell-stock-search--drawer {
