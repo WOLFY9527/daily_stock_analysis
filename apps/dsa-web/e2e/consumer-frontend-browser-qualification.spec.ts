@@ -708,6 +708,106 @@ async function installQualificationOverrides(page: Page) {
   await installWatchlistOverrides(page);
   await installScenarioOverrides(page);
   await installRadarOverrides(page);
+
+  await page.route('**/api/v1/backtest/rule/parse', async (route) => {
+    await fulfillJson(route, {
+      code: 'NVDA',
+      strategy_text: 'Use a fixed-rule moving average observation for NVDA.',
+      parsed_strategy: {
+        version: 'v1',
+        timeframe: 'daily',
+        source_text: 'Use a fixed-rule moving average observation for NVDA.',
+        normalized_text: 'SMA5 上穿 SMA20 作为分析入场，下穿作为分析离场。',
+        entry: { type: 'group', op: 'and', rules: [] },
+        exit: { type: 'group', op: 'or', rules: [] },
+        confidence: 0.96,
+        needs_confirmation: false,
+        ambiguities: [],
+        summary: { strategy: '固定规则分析观察', entry: '分析入场条件', exit: '分析离场条件' },
+        max_lookback: 20,
+        strategy_kind: 'moving_average_crossover',
+        executable: true,
+        normalization_state: 'ready',
+        setup: { symbol: 'NVDA', start_date: '2026-06-01', end_date: '2026-07-06', initial_capital: 100000 },
+        strategy_spec: { strategy_type: 'moving_average_crossover', symbol: 'NVDA', timeframe: 'daily' },
+      },
+      executable: true,
+      normalization_state: 'ready',
+      confidence: 0.96,
+      needs_confirmation: false,
+      ambiguities: [],
+      summary: { strategy: '固定规则分析观察', entry: '分析入场条件', exit: '分析离场条件' },
+      max_lookback: 20,
+    });
+  });
+
+  await page.route('**/api/v1/backtest/rule/run', async (route) => {
+    await fulfillJson(route, {
+      id: 735,
+      code: 'NVDA',
+      strategy_text: 'Use a fixed-rule moving average observation for NVDA.',
+      parsed_strategy: {
+        version: 'v1',
+        timeframe: 'daily',
+        source_text: 'Use a fixed-rule moving average observation for NVDA.',
+        normalized_text: 'SMA5 上穿 SMA20 作为分析入场，下穿作为分析离场。',
+        entry: { type: 'group', op: 'and', rules: [] },
+        exit: { type: 'group', op: 'or', rules: [] },
+        confidence: 0.96,
+        needs_confirmation: false,
+        ambiguities: [],
+        summary: { strategy: '固定规则分析观察', entry: '分析入场条件', exit: '分析离场条件' },
+        max_lookback: 20,
+        strategy_kind: 'moving_average_crossover',
+        executable: true,
+        normalization_state: 'ready',
+      },
+      strategy_hash: 'qualification-fixture-nvda',
+      timeframe: 'daily',
+      start_date: '2026-06-01',
+      end_date: '2026-07-06',
+      lookback_bars: 20,
+      initial_capital: 100000,
+      fee_bps: 0,
+      slippage_bps: 0,
+      needs_confirmation: false,
+      warnings: [],
+      run_at: timestamp,
+      completed_at: timestamp,
+      status: 'completed',
+      status_message: 'Synthetic qualification run completed without persisting a result.',
+      status_history: [{ status: 'completed', at: timestamp }],
+      no_result_reason: 'insufficient_data',
+      no_result_message: 'Synthetic qualification data is intentionally insufficient for a result workspace.',
+      trade_count: 0,
+      win_count: 0,
+      loss_count: 0,
+      execution_readiness: {
+        state: 'data_insufficient',
+        result_contract_available: false,
+        blocked: true,
+        diagnostic_only: true,
+        decision_grade: false,
+      },
+      historical_ohlcv_readiness: {
+        status: 'insufficient_coverage',
+        available_bars: 3,
+        required_bars: 20,
+      },
+      data_quality: {
+        status: 'partial',
+        source: 'Playwright Fixture',
+        as_of: dataAsOf,
+        is_synthetic: true,
+      },
+      execution_assumptions: {
+        engine: 'deterministic_fixture',
+        no_broker_connection: true,
+        no_order_placement: true,
+        no_portfolio_mutation: true,
+      },
+    });
+  });
 }
 
 async function waitForRoute(page: Page, route: QualificationRoute, options: { portfolioOperatorMode?: boolean } = {}) {
@@ -1135,29 +1235,49 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     await recordQ001Journey('Stock evidence handoff', stockRoute, async () => {
       await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('stock-first-viewport-summary-panel')).toBeVisible();
-      return ['Stock evidence summary is visible before the Watchlist handoff.'];
+      const watchlistNav = page.locator('a[href="/zh/watchlist"]').first();
+      await expect(watchlistNav).toBeVisible({ timeout: 10_000 });
+      await watchlistNav.click();
+      await expect(page).toHaveURL(/\/zh\/watchlist$/);
+      return ['Stock evidence summary is visible and the canonical shell handoff opens Watchlist.'];
     });
 
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
-    await waitForRoute(page, watchlistRoute);
+    await expect(page.getByTestId(watchlistRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
     await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
       await expect(page.getByTestId('watchlist-status-strip')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('watchlist-header-strip')).toContainText('观察列表');
-      return ['Watchlist observation surface is reachable after stock evidence review.'];
+      const row = page.getByTestId('watchlist-row-NVDA');
+      await expect(row).toBeVisible({ timeout: 10_000 });
+      await row.getByRole('button', { name: '查看详情 NVDA' }).click();
+      const detailRail = page.getByTestId('watchlist-detail-rail');
+      await expect(detailRail).toBeVisible({ timeout: 10_000 });
+      await detailRail.getByRole('button', { name: '回测' }).click();
+      await expect(page).toHaveURL(/\/zh\/backtest\?symbol=NVDA/);
+      return ['NVDA filled row opened its detail rail and the canonical Backtest action was selected.'];
     });
 
     const backtestRoute = routes.find((entry) => entry.key === 'backtest')!;
-    await waitForRoute(page, backtestRoute);
+    await expect(page.getByTestId(backtestRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
     await recordQ001Journey('Backtest setup', backtestRoute, async () => {
       const input = page.getByLabel(/标的代码|Ticker|symbol/i).first();
       await expect(input).toBeVisible({ timeout: 10_000 });
+      await expect(input).toHaveValue('NVDA');
       await input.focus();
       await expect(input).toBeFocused();
-      return ['Backtest ticker input is keyboard focusable.'];
+      const execute = page.getByRole('button', { name: '执行回测任务' });
+      await expect(execute).toBeVisible({ timeout: 10_000 });
+      await execute.click();
+      await expect(page.getByTestId('backtest-run-feedback')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('backtest-data-limitation')).toContainText('历史行情覆盖不足');
+      return ['Backtest validation and execution were submitted for NVDA; the fixture keeps the unavailable result boundary explicit.'];
     });
 
     const scenarioRoute = routes.find((entry) => entry.key === 'scenario-lab')!;
-    await waitForRoute(page, scenarioRoute);
+    const scenarioNav = page.locator('a[href="/zh/scenario-lab"]').first();
+    await expect(scenarioNav).toBeVisible({ timeout: 10_000 });
+    await scenarioNav.click();
+    await expect(page.getByTestId(scenarioRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
     await recordQ001Journey('Scenario evaluate', scenarioRoute, async () => {
       const evaluate = page.getByRole('button', { name: /评估情景|Evaluate/i }).first();
       await expect(evaluate).toBeVisible({ timeout: 10_000 });
@@ -1169,7 +1289,11 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     });
 
     const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
-    await waitForRoute(page, portfolioRoute);
+    await installPortfolioSmokeHarness(page);
+    const portfolioNav = page.locator('a[href="/zh/portfolio"]').first();
+    await expect(portfolioNav).toBeVisible({ timeout: 10_000 });
+    await portfolioNav.click();
+    await expect(page.getByTestId(portfolioRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
     await recordQ001Journey('Portfolio resume', portfolioRoute, async () => {
       await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
