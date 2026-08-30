@@ -6,6 +6,8 @@ import {
 
 const viewports = [
   { width: 1440, height: 1000 },
+  { width: 1280, height: 900 },
+  { width: 1024, height: 900 },
   { width: 390, height: 844 },
 ];
 
@@ -432,9 +434,20 @@ const routes = [
     groupings: ['L1 / 数据源就绪', 'L2 / 运维矩阵', 'L2 / 本地就绪', 'L2 / 配额与成本'],
     testIds: [
       'market-provider-readability-summary',
+      'market-provider-action-queue',
       'market-provider-source-gap-disclosure',
       'market-provider-matrix-disclosure',
       'market-provider-diagnostics-disclosure',
+    ],
+    hierarchyOrder: [
+      'market-provider-l0-overview-strip',
+      'market-provider-readability-summary',
+      'market-provider-action-queue',
+      'admin-data-roadmap-panel',
+      'market-provider-section-ops-status',
+      'market-provider-section-matrix',
+      'market-provider-section-readiness',
+      'market-provider-section-cost',
     ],
     disclosures: [],
     drillLink: {
@@ -496,6 +509,9 @@ test.describe('admin ops launch surfaces', () => {
             'admin-logs-data-missing-section',
             'admin-logs-storage-disclosure',
           ]);
+        }
+        if (route.hierarchyOrder) {
+          await expectTopToBottomOrder(page, route.hierarchyOrder);
         }
         for (const text of route.groupings || []) {
           expect(bodyText).toContain(text);
