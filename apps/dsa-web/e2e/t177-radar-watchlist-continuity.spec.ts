@@ -21,6 +21,8 @@ const currentUser = {
 };
 
 const requestLog: string[] = [];
+const harnessOptionsByPage = new WeakMap<Page, HarnessOptions>();
+const harnessInstalledPages = new WeakSet<Page>();
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
@@ -492,11 +494,15 @@ function refreshStatusPayload() {
 }
 
 async function installT177Harness(page: Page, options: HarnessOptions = {}) {
-  const radarMode = options.radarMode ?? 'candidate';
-  const watchlistMode = options.watchlistMode ?? 'populated';
+  harnessOptionsByPage.set(page, options);
   requestLog.length = 0;
+  if (harnessInstalledPages.has(page)) return;
+  harnessInstalledPages.add(page);
 
   await page.route('**/api/v1/**', async (route) => {
+    const currentOptions = harnessOptionsByPage.get(page) ?? {};
+    const radarMode = currentOptions.radarMode ?? 'candidate';
+    const watchlistMode = currentOptions.watchlistMode ?? 'populated';
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
@@ -576,7 +582,6 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       { width: 768, height: 900 },
       { width: 390, height: 844 },
     ]) {
-      await page.unrouteAll({ behavior: 'ignoreErrors' });
       await installT177Harness(page, { radarMode: 'candidate', watchlistMode: 'populated' });
       await page.setViewportSize(viewport);
       await page.goto('/zh/research/radar?market=us&limit=5');
@@ -631,7 +636,6 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
     await expectNoAdviceOrRawDiagnostics(page);
     expectNoReadSideEffects();
 
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await installT177Harness(page, { radarMode: 'blocked', watchlistMode: 'empty' });
     await page.goto('/zh/research/radar?market=us&limit=5');
     await page.waitForLoadState('domcontentloaded');
@@ -660,7 +664,6 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       { width: 768, height: 900 },
       { width: 1024, height: 900 },
     ]) {
-      await page.unrouteAll({ behavior: 'ignoreErrors' });
       await installT177Harness(page, { radarMode: 'candidate', watchlistMode: 'populated' });
       await page.setViewportSize(viewport);
       await page.goto('/zh/watchlist?symbol=ALFA&market=US');
@@ -698,7 +701,6 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/zh\/stocks\/BETA\/structure-decision/);
 
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await installT177Harness(page, { radarMode: 'candidate', watchlistMode: 'empty' });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/zh/watchlist');
