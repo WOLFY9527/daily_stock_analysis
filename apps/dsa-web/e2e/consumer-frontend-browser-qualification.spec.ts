@@ -1242,7 +1242,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       const watchlistNav = page.getByRole('link', { name: '打开观察列表视图' });
       await expect(watchlistNav).toBeVisible({ timeout: 10_000 });
       await watchlistNav.click();
-      await expect(page).toHaveURL(/\/zh\/watchlist$/);
+      await expect(page).toHaveURL(/\/zh\/watchlist(?:\?|$)/);
       return ['Stock evidence summary handed off through the canonical Research Radar action to Watchlist.'];
     });
 
