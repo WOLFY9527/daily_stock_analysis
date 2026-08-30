@@ -566,6 +566,9 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       if (message.type() === 'error' && !message.text().includes('favicon.ico')) consoleErrors.push(message.text());
     });
     page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('response', (response) => {
+      if (response.status() >= 500) consoleErrors.push(`${response.status()} ${new URL(response.url()).pathname}`);
+    });
 
     for (const viewport of [
       { width: 1440, height: 1000 },
@@ -598,7 +601,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await expect(watchlistLink).toHaveAttribute('href', /\/zh\/watchlist\?symbol=BETA&market=us&source=scanner/);
       await watchlistLink.focus();
       await page.keyboard.press('Enter');
-      await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=US&source=scanner/);
+      await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=us&source=scanner/);
 
       await expectNoPageOverflow(page);
       await expectNoAdviceOrRawDiagnostics(page);
