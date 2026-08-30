@@ -498,6 +498,8 @@ base.describe('T-1168 options mobile dense rescue', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: '运行结构比较' }).click();
+    await page.getByRole('button', { name: '评估情景准备度' }).click();
     const payoffVisual = page.getByTestId('options-lab-payoff-visual');
     const ivVisual = page.getByTestId('options-lab-iv-visual');
     await expect(payoffVisual).toBeVisible();
