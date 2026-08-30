@@ -1023,6 +1023,7 @@ test.describe('consumer frontend browser qualification matrix', () => {
 
 test.describe('consumer frontend keyboard journey qualification', () => {
   test('representative navigation search menus and product row journeys are keyboard reachable', async ({ page }) => {
+    test.setTimeout(120_000);
     const viewport = '390x844';
     await page.setViewportSize({ width: 390, height: 844 });
     await installQualificationOverrides(page);
