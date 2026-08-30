@@ -1107,14 +1107,6 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       return ['Backtest ticker input is keyboard focusable.'];
     });
 
-    const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
-    await waitForRoute(page, portfolioRoute);
-    await recordJourney(page, 'Portfolio resume', portfolioRoute, viewport, async () => {
-      await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
-      return ['Portfolio resume surface is reachable after validation setup.'];
-    });
-
     const scenarioRoute = routes.find((entry) => entry.key === 'scenario-lab')!;
     await waitForRoute(page, scenarioRoute);
     await recordJourney(page, 'Scenario evaluate', scenarioRoute, viewport, async () => {
@@ -1125,6 +1117,14 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       await page.keyboard.press('Enter');
       await expect(page.getByTestId('scenario-lab-first-read-summary')).toBeVisible({ timeout: 15_000 });
       return ['Scenario evaluate works from keyboard.'];
+    });
+
+    const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
+    await waitForRoute(page, portfolioRoute);
+    await recordJourney(page, 'Portfolio resume', portfolioRoute, viewport, async () => {
+      await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
+      return ['Portfolio resume surface is reachable after validation setup.'];
     });
   });
 
