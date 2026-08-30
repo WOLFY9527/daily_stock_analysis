@@ -602,6 +602,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await watchlistLink.focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=us&source=scanner/);
+      await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
 
       await expectNoPageOverflow(page);
       await expectNoAdviceOrRawDiagnostics(page);
