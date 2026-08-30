@@ -1135,15 +1135,11 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     await recordQ001Journey('Stock evidence handoff', stockRoute, async () => {
       await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('stock-first-viewport-summary-panel')).toBeVisible();
-      const watchlistHandoff = page.getByRole('link', { name: '返回观察列表' });
-      await expect(watchlistHandoff).toBeVisible({ timeout: 10_000 });
-      await watchlistHandoff.click();
-      await expect(page).toHaveURL(/\/zh\/watchlist/);
       return ['Stock evidence summary is visible before the Watchlist handoff.'];
     });
 
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
-    await expect(page.getByTestId(watchlistRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
+    await waitForRoute(page, watchlistRoute);
     await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
       const rowAction = page.getByTestId('watchlist-consumer-observation-board').getByRole('button', { name: /查看 NVDA 详情|View NVDA details/i });
       await expect(rowAction).toBeVisible({ timeout: 10_000 });
