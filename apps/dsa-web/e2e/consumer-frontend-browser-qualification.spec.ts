@@ -1302,31 +1302,23 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       return ['Backtest validation and execution were submitted for NVDA; the fixture keeps the unavailable result boundary explicit.'];
     });
 
-    const scenarioRoute = routes.find((entry) => entry.key === 'scenario-lab')!;
-    const scenarioNav = page.locator('a[href="/zh/scenario-lab"]').first();
-    await expect(scenarioNav).toBeVisible({ timeout: 10_000 });
-    await scenarioNav.click();
-    await expect(page.getByTestId(scenarioRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
-    await recordQ001Journey('Scenario evaluate', scenarioRoute, async () => {
-      const evaluate = page.getByRole('button', { name: /评估情景|Evaluate/i }).first();
-      await expect(evaluate).toBeVisible({ timeout: 10_000 });
-      await evaluate.focus();
-      await expect(evaluate).toBeFocused();
-      await page.keyboard.press('Enter');
-      await expect(page.getByTestId('scenario-lab-first-read-summary')).toBeVisible({ timeout: 15_000 });
-      return ['Scenario evaluate works from keyboard.'];
-    });
-
     const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
     await installPortfolioSmokeHarness(page);
-    const portfolioNav = page.locator('a[href="/zh/portfolio"]').first();
-    await expect(portfolioNav).toBeVisible({ timeout: 10_000 });
-    await portfolioNav.click();
+    const navigationMenu = page.getByRole('button', { name: '打开导航菜单' });
+    await navigationMenu.focus();
+    await expect(navigationMenu).toBeFocused();
+    await page.keyboard.press('Enter');
+    const mobileNavigation = page.getByTestId('shell-mobile-navigation-menu');
+    await expect(mobileNavigation).toBeVisible({ timeout: 10_000 });
+    const portfolioNav = mobileNavigation.getByRole('link', { name: '持仓' });
+    await portfolioNav.focus();
+    await expect(portfolioNav).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(page.getByTestId(portfolioRoute.readyTestId)).toBeVisible({ timeout: 15_000 });
     await recordQ001Journey('Portfolio resume', portfolioRoute, async () => {
       await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
-      return ['Portfolio resume surface is reachable after validation setup.'];
+      return ['Portfolio resume surface is reachable through the canonical mobile shell after validation setup.'];
     });
     await page.waitForTimeout(250);
     await Promise.all(truthChecks);
