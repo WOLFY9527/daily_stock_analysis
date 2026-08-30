@@ -1235,11 +1235,15 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     await recordQ001Journey('Stock evidence handoff', stockRoute, async () => {
       await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('stock-first-viewport-summary-panel')).toBeVisible();
-      const watchlistNav = page.locator('a[href="/zh/watchlist"]').first();
+      const radarNav = page.getByRole('link', { name: '前往研究雷达继续核对' });
+      await expect(radarNav).toBeVisible({ timeout: 10_000 });
+      await radarNav.click();
+      await expect(page).toHaveURL(/\/zh\/research\/radar/);
+      const watchlistNav = page.getByRole('link', { name: '打开观察列表视图' });
       await expect(watchlistNav).toBeVisible({ timeout: 10_000 });
       await watchlistNav.click();
       await expect(page).toHaveURL(/\/zh\/watchlist$/);
-      return ['Stock evidence summary is visible and the canonical shell handoff opens Watchlist.'];
+      return ['Stock evidence summary handed off through the canonical Research Radar action to Watchlist.'];
     });
 
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
