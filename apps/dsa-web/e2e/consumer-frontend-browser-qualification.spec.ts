@@ -1137,7 +1137,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
     await waitForRoute(page, watchlistRoute);
     await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
-      const rowAction = page.getByTestId('watchlist-row-NVDA').getByRole('button', { name: /查看详情 NVDA|View details NVDA/i });
+      const rowAction = page.getByTestId('watchlist-row-NVDA').getByRole('button', { name: /查看个股结构 NVDA|Open stock structure NVDA/i });
       await expect(rowAction).toBeVisible({ timeout: 10_000 });
       await rowAction.focus();
       await expect(rowAction).toBeFocused();
