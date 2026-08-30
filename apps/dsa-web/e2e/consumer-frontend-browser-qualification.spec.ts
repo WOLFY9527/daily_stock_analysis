@@ -395,7 +395,7 @@ async function installMarketOverviewOverrides(page: Page) {
 }
 
 async function installWatchlistOverrides(page: Page) {
-  await page.route('**/api/v1/watchlist/items', async (route) => {
+  await page.route('**/api/v1/watchlist/items**', async (route) => {
     await fulfillJson(route, {
       items: [
         {
