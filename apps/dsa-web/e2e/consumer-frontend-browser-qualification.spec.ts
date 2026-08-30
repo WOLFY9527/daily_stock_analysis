@@ -1126,7 +1126,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       return ['Radar candidate accepted keyboard focus and Enter.'];
     });
 
-    const stockRoute = routes.find((entry) => entry.key === 'stock-research')!;
+    const stockRoute = { ...routes.find((entry) => entry.key === 'stock-research')!, path: '/zh/stocks/NVDA/structure-decision' };
     await waitForRoute(page, stockRoute);
     await recordQ001Journey('Stock evidence handoff', stockRoute, async () => {
       await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
@@ -1137,7 +1137,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
     await waitForRoute(page, watchlistRoute);
     await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
-      const rowAction = page.getByTestId('watchlist-row-NVDA').getByRole('button', { name: /查看个股结构 NVDA|Open stock structure NVDA/i });
+      const rowAction = page.getByTestId('watchlist-consumer-observation-board').getByRole('button', { name: /查看 NVDA 详情|View NVDA details/i });
       await expect(rowAction).toBeVisible({ timeout: 10_000 });
       await rowAction.focus();
       await expect(rowAction).toBeFocused();
