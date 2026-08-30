@@ -1072,6 +1072,14 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       return ['Radar candidate accepted keyboard focus and Enter.'];
     });
 
+    const stockRoute = routes.find((entry) => entry.key === 'stock-research')!;
+    await waitForRoute(page, stockRoute);
+    await recordJourney(page, 'Stock evidence handoff', stockRoute, viewport, async () => {
+      await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('stock-first-viewport-summary-panel')).toBeVisible();
+      return ['Stock evidence summary is visible after the watchlist handoff.'];
+    });
+
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
     await waitForRoute(page, watchlistRoute);
     await recordJourney(page, 'Watchlist row', watchlistRoute, viewport, async () => {
@@ -1079,7 +1087,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       await expect(rowAction).toBeVisible({ timeout: 10_000 });
       await rowAction.focus();
       await expect(rowAction).toBeFocused();
-      return ['Watchlist first row/action is keyboard focusable.'];
+      return ['Watchlist first row/action is keyboard focusable after stock evidence review.'];
     });
 
     const backtestRoute = routes.find((entry) => entry.key === 'backtest')!;
@@ -1090,6 +1098,14 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       await input.focus();
       await expect(input).toBeFocused();
       return ['Backtest ticker input is keyboard focusable.'];
+    });
+
+    const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
+    await waitForRoute(page, portfolioRoute);
+    await recordJourney(page, 'Portfolio resume', portfolioRoute, viewport, async () => {
+      await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('portfolio-summary-hero')).toBeVisible();
+      return ['Portfolio resume surface is reachable after validation setup.'];
     });
 
     const scenarioRoute = routes.find((entry) => entry.key === 'scenario-lab')!;
