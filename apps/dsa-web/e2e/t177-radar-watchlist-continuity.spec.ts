@@ -219,72 +219,73 @@ function radarPayload(mode: RadarMode = 'candidate') {
   };
 }
 
-function researchQueuePayload() {
+function researchQueuePayload(mode: RadarMode = 'candidate') {
+  const queue = mode === 'candidate' ? [
+    {
+      queueItemId: 'watchlist-ALFA',
+      sourceSurface: 'watchlist',
+      symbol: 'ALFA',
+      title: 'Watchlist follow-up',
+      priorityTier: 'follow_up',
+      whyQueued: ['Saved observation needs quote freshness review.'],
+      evidenceUsed: ['Watchlist row evidence.'],
+      evidenceGaps: ['Quote freshness needs review.'],
+      readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+      provenance: { sourceSurface: 'watchlist', state: 'fixture' },
+      dataAsOf: '2026-07-06T09:10:00Z',
+      freshness: { state: 'needs_review', lastReviewedAt: now },
+      materialChange: { state: 'unknown', asserted: false },
+      suggestedResearchPath: [
+        {
+          label: 'Stock Structure',
+          route: '/stocks/ALFA/structure-decision',
+          section: 'watchlist',
+          reason: 'Review stock evidence.',
+        },
+      ],
+      observationOnly: true,
+    },
+    {
+      queueItemId: 'scanner-BETA',
+      sourceSurface: 'scanner',
+      symbol: 'BETA',
+      title: 'Synthetic scanner follow-up',
+      priorityTier: 'urgent_review',
+      whyQueued: ['Synthetic candidate requires stock evidence review.'],
+      evidenceUsed: ['Synthetic scanner candidate fixture.'],
+      evidenceGaps: ['Stock evidence remains partial.'],
+      readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+      provenance: { sourceSurface: 'scanner', state: 'fixture' },
+      dataAsOf: '2026-07-06T09:10:00Z',
+      freshness: { state: 'needs_review', lastReviewedAt: now },
+      materialChange: { state: 'unknown', asserted: false },
+      suggestedResearchPath: [
+        {
+          label: 'Stock Structure',
+          route: '/stocks/BETA/structure-decision',
+          section: 'scanner',
+          reason: 'Review synthetic stock evidence.',
+        },
+      ],
+      observationOnly: true,
+    },
+  ] : [];
   return {
     schemaVersion: 'research_queue_v1',
-    researchQueue: [
-      {
-        queueItemId: 'watchlist-ALFA',
-        sourceSurface: 'watchlist',
-        symbol: 'ALFA',
-        title: 'Watchlist follow-up',
-        priorityTier: 'follow_up',
-        whyQueued: ['Saved observation needs quote freshness review.'],
-        evidenceUsed: ['Watchlist row evidence.'],
-        evidenceGaps: ['Quote freshness needs review.'],
-        readiness: { state: 'needs_evidence', evidenceState: 'partial' },
-        provenance: { sourceSurface: 'watchlist', state: 'fixture' },
-        dataAsOf: '2026-07-06T09:10:00Z',
-        freshness: { state: 'needs_review', lastReviewedAt: now },
-        materialChange: { state: 'unknown', asserted: false },
-        suggestedResearchPath: [
-          {
-            label: 'Stock Structure',
-            route: '/stocks/ALFA/structure-decision',
-            section: 'watchlist',
-            reason: 'Review stock evidence.',
-          },
-        ],
-        observationOnly: true,
-      },
-      {
-        queueItemId: 'scanner-BETA',
-        sourceSurface: 'scanner',
-        symbol: 'BETA',
-        title: 'Synthetic scanner follow-up',
-        priorityTier: 'urgent_review',
-        whyQueued: ['Synthetic candidate requires stock evidence review.'],
-        evidenceUsed: ['Synthetic scanner candidate fixture.'],
-        evidenceGaps: ['Stock evidence remains partial.'],
-        readiness: { state: 'needs_evidence', evidenceState: 'partial' },
-        provenance: { sourceSurface: 'scanner', state: 'fixture' },
-        dataAsOf: '2026-07-06T09:10:00Z',
-        freshness: { state: 'needs_review', lastReviewedAt: now },
-        materialChange: { state: 'unknown', asserted: false },
-        suggestedResearchPath: [
-          {
-            label: 'Stock Structure',
-            route: '/stocks/BETA/structure-decision',
-            section: 'scanner',
-            reason: 'Review synthetic stock evidence.',
-          },
-        ],
-        observationOnly: true,
-      },
-    ],
+    researchQueue: queue,
     aggregateSummary: {
-      itemCount: 2,
+      itemCount: queue.length,
       limit: 5,
       bounded: false,
-      bySourceSurface: { scanner: 1, watchlist: 1 },
-      byPriorityTier: { urgent_review: 1, follow_up: 1 },
+      bySourceSurface: mode === 'candidate' ? { scanner: 1, watchlist: 1 } : {},
+      byPriorityTier: mode === 'candidate' ? { urgent_review: 1, follow_up: 1 } : {},
     },
-    sourceSurfacesAggregated: ['scanner', 'watchlist'],
-    evidenceGaps: ['Quote freshness needs review.', 'Stock evidence remains partial.'],
+    sourceSurfacesAggregated: mode === 'candidate' ? ['scanner', 'watchlist'] : [],
+    evidenceGaps: mode === 'candidate' ? ['Quote freshness needs review.', 'Stock evidence remains partial.'] : [],
     dataQuality: {
-      state: 'partial',
-      itemCount: 2,
-      sourceSurfacesAvailable: ['scanner', 'watchlist'],
+      state: mode === 'candidate' ? 'partial' : 'unavailable',
+      itemCount: queue.length,
+      sourceSurfacesAvailable: mode === 'candidate' ? ['scanner', 'watchlist'] : [],
       sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
       failClosed: true,
     },
@@ -508,7 +509,7 @@ async function installT177Harness(page: Page, options: HarnessOptions = {}) {
     if (method === 'GET' && path === '/api/v1/history') return fulfillJson(route, { total: 0, page: 1, limit: 20, items: [] });
     if (method === 'GET' && path === '/api/v1/analysis/tasks') return fulfillJson(route, { tasks: [], total: 0 });
     if (method === 'GET' && path === '/api/v1/research/radar') return fulfillJson(route, radarPayload(radarMode));
-    if (method === 'GET' && path === '/api/v1/research/queue') return fulfillJson(route, researchQueuePayload());
+    if (method === 'GET' && path === '/api/v1/research/queue') return fulfillJson(route, researchQueuePayload(radarMode));
     if (method === 'GET' && path === '/api/v1/watchlist/items') return fulfillJson(route, watchlistPayload(watchlistMode));
     if (method === 'GET' && path === '/api/v1/watchlist/research-overlay') return fulfillJson(route, watchlistOverlayPayload(watchlistMode));
     if (method === 'GET' && path === '/api/v1/watchlist/refresh-status') return fulfillJson(route, refreshStatusPayload());
@@ -592,9 +593,9 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toContainText('BETA');
 
       const stockLink = page.getByRole('link', { name: '查看个股研究' });
-      await expect(stockLink).toHaveAttribute('href', /\/zh\/stocks\/BETA\/structure-decision\?symbol=BETA&market=US/);
+      await expect(stockLink).toHaveAttribute('href', /\/zh\/stocks\/BETA\/structure-decision\?symbol=BETA&market=us&source=scanner/);
       const watchlistLink = page.getByRole('link', { name: '打开观察列表视图' });
-      await expect(watchlistLink).toHaveAttribute('href', /\/zh\/watchlist\?symbol=BETA&market=US&source=scanner/);
+      await expect(watchlistLink).toHaveAttribute('href', /\/zh\/watchlist\?symbol=BETA&market=us&source=scanner/);
       await watchlistLink.focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=US&source=scanner/);
