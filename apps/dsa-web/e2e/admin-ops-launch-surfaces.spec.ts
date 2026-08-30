@@ -364,6 +364,18 @@ async function expectClosedDisclosureButtons(page: Page) {
   }
 }
 
+async function expectTopToBottomOrder(page: Page, testIds: string[]) {
+  const positions = await Promise.all(testIds.map(async (testId) => {
+    const box = await page.getByTestId(testId).boundingBox();
+    expect(box, `${testId} must have a rendered bounding box`).not.toBeNull();
+    return box!.y;
+  }));
+
+  for (let index = 1; index < positions.length; index += 1) {
+    expect(positions[index]).toBeGreaterThan(positions[index - 1]);
+  }
+}
+
 const forbiddenDefaultLeakPattern =
   /raw\s+(payload|response)|debug\s+(payload|response|panel)|provider\s+payload|request\s+body|stack\s+trace|prompt\s+(text|payload)|router\s+(state|payload)|\.env|token\s*[=:]|secret\s*[=:]|password\s*[=:]|bearer\s+[a-z0-9._-]+|api[_\s-]?key|credential\s*[=:]/i;
 
@@ -373,7 +385,7 @@ const routes = [
     path: '/zh/admin/logs',
     ready: 'admin-logs-workspace',
     l0: 'admin-logs-l0-overview-strip',
-    first: ['定位失败与审计线索', '当前状态', '下一步', '整体状态'],
+    first: ['定位失败与审计线索', '影响范围', '建议动作', '主队列'],
     secondary: ['L4 日志容量建议与显式清理：容量 / 保留期 / 预览'],
     drillLink: {
       label: '查看数据源维护',
@@ -475,6 +487,16 @@ test.describe('admin ops launch surfaces', () => {
           expect(bodyText).toContain(text);
         }
         await expectL0OverviewStrip(page, route.l0);
+        if (route.key === 'logs') {
+          await expectTopToBottomOrder(page, [
+            'admin-logs-filter-bar',
+            'admin-logs-main-queue',
+            'admin-logs-health-summary',
+            'admin-logs-operator-issue-rollup',
+            'admin-logs-data-missing-section',
+            'admin-logs-storage-disclosure',
+          ]);
+        }
         for (const text of route.groupings || []) {
           expect(bodyText).toContain(text);
         }

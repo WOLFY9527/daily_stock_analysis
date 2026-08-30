@@ -2149,7 +2149,7 @@ const AdminLogsPage: React.FC = () => {
               </TerminalNotice>
             ) : null}
 
-            {/* Compact purpose / state / next line (not equal-weight card wall) */}
+            {/* Keep page purpose separate from the L0 current-state and next-action summary. */}
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5" data-testid="admin-logs-purpose-line">
               <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
                 <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
@@ -2159,20 +2159,6 @@ const AdminLogsPage: React.FC = () => {
                 <span className="text-[color:var(--wolfy-text-primary)]">
                   {locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}
                 </span>
-              </p>
-              <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
-                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
-                  {locale === 'zh' ? '当前状态' : 'Current state'}
-                </span>
-                {': '}
-                <span className="text-[color:var(--wolfy-text-primary)]">{operatorCurrentState}</span>
-              </p>
-              <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
-                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
-                  {locale === 'zh' ? '下一步' : 'Next action'}
-                </span>
-                {': '}
-                <span className="text-[color:var(--wolfy-text-primary)]">{operatorNextAction}</span>
               </p>
             </div>
 
@@ -2314,137 +2300,226 @@ const AdminLogsPage: React.FC = () => {
 
         {error ? <ApiErrorAlert error={error} /> : null}
 
-        <AdminLogsTerminalSection
-          data-testid="admin-logs-storage-disclosure"
-          title={locale === 'zh' ? 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览' : 'L4 storage advisory and explicit cleanup: size / retention / preview'}
-          summary={locale === 'zh' ? '默认折叠 · 仅建议，不自动执行' : 'collapsed by default · advisory only, no automatic execution'}
-          className="px-4 py-3"
+
+        <TerminalPanel
+          as="section"
+          data-testid="admin-logs-main-queue"
+          id={adminLogsTabPanelId(activeTab)}
+          role="tabpanel"
+          aria-labelledby={adminLogsTabId(activeTab)}
+          aria-busy={isLoadingList}
+          className="min-h-0"
+          dense
         >
-          <section
-            data-testid="admin-logs-storage-summary"
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
-          >
-            <TerminalNestedBlock className={`min-w-0 ${storageStatusTone(storageSummary?.status)}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志容量' : 'LOG STORAGE'}</p>
-                  {storageSummary?.storageSizeAvailable ? (
-                    <>
-                      <p className="mt-1 text-base font-semibold">
-                        {locale === 'zh' ? '日志容量 ' : ''}{storageSummary.storageSizeLabel || storageSummary.sizeLabel || formatStorageBytes(currentStorageBytes)}
-                      </p>
-                      <p className="text-[11px] opacity-80">{storageMeasurementLabel(storageSummary, locale)} · {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'} · {formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '容量暂不可用' : 'Size unavailable'}</p>
-                      <p className="text-[11px] opacity-80">{storageUnavailableReason(storageSummary, locale)} · {locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
-                    </>
-                  )}
+          <TerminalSectionHeader
+            eyebrow={locale === 'zh' ? '主队列' : 'MAIN QUEUE'}
+            title={t('adminLogs.sessionListTitle')}
+            action={<TerminalChip variant="neutral">{countLabel(activeTab === 'raw' ? filteredSessions.length : businessTotal, 'record', 'records', '记录', locale)}</TerminalChip>}
+          />
+          <TerminalNotice variant="neutral" className="mt-3">
+            {locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}
+          </TerminalNotice>
+
+          {isInitialListLoading ? (
+            <TerminalNotice data-testid="admin-logs-list-initial-loading" variant="info" role="status" aria-live="polite" aria-atomic="true" className="mt-3">
+              {listLoadingLabel}
+            </TerminalNotice>
+          ) : isRefreshingList ? (
+            <>
+              <p data-testid="admin-logs-list-refresh-status" role="status" aria-live="polite" aria-atomic="true" className="mt-3 text-xs text-muted-text">
+                {listRefreshLabel}
+              </p>
+              {activeTab !== 'raw' ? (
+                businessEvents.length === 0 ? null : (
+                  <div className="sr-only">{locale === 'zh' ? '刷新前的日志记录仍可用。' : 'Previously loaded log records remain available during refresh.'}</div>
+                )
+              ) : null}
+            </>
+          ) : null}
+
+          {activeTab !== 'raw' ? (
+            !isInitialListLoading && !error && businessEvents.length === 0 ? (
+              <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}>
+                {activeTab === 'scanner' && locale === 'zh'
+                  ? '暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。'
+                  : t('adminLogs.noSessionsBody')}
+              </TerminalEmptyState>
+            ) : isInitialListLoading || (error && businessEvents.length === 0) ? null : (
+              <>
+                <div data-testid="business-events-mobile-list" className="mt-3 grid gap-2 md:hidden">
+                  {businessEvents.map((item) => {
+                    const status = normalizeStatus(item.status);
+                    const actorRole = actorBadgeLabel(item.actorType);
+                    const actorType = actorBadgeDisplay(item.actorType, locale);
+                    const actorSecondary = actorSecondaryLabel(item, locale);
+                    const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
+                    const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextSecondary = businessContextSecondaryLabel(item, locale);
+                    const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                    const sourceSecondary = businessSourceSecondaryLabel(item, locale);
+                    const severity = businessEventSeverity(item);
+                    const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                    const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
+                    const stepLabel = stepStatsLabel(item, locale);
+                    return (
+                      <article
+                        key={`${item.id}-mobile`}
+                        data-testid="business-event-mobile-card"
+                        className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+                      >
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
+                          </div>
+                          <p className="shrink-0 font-mono text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
+                        </div>
+                        <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+                          <StatusChip status={status} locale={locale} className="w-fit" />
+                          <SeverityChip severity={severity} locale={locale} className="w-fit" />
+                          <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm leading-6 text-secondary-text">
+                          <p className="font-medium text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={stepLabel}>{stepLabel}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={contextSecondary || contextPrimary}>{contextPrimary}{contextSecondary ? ` · ${contextSecondary}` : ''}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={sourceSecondary || sourcePrimary}>{sourcePrimary}{sourceSecondary ? ` · ${operatorSafeText(sourceSecondary, locale)}` : ''}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={actorSecondary}>{actorSecondary}</p>
+                        </div>
+                        <TerminalButton type="button" variant="compact" className="mt-3 w-fit px-3 py-1.5 text-xs" onClick={() => void openBusinessDetail(item)}>
+                          {t('adminLogs.viewDetails')}
+                        </TerminalButton>
+                      </article>
+                    );
+                  })}
                 </div>
-                <TerminalChip variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'success'} className="shrink-0 font-semibold uppercase">
-                  {storageStatusLabel(storageSummary?.status, locale)}
-                </TerminalChip>
-              </div>
-              {storageSummary?.storageSizeAvailable ? (
-                <div className="mt-2">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
-                    <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
+                <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 hidden gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0 md:flex">
+                <div data-testid="business-events-table-inner" className="min-w-[44rem]">
+                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)] md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                    <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                    <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                    <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
+                    <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 数据源' : 'Source / Provider'}</div>
+                    <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
-                  <p className="mt-1 text-[10px] opacity-75">{softPercent}% {locale === 'zh' ? '软限制' : 'soft'} · {hardPercent}% {locale === 'zh' ? '硬限制' : 'hard'}</p>
+                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
+                    {businessEvents.map((item) => {
+                      const status = normalizeStatus(item.status);
+                      const actorRole = actorBadgeLabel(item.actorType);
+                      const actorType = actorBadgeDisplay(item.actorType, locale);
+                      const actorSecondary = actorSecondaryLabel(item, locale);
+                      const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
+                      const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                      const contextSecondary = businessContextSecondaryLabel(item, locale);
+                      const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                      const sourceSecondary = businessSourceSecondaryLabel(item, locale);
+                      const severity = businessEventSeverity(item);
+                      const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                      const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
+                      const traceValue = item.traceId || item.requestId;
+                      const stepLabel = stepStatsLabel(item, locale);
+                      return (
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                          <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <StatusChip status={status} locale={locale} className="w-fit" />
+                            <SeverityChip severity={severity} locale={locale} className="w-fit" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText(contextSecondary || item.summary, locale)}>{operatorSafeText(contextSecondary || item.summary, locale)}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={traceReferenceLabel(traceValue, locale)}>{traceReferenceLabel(traceValue, locale)}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText(sourceSecondary, locale)}>{operatorSafeText(sourceSecondary, locale, '--')}</p>
+                          </div>
+                          <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
+                            {t('adminLogs.viewDetails')}
+                          </TerminalButton>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--wolfy-border-subtle)] px-3 py-2.5">
+                    <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
+                    <div className="flex gap-2">
+                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
+                        {locale === 'zh' ? '上一页' : 'Previous'}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
+                        {locale === 'zh' ? '下一页' : 'Next'}
+                      </TerminalButton>
+                    </div>
+                  </div>
                 </div>
-              ) : null}
-            </TerminalNestedBlock>
-
-            <TerminalMetric
-              label={locale === 'zh' ? '日志规模' : 'LOG VOLUME'}
-              value={countLabel(storageSummary?.totalLogCount, 'session', 'sessions', '会话', locale)}
-              subvalue={countLabel(storageSummary?.totalEventCount, 'event', 'events', '事件', locale)}
-              valueClassName="text-base"
-            />
-            <TerminalMetric
-              label={locale === 'zh' ? '保留期' : 'Retention'}
-              value={`${storageSummary?.retentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'}`}
-              subvalue={`${locale === 'zh' ? '最少' : 'min'} ${storageSummary?.minimumRetentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'} · ${storageSummary?.logsOlderThanRetentionCount ?? 0} ${locale === 'zh' ? '条超期' : 'older'}`}
-              valueClassName="text-base"
-            />
-            <TerminalMetric
-              label={locale === 'zh' ? '最早日志' : 'OLDEST LOG'}
-              value={formatDateTime(storageSummary?.oldestLogTimestamp, locale)}
-              subvalue={locale === 'zh' ? '当前保留的最早会话 / 事件' : 'oldest retained session/event'}
-              valueClassName="truncate text-sm font-semibold tracking-normal"
-            />
-
-            <div className="min-w-0 space-y-2">
-              <TerminalNotice variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'neutral'}>
-                <p className="font-medium text-[color:var(--wolfy-text-primary)]">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
-                <p className="mt-1">{localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}</p>
-                <p className="mt-1 text-[11px] opacity-80">
-                  {locale === 'zh'
-                    ? '存储摘要仅提供建议，不会在读取摘要时自动删除日志。'
-                    : 'Storage summary is advisory only and does not delete log rows when read.'}
-                </p>
-                {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
-                  <a
-                    href="/admin/notifications"
-                    className="mt-1 inline-flex text-[11px] font-semibold text-[color:var(--wolfy-market-up)] underline-offset-4 hover:underline"
-                  >
-                    {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
-                  </a>
-                ) : null}
-              </TerminalNotice>
-              {storageSummary?.postgresVacuumNote ? (
-                <TerminalNotice variant="caution">
-                  {locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}
-                </TerminalNotice>
-              ) : null}
-              {(storageSummary?.autoCleanupMessage || (storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical')) ? (
-                <TerminalNotice variant={storageSummary?.status === 'critical' ? 'caution' : 'info'}>
-                  {storageSummary?.autoCleanupMessage
-                    ? localizedRecommendedCleanupAction(storageSummary.autoCleanupMessage, locale)
-                    : (locale === 'zh' ? '建议执行显式容量清理。' : 'Explicit capacity cleanup recommended.')}
-                </TerminalNotice>
-              ) : null}
-              {cleanupMessage ? (
-                <TerminalNotice variant="info">
-                  {cleanupMessage}
-                </TerminalNotice>
-              ) : null}
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
-              <TerminalButton
-                type="button"
-                variant="secondary"
-                className="h-9 px-3 text-xs"
-                onClick={() => void previewCleanup()}
-                disabled={isCleanupBusy || !storageSummary}
-              >
-                {isCleanupBusy ? t('adminLogs.loading') : (locale === 'zh' ? '预览保留期清理' : 'Preview retention cleanup')}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="secondary"
-                className="h-9 px-3 text-xs"
-                onClick={() => void previewCapacityCleanup()}
-                disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
-              >
-                {locale === 'zh' ? '预览容量清理' : 'Preview capacity cleanup'}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="danger"
-                className="h-9 px-3 py-2 text-xs font-semibold"
-                onClick={() => void confirmCleanup()}
-                disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
-              >
-                {cleanupPreview?.mode === 'capacity'
-                  ? (locale === 'zh' ? '按容量清理日志' : 'Run capacity cleanup')
-                  : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
-              </TerminalButton>
-            </div>
-          </section>
-        </AdminLogsTerminalSection>
+                </TerminalDenseList>
+              </>
+            )
+          ) : !isInitialListLoading && !error && filteredSessions.length === 0 ? (
+            <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
+              {t('adminLogs.noSessionsBody')}
+            </TerminalEmptyState>
+          ) : isInitialListLoading || (error && filteredSessions.length === 0) ? null : (
+            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0">
+              <div data-testid="raw-logs-table-inner" className="min-w-[880px]">
+                <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                  <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                  <div>{locale === 'zh' ? '级别' : 'level'}</div>
+                  <div>{locale === 'zh' ? '分类' : 'category'}</div>
+                  <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                  <div>{locale === 'zh' ? '消息' : 'message'}</div>
+                  <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
+                  <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+                </div>
+                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
+                  {filteredSessions.map((item) => {
+                    const summary = item.readableSummary || {};
+                    const level = normalizeLogLevel(summary.logLevel);
+                    const category = text(summary.logCategory, 'system');
+                    const eventName = operatorSafeText(summary.eventName || item.name || item.taskId, locale, t('adminLogs.unavailable'));
+                    const message = operatorSafeText(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, locale, t('adminLogs.unavailable'));
+                    const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .filter((value, index, values) => values.indexOf(value) === index)
+                      .join(' · ');
+                    const sourceLabel = operatorSafeText(source, locale, t('adminLogs.unavailable'));
+                    return (
+                      <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
+                        <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
+                        <AdminLogLevelPill value={level} locale={locale} />
+                        <TerminalChip variant="neutral" className="w-fit">{categoryLabel(category, locale)}</TerminalChip>
+                        <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
+                        <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
+                        <p className="min-w-0 truncate text-xs text-muted-text" title={sourceLabel}>{sourceLabel}</p>
+                        <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
+                          {t('adminLogs.viewDetails')}
+                        </TerminalButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-lg bg-gradient-to-l from-black/70 to-transparent md:hidden" />
+            </TerminalDenseTable>
+          )}
+        </TerminalPanel>
 
         <TerminalPanel as="section" data-testid="admin-logs-health-summary" dense>
           <TerminalSectionHeader
@@ -2689,225 +2764,137 @@ const AdminLogsPage: React.FC = () => {
             </div>
           </TerminalPanel>
         ) : null}
-
-        <TerminalPanel
-          as="section"
-          id={adminLogsTabPanelId(activeTab)}
-          role="tabpanel"
-          aria-labelledby={adminLogsTabId(activeTab)}
-          aria-busy={isLoadingList}
-          className="min-h-0"
-          dense
+        <AdminLogsTerminalSection
+          data-testid="admin-logs-storage-disclosure"
+          title={locale === 'zh' ? 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览' : 'L4 storage advisory and explicit cleanup: size / retention / preview'}
+          summary={locale === 'zh' ? '默认折叠 · 仅建议，不自动执行' : 'collapsed by default · advisory only, no automatic execution'}
+          className="px-4 py-3"
         >
-          <TerminalSectionHeader
-            eyebrow={locale === 'zh' ? '主队列' : 'MAIN QUEUE'}
-            title={t('adminLogs.sessionListTitle')}
-            action={<TerminalChip variant="neutral">{countLabel(activeTab === 'raw' ? filteredSessions.length : businessTotal, 'record', 'records', '记录', locale)}</TerminalChip>}
-          />
-          <TerminalNotice variant="neutral" className="mt-3">
-            {locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}
-          </TerminalNotice>
-
-          {isInitialListLoading ? (
-            <TerminalNotice data-testid="admin-logs-list-initial-loading" variant="info" role="status" aria-live="polite" aria-atomic="true" className="mt-3">
-              {listLoadingLabel}
-            </TerminalNotice>
-          ) : isRefreshingList ? (
-            <>
-              <p data-testid="admin-logs-list-refresh-status" role="status" aria-live="polite" aria-atomic="true" className="mt-3 text-xs text-muted-text">
-                {listRefreshLabel}
-              </p>
-              {activeTab !== 'raw' ? (
-                businessEvents.length === 0 ? null : (
-                  <div className="sr-only">{locale === 'zh' ? '刷新前的日志记录仍可用。' : 'Previously loaded log records remain available during refresh.'}</div>
-                )
-              ) : null}
-            </>
-          ) : null}
-
-          {activeTab !== 'raw' ? (
-            !isInitialListLoading && !error && businessEvents.length === 0 ? (
-              <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}>
-                {activeTab === 'scanner' && locale === 'zh'
-                  ? '暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。'
-                  : t('adminLogs.noSessionsBody')}
-              </TerminalEmptyState>
-            ) : isInitialListLoading || (error && businessEvents.length === 0) ? null : (
-              <>
-                <div data-testid="business-events-mobile-list" className="mt-3 grid gap-2 md:hidden">
-                  {businessEvents.map((item) => {
-                    const status = normalizeStatus(item.status);
-                    const actorRole = actorBadgeLabel(item.actorType);
-                    const actorType = actorBadgeDisplay(item.actorType, locale);
-                    const actorSecondary = actorSecondaryLabel(item, locale);
-                    const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
-                    const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
-                    const contextSecondary = businessContextSecondaryLabel(item, locale);
-                    const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
-                    const sourceSecondary = businessSourceSecondaryLabel(item, locale);
-                    const severity = businessEventSeverity(item);
-                    const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
-                    const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
-                    const stepLabel = stepStatsLabel(item, locale);
-                    return (
-                      <article
-                        key={`${item.id}-mobile`}
-                        data-testid="business-event-mobile-card"
-                        className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
-                      >
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
-                          </div>
-                          <p className="shrink-0 font-mono text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
-                        </div>
-                        <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
-                          <StatusChip status={status} locale={locale} className="w-fit" />
-                          <SeverityChip severity={severity} locale={locale} className="w-fit" />
-                          <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
-                        </div>
-                        <div className="mt-3 grid gap-2 text-sm leading-6 text-secondary-text">
-                          <p className="font-medium text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
-                          <p className="text-xs leading-5 text-muted-text" title={stepLabel}>{stepLabel}</p>
-                          <p className="text-xs leading-5 text-muted-text" title={contextSecondary || contextPrimary}>{contextPrimary}{contextSecondary ? ` · ${contextSecondary}` : ''}</p>
-                          <p className="text-xs leading-5 text-muted-text" title={sourceSecondary || sourcePrimary}>{sourcePrimary}{sourceSecondary ? ` · ${operatorSafeText(sourceSecondary, locale)}` : ''}</p>
-                          <p className="text-xs leading-5 text-muted-text" title={actorSecondary}>{actorSecondary}</p>
-                        </div>
-                        <TerminalButton type="button" variant="compact" className="mt-3 w-fit px-3 py-1.5 text-xs" onClick={() => void openBusinessDetail(item)}>
-                          {t('adminLogs.viewDetails')}
-                        </TerminalButton>
-                      </article>
-                    );
-                  })}
+          <section
+            data-testid="admin-logs-storage-summary"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
+          >
+            <TerminalNestedBlock className={`min-w-0 ${storageStatusTone(storageSummary?.status)}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志容量' : 'LOG STORAGE'}</p>
+                  {storageSummary?.storageSizeAvailable ? (
+                    <>
+                      <p className="mt-1 text-base font-semibold">
+                        {locale === 'zh' ? '日志容量 ' : ''}{storageSummary.storageSizeLabel || storageSummary.sizeLabel || formatStorageBytes(currentStorageBytes)}
+                      </p>
+                      <p className="text-[11px] opacity-80">{storageMeasurementLabel(storageSummary, locale)} · {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'} · {formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '容量暂不可用' : 'Size unavailable'}</p>
+                      <p className="text-[11px] opacity-80">{storageUnavailableReason(storageSummary, locale)} · {locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
+                    </>
+                  )}
                 </div>
-                <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 hidden gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0 md:flex">
-                <div data-testid="business-events-table-inner" className="min-w-[44rem]">
-                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)] md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                    <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                    <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                    <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
-                    <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 数据源' : 'Source / Provider'}</div>
-                    <div>{locale === 'zh' ? '操作' : 'Action'}</div>
-                  </div>
-                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
-                    {businessEvents.map((item) => {
-                      const status = normalizeStatus(item.status);
-                      const actorRole = actorBadgeLabel(item.actorType);
-                      const actorType = actorBadgeDisplay(item.actorType, locale);
-                      const actorSecondary = actorSecondaryLabel(item, locale);
-                      const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
-                      const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextSecondary = businessContextSecondaryLabel(item, locale);
-                      const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
-                      const sourceSecondary = businessSourceSecondaryLabel(item, locale);
-                      const severity = businessEventSeverity(item);
-                      const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
-                      const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
-                      const traceValue = item.traceId || item.requestId;
-                      const stepLabel = stepStatsLabel(item, locale);
-                      return (
-                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                          <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
-                          </div>
-                          <div className="min-w-0 space-y-1">
-                            <StatusChip status={status} locale={locale} className="w-fit" />
-                            <SeverityChip severity={severity} locale={locale} className="w-fit" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText(contextSecondary || item.summary, locale)}>{operatorSafeText(contextSecondary || item.summary, locale)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={traceReferenceLabel(traceValue, locale)}>{traceReferenceLabel(traceValue, locale)}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText(sourceSecondary, locale)}>{operatorSafeText(sourceSecondary, locale, '--')}</p>
-                          </div>
-                          <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
-                            {t('adminLogs.viewDetails')}
-                          </TerminalButton>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--wolfy-border-subtle)] px-3 py-2.5">
-                    <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
-                    <div className="flex gap-2">
-                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
-                        {locale === 'zh' ? '上一页' : 'Previous'}
-                      </TerminalButton>
-                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
-                        {locale === 'zh' ? '下一页' : 'Next'}
-                      </TerminalButton>
-                    </div>
-                  </div>
-                </div>
-                </TerminalDenseList>
-              </>
-            )
-          ) : !isInitialListLoading && !error && filteredSessions.length === 0 ? (
-            <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
-              {t('adminLogs.noSessionsBody')}
-            </TerminalEmptyState>
-          ) : isInitialListLoading || (error && filteredSessions.length === 0) ? null : (
-            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0">
-              <div data-testid="raw-logs-table-inner" className="min-w-[880px]">
-                <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
-                  <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                  <div>{locale === 'zh' ? '级别' : 'level'}</div>
-                  <div>{locale === 'zh' ? '分类' : 'category'}</div>
-                  <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                  <div>{locale === 'zh' ? '消息' : 'message'}</div>
-                  <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
-                  <div>{locale === 'zh' ? '操作' : 'Action'}</div>
-                </div>
-                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
-                  {filteredSessions.map((item) => {
-                    const summary = item.readableSummary || {};
-                    const level = normalizeLogLevel(summary.logLevel);
-                    const category = text(summary.logCategory, 'system');
-                    const eventName = operatorSafeText(summary.eventName || item.name || item.taskId, locale, t('adminLogs.unavailable'));
-                    const message = operatorSafeText(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, locale, t('adminLogs.unavailable'));
-                    const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
-                      .map((value) => String(value || '').trim())
-                      .filter(Boolean)
-                      .filter((value, index, values) => values.indexOf(value) === index)
-                      .join(' · ');
-                    const sourceLabel = operatorSafeText(source, locale, t('adminLogs.unavailable'));
-                    return (
-                      <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
-                        <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
-                        <AdminLogLevelPill value={level} locale={locale} />
-                        <TerminalChip variant="neutral" className="w-fit">{categoryLabel(category, locale)}</TerminalChip>
-                        <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
-                        <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
-                        <p className="min-w-0 truncate text-xs text-muted-text" title={sourceLabel}>{sourceLabel}</p>
-                        <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
-                          {t('adminLogs.viewDetails')}
-                        </TerminalButton>
-                      </div>
-                    );
-                  })}
-                </div>
+                <TerminalChip variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'success'} className="shrink-0 font-semibold uppercase">
+                  {storageStatusLabel(storageSummary?.status, locale)}
+                </TerminalChip>
               </div>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-lg bg-gradient-to-l from-black/70 to-transparent md:hidden" />
-            </TerminalDenseTable>
-          )}
-        </TerminalPanel>
+              {storageSummary?.storageSizeAvailable ? (
+                <div className="mt-2">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
+                    <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
+                  </div>
+                  <p className="mt-1 text-[10px] opacity-75">{softPercent}% {locale === 'zh' ? '软限制' : 'soft'} · {hardPercent}% {locale === 'zh' ? '硬限制' : 'hard'}</p>
+                </div>
+              ) : null}
+            </TerminalNestedBlock>
+
+            <TerminalMetric
+              label={locale === 'zh' ? '日志规模' : 'LOG VOLUME'}
+              value={countLabel(storageSummary?.totalLogCount, 'session', 'sessions', '会话', locale)}
+              subvalue={countLabel(storageSummary?.totalEventCount, 'event', 'events', '事件', locale)}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '保留期' : 'Retention'}
+              value={`${storageSummary?.retentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'}`}
+              subvalue={`${locale === 'zh' ? '最少' : 'min'} ${storageSummary?.minimumRetentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'} · ${storageSummary?.logsOlderThanRetentionCount ?? 0} ${locale === 'zh' ? '条超期' : 'older'}`}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '最早日志' : 'OLDEST LOG'}
+              value={formatDateTime(storageSummary?.oldestLogTimestamp, locale)}
+              subvalue={locale === 'zh' ? '当前保留的最早会话 / 事件' : 'oldest retained session/event'}
+              valueClassName="truncate text-sm font-semibold tracking-normal"
+            />
+
+            <div className="min-w-0 space-y-2">
+              <TerminalNotice variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'neutral'}>
+                <p className="font-medium text-[color:var(--wolfy-text-primary)]">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
+                <p className="mt-1">{localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}</p>
+                <p className="mt-1 text-[11px] opacity-80">
+                  {locale === 'zh'
+                    ? '存储摘要仅提供建议，不会在读取摘要时自动删除日志。'
+                    : 'Storage summary is advisory only and does not delete log rows when read.'}
+                </p>
+                {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
+                  <a
+                    href="/admin/notifications"
+                    className="mt-1 inline-flex text-[11px] font-semibold text-[color:var(--wolfy-market-up)] underline-offset-4 hover:underline"
+                  >
+                    {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
+                  </a>
+                ) : null}
+              </TerminalNotice>
+              {storageSummary?.postgresVacuumNote ? (
+                <TerminalNotice variant="caution">
+                  {locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}
+                </TerminalNotice>
+              ) : null}
+              {(storageSummary?.autoCleanupMessage || (storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical')) ? (
+                <TerminalNotice variant={storageSummary?.status === 'critical' ? 'caution' : 'info'}>
+                  {storageSummary?.autoCleanupMessage
+                    ? localizedRecommendedCleanupAction(storageSummary.autoCleanupMessage, locale)
+                    : (locale === 'zh' ? '建议执行显式容量清理。' : 'Explicit capacity cleanup recommended.')}
+                </TerminalNotice>
+              ) : null}
+              {cleanupMessage ? (
+                <TerminalNotice variant="info">
+                  {cleanupMessage}
+                </TerminalNotice>
+              ) : null}
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void previewCleanup()}
+                disabled={isCleanupBusy || !storageSummary}
+              >
+                {isCleanupBusy ? t('adminLogs.loading') : (locale === 'zh' ? '预览保留期清理' : 'Preview retention cleanup')}
+              </TerminalButton>
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void previewCapacityCleanup()}
+                disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
+              >
+                {locale === 'zh' ? '预览容量清理' : 'Preview capacity cleanup'}
+              </TerminalButton>
+              <TerminalButton
+                type="button"
+                variant="danger"
+                className="h-9 px-3 py-2 text-xs font-semibold"
+                onClick={() => void confirmCleanup()}
+                disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
+              >
+                {cleanupPreview?.mode === 'capacity'
+                  ? (locale === 'zh' ? '按容量清理日志' : 'Run capacity cleanup')
+                  : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
+              </TerminalButton>
+            </div>
+          </section>
+        </AdminLogsTerminalSection>
 
         <AdminDrillThroughStrip
           className="mt-1"
