@@ -1264,10 +1264,16 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       await expect(page.getByTestId('watchlist-header-strip')).toContainText('观察列表');
       const row = page.getByTestId('watchlist-row-NVDA');
       await expect(row).toBeVisible({ timeout: 10_000 });
-      await row.getByRole('button', { name: '查看详情 NVDA' }).click();
+      const detailButton = row.getByRole('button', { name: '查看详情 NVDA' });
+      await detailButton.focus();
+      await expect(detailButton).toBeFocused();
+      await page.keyboard.press('Enter');
       const detailRail = page.getByTestId('watchlist-detail-rail');
       await expect(detailRail).toBeVisible({ timeout: 10_000 });
-      await detailRail.getByRole('button', { name: '回测' }).click();
+      const backtestButton = detailRail.getByRole('button', { name: '回测' });
+      await backtestButton.focus();
+      await expect(backtestButton).toBeFocused();
+      await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/zh\/backtest\?symbol=NVDA/);
       return ['NVDA filled row opened its detail rail and the canonical Backtest action was selected.'];
     });
