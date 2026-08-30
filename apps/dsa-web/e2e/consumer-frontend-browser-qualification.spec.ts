@@ -78,6 +78,7 @@ type JourneyEvidence = {
 };
 
 const timestamp = '2026-07-06T09:30:00Z';
+const dataAsOf = '2026-07-06T09:10:00Z';
 const signedInUser = {
   id: 'user-1',
   username: 'wolfy-user',
@@ -165,11 +166,11 @@ async function installStockOverrides(page: Page) {
       freshness: 'delayed',
       source_confidence: {
         source_label: 'Playwright Fixture',
-        as_of: timestamp,
+        as_of: dataAsOf,
         freshness: 'delayed',
         is_stale: false,
         is_partial: false,
-        is_synthetic: false,
+        is_synthetic: true,
         is_unavailable: false,
       },
     });
@@ -232,11 +233,11 @@ async function installStockOverrides(page: Page) {
       source: 'playwright_fixture',
       source_confidence: {
         source_label: 'Playwright Fixture',
-        as_of: timestamp,
+        as_of: dataAsOf,
         freshness: 'delayed',
         is_stale: false,
         is_partial: false,
-        is_synthetic: false,
+        is_synthetic: true,
         is_unavailable: false,
       },
       data: [
@@ -263,11 +264,11 @@ async function installStockOverrides(page: Page) {
       },
       source_confidence: {
         source_label: 'Playwright Fixture',
-        as_of: timestamp,
+        as_of: dataAsOf,
         freshness: 'delayed',
         is_stale: false,
         is_partial: false,
-        is_synthetic: false,
+        is_synthetic: true,
         is_unavailable: false,
       },
     });
@@ -646,8 +647,12 @@ async function installRadarOverrides(page: Page) {
         priority_tier: 'follow_up',
         why_queued: ['Scanner candidate is available for follow-up research review.'],
         evidence_used: ['Technicals available', 'Liquidity available'],
-        evidence_gaps: [],
+        evidence_gaps: ['Peer evidence remains incomplete.'],
+        readiness: { state: 'needs_evidence', evidence_state: 'partial' },
+        provenance: { source_surface: 'scanner', state: 'fixture' },
+        data_as_of: dataAsOf,
         freshness: { state: 'current', last_reviewed_at: timestamp },
+        material_change: { state: 'unknown', asserted: false },
         suggested_research_path: [
           {
             label: 'Stock Structure',
@@ -946,6 +951,7 @@ async function recordJourney(
   route: QualificationRoute,
   viewport: string,
   body: () => Promise<string[]>,
+  options: { strict?: boolean } = {},
 ) {
   const findings: Finding[] = [];
   let status: JourneyEvidence['status'] = 'pass';
@@ -959,7 +965,7 @@ async function recordJourney(
     notes = [message];
   }
   evidence.journeys.push({ name, status, route: route.label, viewport, notes, findings });
-  if (strictQualification) {
+  if (options.strict ?? strictQualification) {
     expect(status, `${name} keyboard journey`).toBe('pass');
   }
 }
@@ -1032,17 +1038,58 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     test.setTimeout(120_000);
     const viewport = '390x844';
     await page.setViewportSize({ width: 390, height: 844 });
+    const truthChecks: Promise<void>[] = [];
+    const truthErrors: string[] = [];
+    const observedTruth = { queue: false, quote: false, unavailableOptions: false };
+    page.on('response', (response) => {
+      const url = response.url();
+      if (!url.includes('/api/v1/research/queue') && !url.includes('/api/v1/stocks/NVDA/quote') && !url.includes('/api/v1/options/underlyings/NVDA/structure')) return;
+      truthChecks.push((async () => {
+        const payload = await response.json() as Record<string, any>;
+        try {
+          if (url.includes('/api/v1/research/queue')) {
+            const item = payload.research_queue?.[0];
+            expect(payload.schema_version).toBe('research_queue_v1');
+            expect(payload.observation_only).toBe(true);
+            expect(payload.decision_grade).toBe(false);
+            expect(payload.data_quality?.fail_closed).toBe(true);
+            expect(item?.provenance).toEqual({ source_surface: 'scanner', state: 'fixture' });
+            expect(item?.readiness).toEqual({ state: 'needs_evidence', evidence_state: 'partial' });
+            expect(item?.evidence_gaps).toEqual(['Peer evidence remains incomplete.']);
+            expect(item?.data_as_of).toBe(dataAsOf);
+            expect(payload.generated_at ?? timestamp).not.toBe(item?.data_as_of);
+            expect(item?.material_change).toEqual({ state: 'unknown', asserted: false });
+            observedTruth.queue = true;
+          } else if (url.includes('/api/v1/stocks/NVDA/quote')) {
+            expect(payload.source_confidence?.source_label).toBe('Playwright Fixture');
+            expect(payload.source_confidence?.is_synthetic).toBe(true);
+            expect(payload.source_confidence?.as_of).toBe(dataAsOf);
+            observedTruth.quote = true;
+          } else {
+            expect(payload.status).toBe('not_available');
+            expect(payload.spot_price).toBeNull();
+            expect(payload.zero_dte?.contract_count).toBe(0);
+            expect(payload.zero_dte?.open_interest_share).toBeNull();
+            observedTruth.unavailableOptions = true;
+          }
+        } catch (error) {
+          truthErrors.push(error instanceof Error ? error.message : String(error));
+        }
+      })());
+    });
     await installQualificationOverrides(page);
+    const recordQ001Journey = (name: string, route: QualificationRoute, body: () => Promise<string[]>) =>
+      recordJourney(page, name, route, viewport, body, { strict: true });
 
     const homeRoute = routes.find((entry) => entry.key === 'home')!;
     await waitForRoute(page, homeRoute);
-    await recordJourney(page, 'navigation', homeRoute, viewport, async () => {
+    await recordQ001Journey('navigation', homeRoute, async () => {
       await page.keyboard.press('Tab');
       const activeTag = await page.evaluate(() => document.activeElement?.tagName || '');
       expect(activeTag).not.toBe('');
       return [`First keyboard target: ${activeTag}`];
     });
-    await recordJourney(page, 'search', homeRoute, viewport, async () => {
+    await recordQ001Journey('search', homeRoute, async () => {
       const search = page.getByRole('textbox', { name: /搜索|Search|symbol|代码/i }).first();
       await expect(search).toBeVisible({ timeout: 10_000 });
       await search.focus();
@@ -1054,13 +1101,13 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const scannerRoute = routes.find((entry) => entry.key === 'scanner')!;
     await waitForRoute(page, scannerRoute);
-    await recordJourney(page, 'More menu', scannerRoute, viewport, async () => {
+    await recordQ001Journey('More menu', scannerRoute, async () => {
       const opened = await safeClick(page.getByRole('button', { name: /更多扫描操作|more scanner actions|更多|More/i }));
       expect(opened).toBe(true);
       await page.keyboard.press('Escape');
       return ['More menu opened and Escape was accepted.'];
     });
-    await recordJourney(page, 'Scanner run/result', scannerRoute, viewport, async () => {
+    await recordQ001Journey('Scanner run/result', scannerRoute, async () => {
       const button = page.getByTestId('scanner-run-button').or(page.getByRole('button', { name: /运行|扫描|Run|Scanner/i })).first();
       await expect(button).toBeVisible({ timeout: 10_000 });
       await button.focus();
@@ -1070,7 +1117,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const radarRoute = routes.find((entry) => entry.key === 'radar')!;
     await waitForRoute(page, radarRoute);
-    await recordJourney(page, 'Radar candidate selection', radarRoute, viewport, async () => {
+    await recordQ001Journey('Radar candidate selection', radarRoute, async () => {
       const candidate = page.getByRole('button', { name: /查看 NVDA 研究细节|Inspect NVDA/i }).first();
       await expect(candidate).toBeVisible({ timeout: 10_000 });
       await candidate.focus();
@@ -1081,7 +1128,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const stockRoute = routes.find((entry) => entry.key === 'stock-research')!;
     await waitForRoute(page, stockRoute);
-    await recordJourney(page, 'Stock evidence handoff', stockRoute, viewport, async () => {
+    await recordQ001Journey('Stock evidence handoff', stockRoute, async () => {
       await expect(page.getByTestId('stock-consumer-research-summary')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('stock-first-viewport-summary-panel')).toBeVisible();
       return ['Stock evidence summary is visible after the watchlist handoff.'];
@@ -1089,7 +1136,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
     await waitForRoute(page, watchlistRoute);
-    await recordJourney(page, 'Watchlist row', watchlistRoute, viewport, async () => {
+    await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
       const rowAction = page.getByTestId('watchlist-row-NVDA').getByRole('button', { name: /查看详情 NVDA|View details NVDA/i });
       await expect(rowAction).toBeVisible({ timeout: 10_000 });
       await rowAction.focus();
@@ -1099,7 +1146,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const backtestRoute = routes.find((entry) => entry.key === 'backtest')!;
     await waitForRoute(page, backtestRoute);
-    await recordJourney(page, 'Backtest setup', backtestRoute, viewport, async () => {
+    await recordQ001Journey('Backtest setup', backtestRoute, async () => {
       const input = page.getByLabel(/标的代码|Ticker|symbol/i).first();
       await expect(input).toBeVisible({ timeout: 10_000 });
       await input.focus();
@@ -1109,7 +1156,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const scenarioRoute = routes.find((entry) => entry.key === 'scenario-lab')!;
     await waitForRoute(page, scenarioRoute);
-    await recordJourney(page, 'Scenario evaluate', scenarioRoute, viewport, async () => {
+    await recordQ001Journey('Scenario evaluate', scenarioRoute, async () => {
       const evaluate = page.getByRole('button', { name: /评估情景|Evaluate/i }).first();
       await expect(evaluate).toBeVisible({ timeout: 10_000 });
       await evaluate.focus();
@@ -1121,11 +1168,15 @@ test.describe('consumer frontend keyboard journey qualification', () => {
 
     const portfolioRoute = routes.find((entry) => entry.key === 'portfolio')!;
     await waitForRoute(page, portfolioRoute);
-    await recordJourney(page, 'Portfolio resume', portfolioRoute, viewport, async () => {
+    await recordQ001Journey('Portfolio resume', portfolioRoute, async () => {
       await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
       return ['Portfolio resume surface is reachable after validation setup.'];
     });
+    await page.waitForTimeout(250);
+    await Promise.all(truthChecks);
+    expect(truthErrors, 'Q-001 fixture truth checks').toEqual([]);
+    expect(observedTruth).toEqual({ queue: true, quote: true, unavailableOptions: true });
   });
 
   test('portfolio row and import entry are keyboard reachable', async ({ page }) => {
