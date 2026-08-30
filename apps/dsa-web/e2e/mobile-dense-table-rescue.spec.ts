@@ -498,8 +498,12 @@ base.describe('T-1168 options mobile dense rescue', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('options-lab-payoff-visual').locator('span[aria-hidden="true"]').last()).toHaveClass(/bg-gradient-to-l/);
-    await expect(page.getByTestId('options-lab-iv-visual').locator('span[aria-hidden="true"]').last()).toHaveClass(/bg-gradient-to-l/);
+    const payoffVisual = page.getByTestId('options-lab-payoff-visual');
+    const ivVisual = page.getByTestId('options-lab-iv-visual');
+    await expect(payoffVisual).toBeVisible();
+    await expect(ivVisual).toBeVisible();
+    await expect(payoffVisual.locator('svg[role="img"]')).toBeVisible();
+    await expect(ivVisual.locator('svg[role="img"]')).toBeVisible();
     await expectNoDocumentOverflow(page);
     expect(consoleErrors).toEqual([]);
   });

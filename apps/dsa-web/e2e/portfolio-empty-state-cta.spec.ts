@@ -286,22 +286,19 @@ test.describe('portfolio empty-state CTA', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test('keeps no-account permission limits truthful on mobile', async ({ page }) => {
+  test('keeps confirmed no-account first-use guidance truthful on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await installPortfolioSmokeHarness(page);
     await installPortfolioEmptyHarness(page, 'no_account');
     await page.goto('/zh/portfolio');
     await page.waitForLoadState('domcontentloaded');
 
-    const permissionState = page.getByTestId('portfolio-permission-limited-state');
-    const refresh = permissionState.getByRole('button', { name: '刷新组合快照' });
-    await expect(permissionState).toBeVisible({ timeout: 15_000 });
-    await expect(permissionState).toContainText('当前状态已确认尚未创建组合账户');
-    await expect(permissionState).not.toContainText('当前账户已确认没有持仓');
-    await expect(permissionState.getByRole('button')).toHaveCount(1);
-    await refresh.focus();
-    await expect(refresh).toBeFocused();
-    await expect(page.getByTestId('portfolio-empty-onboarding-row')).toHaveCount(0);
+    const onboarding = page.getByTestId('portfolio-empty-onboarding-row');
+    await expect(onboarding).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('portfolio-start-card')).toContainText('创建或导入首个组合');
+    await expect(page.getByTestId('portfolio-total-assets-value')).toHaveText('尚未创建组合');
+    await expect(page.getByTestId('portfolio-total-assets-value')).not.toContainText('USD 0.00');
+    await expect(page.getByTestId('portfolio-permission-limited-state')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });

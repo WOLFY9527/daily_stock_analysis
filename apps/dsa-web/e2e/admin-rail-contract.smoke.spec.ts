@@ -736,7 +736,8 @@ async function expectRecoveryMenuPointerReachable(page: Page, testId: string) {
   expect(metrics.display).not.toBe('none');
   expect(metrics.visibility).not.toBe('hidden');
   expect(metrics.pointerEvents).not.toBe('none');
-  expect(metrics.hitInsideMenu).toBe(true);
+  await expect(menu.getByRole('link').first()).toBeVisible();
+  await menu.getByRole('link').first().click({ trial: true });
 }
 
 async function openRecoveryConsumerHome(page: Page) {

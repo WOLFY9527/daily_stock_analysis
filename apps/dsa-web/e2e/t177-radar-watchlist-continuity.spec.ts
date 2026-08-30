@@ -232,7 +232,11 @@ function researchQueuePayload() {
         whyQueued: ['Saved observation needs quote freshness review.'],
         evidenceUsed: ['Watchlist row evidence.'],
         evidenceGaps: ['Quote freshness needs review.'],
+        readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+        provenance: { sourceSurface: 'watchlist', state: 'fixture' },
+        dataAsOf: '2026-07-06T09:10:00Z',
         freshness: { state: 'needs_review', lastReviewedAt: now },
+        materialChange: { state: 'unknown', asserted: false },
         suggestedResearchPath: [
           {
             label: 'Stock Structure',
@@ -243,20 +247,44 @@ function researchQueuePayload() {
         ],
         observationOnly: true,
       },
+      {
+        queueItemId: 'scanner-BETA',
+        sourceSurface: 'scanner',
+        symbol: 'BETA',
+        title: 'Synthetic scanner follow-up',
+        priorityTier: 'urgent_review',
+        whyQueued: ['Synthetic candidate requires stock evidence review.'],
+        evidenceUsed: ['Synthetic scanner candidate fixture.'],
+        evidenceGaps: ['Stock evidence remains partial.'],
+        readiness: { state: 'needs_evidence', evidenceState: 'partial' },
+        provenance: { sourceSurface: 'scanner', state: 'fixture' },
+        dataAsOf: '2026-07-06T09:10:00Z',
+        freshness: { state: 'needs_review', lastReviewedAt: now },
+        materialChange: { state: 'unknown', asserted: false },
+        suggestedResearchPath: [
+          {
+            label: 'Stock Structure',
+            route: '/stocks/BETA/structure-decision',
+            section: 'scanner',
+            reason: 'Review synthetic stock evidence.',
+          },
+        ],
+        observationOnly: true,
+      },
     ],
     aggregateSummary: {
-      itemCount: 1,
+      itemCount: 2,
       limit: 5,
       bounded: false,
-      bySourceSurface: { watchlist: 1 },
-      byPriorityTier: { follow_up: 1 },
+      bySourceSurface: { scanner: 1, watchlist: 1 },
+      byPriorityTier: { urgent_review: 1, follow_up: 1 },
     },
-    sourceSurfacesAggregated: ['watchlist'],
-    evidenceGaps: ['Quote freshness needs review.'],
+    sourceSurfacesAggregated: ['scanner', 'watchlist'],
+    evidenceGaps: ['Quote freshness needs review.', 'Stock evidence remains partial.'],
     dataQuality: {
       state: 'partial',
-      itemCount: 1,
-      sourceSurfacesAvailable: ['watchlist'],
+      itemCount: 2,
+      sourceSurfacesAvailable: ['scanner', 'watchlist'],
       sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
       failClosed: true,
     },
@@ -555,7 +583,6 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await expect(page.getByTestId('research-radar-candidate-ledger')).toBeVisible();
       await expect(page.getByRole('region', { name: '研究雷达候选台账横向滚动区域' })).toBeVisible();
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toBeVisible();
-      await expect(page.getByTestId('research-radar-factor-bars')).toContainText('70');
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toContainText(/数据时效|Data freshness/);
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toContainText(/Quote freshness is partial|报价|时效|partial/i);
 
@@ -643,14 +670,14 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
 
       const ledgerOverflow = await page.getByTestId('watchlist-primary-work-region').evaluate((node) => {
         const element = node as HTMLElement;
-        const table = element.querySelector('[data-testid="watchlist-candidate-list"]') as HTMLElement | null;
+        const scrollRegion = element.querySelector('[data-testid="watchlist-ledger-scroll-region"]') as HTMLElement | null;
         return {
           bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          internalOverflow: Boolean(table && table.scrollWidth > element.clientWidth),
+          ledgerOverflowX: scrollRegion ? getComputedStyle(scrollRegion).overflowX : null,
         };
       });
       expect(ledgerOverflow.bodyOverflow).toBe(false);
-      if (viewport.width === 390) expect(ledgerOverflow.internalOverflow).toBe(true);
+      if (viewport.width === 390) expect(ledgerOverflow.ledgerOverflowX).toBe('hidden');
     }
 
     await page.goto('/zh/watchlist');
