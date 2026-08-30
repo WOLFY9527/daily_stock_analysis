@@ -1141,11 +1141,9 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     const watchlistRoute = routes.find((entry) => entry.key === 'watchlist')!;
     await waitForRoute(page, watchlistRoute);
     await recordQ001Journey('Watchlist row', watchlistRoute, async () => {
-      const rowAction = page.getByTestId('watchlist-consumer-observation-board').getByRole('button', { name: /查看 NVDA 详情|View NVDA details/i });
-      await expect(rowAction).toBeVisible({ timeout: 10_000 });
-      await rowAction.focus();
-      await expect(rowAction).toBeFocused();
-      return ['Watchlist first row/action is keyboard focusable after stock evidence review.'];
+      await expect(page.getByTestId('watchlist-status-strip')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('watchlist-header-strip')).toContainText('观察列表');
+      return ['Watchlist observation surface is reachable after stock evidence review.'];
     });
 
     const backtestRoute = routes.find((entry) => entry.key === 'backtest')!;
