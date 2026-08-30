@@ -692,6 +692,12 @@ async function installRadarOverrides(page: Page) {
 
 async function installQualificationOverrides(page: Page) {
   await installSignedInOverrides(page);
+  await page.route('**/api/v1/user-alerts/rules', async (route) => {
+    await fulfillJson(route, { contract_version: 'user_alert_contract_v1', delivery_mode: 'in_app', in_app_only: true, owner_scoped: true, items: [] });
+  });
+  await page.route('**/api/v1/user-alerts/events', async (route) => {
+    await fulfillJson(route, { contract_version: 'user_alert_contract_v1', delivery_mode: 'in_app', in_app_only: true, owner_scoped: true, total: 0, limit: 20, offset: 0, items: [] });
+  });
   await installStockOverrides(page);
   await installMarketOverviewOverrides(page);
   await installWatchlistOverrides(page);
@@ -1105,7 +1111,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     await waitForRoute(page, portfolioRoute);
     await recordJourney(page, 'Portfolio resume', portfolioRoute, viewport, async () => {
       await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId('portfolio-summary-hero')).toBeVisible();
+      await expect(page.getByTestId('portfolio-next-action-panel')).toBeVisible();
       return ['Portfolio resume surface is reachable after validation setup.'];
     });
 
