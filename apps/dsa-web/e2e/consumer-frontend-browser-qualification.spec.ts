@@ -470,6 +470,17 @@ async function installWatchlistOverrides(page: Page) {
       data_quality: { state: 'partial', item_count: 0 },
     });
   });
+  await page.route('**/api/v1/watchlist/refresh-status', async (route) => {
+    await fulfillJson(route, {
+      enabled: true,
+      us_time: '08:45',
+      cn_time: '09:00',
+      hk_time: '09:00',
+      status: 'idle',
+      last_run_at: null,
+      next_run_at: null,
+    });
+  });
 }
 
 function cockpitPayload() {
