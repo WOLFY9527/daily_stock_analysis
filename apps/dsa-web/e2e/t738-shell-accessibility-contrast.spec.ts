@@ -104,7 +104,7 @@ for (const theme of ['light', 'dark'] as const) {
     await search.fill('AAPL');
     const typed = await inspectShell(page, '#shell-stock-search-header');
     expect(typed.inputRatio).toBeGreaterThanOrEqual(4.5);
-    await search.locator('input').focus();
+    await search.focus();
     const focused = await inspectShell(page, '#shell-stock-search-header');
     expect(focused.fieldBoxShadow).not.toBe('none');
     expect(focused.fieldBorderRatio).toBeGreaterThanOrEqual(3);
