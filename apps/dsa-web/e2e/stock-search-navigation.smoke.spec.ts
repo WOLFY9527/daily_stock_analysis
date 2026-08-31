@@ -70,7 +70,33 @@ async function expectSpaMarker(page: Page) {
   await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665SearchMarker)).toBe('spa-search-session');
 }
 
-test('home stock search reaches the canonical route through keyboard, button, and suggestions', async ({ page }) => {
+async function installAuthenticatedHomeSession(page: Page) {
+  await page.route('**/api/v1/auth/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authEnabled: true,
+        loggedIn: true,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+        currentUser: {
+          id: 't739-member',
+          username: 't739-member',
+          displayName: 'T739 Member',
+          role: 'user',
+          isAdmin: false,
+          isAuthenticated: true,
+          transitional: false,
+          authEnabled: true,
+        },
+      }),
+    });
+  });
+}
+
+test('authenticated Home stock search reaches the canonical route through keyboard, button, and suggestions', async ({ page }) => {
   const failedRequests: string[] = [];
   const errorResponses: string[] = [];
   const previewStockCodes: string[] = [];
@@ -97,11 +123,10 @@ test('home stock search reaches the canonical route through keyboard, button, an
   });
 
   await stabilizeUnrelatedData(page);
+  await installAuthenticatedHomeSession(page);
   await page.goto('/');
   await expect(page.getByTestId('home-bento-omnibar-input')).toBeVisible();
-  await expect(page.getByTestId('guest-home-research-access-disclosure')).toHaveText(
-    '搜索会先验证标的；打开完整个股研究需要登录。',
-  );
+  await expect(page.getByTestId('guest-home-research-access-disclosure')).toHaveCount(0);
   await markClientSession(page);
 
   const homeInput = page.getByTestId('home-bento-omnibar-input');
@@ -123,25 +148,11 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('home-bento-omnibar-input')).toBeVisible();
-  await homeInput.fill('600519');
-  await page.getByTestId('home-bento-analyze-button').click();
-  await expect(page).toHaveURL(/\/stocks\/600519\/structure-decision\?symbol=600519&source=manual$/);
-  await expect(page.getByTestId('auth-guard-overlay')).toBeVisible();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByTestId('consumer-protected-frame')).toHaveAttribute('data-boundary-family', 'consumer-protected');
-  await expect(page.getByTestId('stock-structure-decision-page')).toHaveCount(0);
-  await expectSpaMarker(page);
-  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(3);
-
-  await page.goBack();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('home-bento-omnibar-input')).toBeVisible();
   await homeInput.fill('0700.HK');
   await homeInput.press('Enter');
   await expect(page).toHaveURL(/\/stocks\/HK00700\/structure-decision\?symbol=HK00700&source=manual$/);
   await expectSpaMarker(page);
-  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(4);
-  await expect.poll(() => previewStockCodes).toContain('HK00700');
+  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(3);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
@@ -165,7 +176,7 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await expect(homeInput).toBeFocused();
   await expect(homeInput).toHaveAttribute('aria-invalid', 'true');
   await expect(page.getByTestId('home-bento-fallback-toast')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(4);
+  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(3);
 
   const isMobile = page.viewportSize()?.width !== undefined && (page.viewportSize()?.width || 0) < 700;
   if (isMobile) {
@@ -179,7 +190,7 @@ test('home stock search reaches the canonical route through keyboard, button, an
   await shellInput.press('Enter');
   await expect(page).toHaveURL(/\/stocks\/AAPL\/structure-decision$/);
   await expectSpaMarker(page);
-  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(5);
+  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(4);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
@@ -209,11 +220,21 @@ test('home stock search reaches the canonical route through keyboard, button, an
     .click();
   await expect(page).toHaveURL(/\/stocks\/AAPL\/structure-decision$/);
   await expectSpaMarker(page);
-  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(6);
+  await expect.poll(() => page.evaluate(() => (window as SearchNavigationWindow).__t665RouteTransitions)).toBe(5);
 
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(failedRequests).toEqual([]);
-  expect(validatedSymbols).toEqual(expect.arrayContaining(['AAPL', '600519', '0700.HK', 'not-a-symbol!']));
+  expect(validatedSymbols).toEqual(expect.arrayContaining(['AAPL', '0700.HK', 'not-a-symbol!']));
   expect(previewStockCodes).not.toContain('not-a-symbol!');
   expect(errorResponses).toEqual([]);
+});
+
+test('guest canonical stock destination remains owned by AuthGuard', async ({ page }) => {
+  await page.goto('/stocks/600519/structure-decision?symbol=600519&source=manual');
+
+  await expect(page).toHaveURL(/\/stocks\/600519\/structure-decision\?symbol=600519&source=manual$/);
+  await expect(page.getByTestId('auth-guard-overlay')).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByTestId('consumer-protected-frame')).toHaveAttribute('data-boundary-family', 'consumer-protected');
+  await expect(page.getByTestId('stock-structure-decision-page')).toHaveCount(0);
 });
