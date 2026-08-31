@@ -55,8 +55,9 @@ async function inspectShell(page: Parameters<typeof openAdminRouteWithHarness>[0
       return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
     };
     const ratio = (first: Rgba, second: Rgba) => {
-      const lighter = Math.max(luminance(first), luminance(second));
-      const darker = Math.min(luminance(first), luminance(second));
+      const renderedFirst = composite(first, second);
+      const lighter = Math.max(luminance(renderedFirst), luminance(second));
+      const darker = Math.min(luminance(renderedFirst), luminance(second));
       return (lighter + 0.05) / (darker + 0.05);
     };
     const utilityActions = [...document.querySelectorAll<HTMLElement>('.shell-header-action, .shell-account-center-trigger')].map((action) => {
