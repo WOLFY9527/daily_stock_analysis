@@ -59,7 +59,7 @@ async function inspectShell(page: Parameters<typeof openAdminRouteWithHarness>[0
       const darker = Math.min(luminance(first), luminance(second));
       return (lighter + 0.05) / (darker + 0.05);
     };
-    const utilityActions = [...document.querySelectorAll<HTMLElement>('.shell-header-action')].map((action) => {
+    const utilityActions = [...document.querySelectorAll<HTMLElement>('.shell-header-action, .shell-account-center-trigger')].map((action) => {
       const style = getComputedStyle(action);
       return {
         text: action.textContent?.trim() ?? '',

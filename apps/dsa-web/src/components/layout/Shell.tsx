@@ -898,7 +898,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               id={ACCOUNT_MENU_TRIGGER_ID}
               type="button"
               className={cn(
-                'flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-[var(--wolfy-surface-input)] px-2.5 text-left text-[11px] font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+                'shell-account-center-trigger flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-[var(--wolfy-surface-input)] px-2.5 text-left font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
                 accountMenuOpen ? 'border-[color:var(--wolfy-accent)] bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
               )}
               aria-label={accountCopy.accountCenter}

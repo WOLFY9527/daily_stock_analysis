@@ -142,8 +142,8 @@ function routeToNavItem(route: CoreProductRoute): NavItem {
   };
 }
 
-const HEADER_UTILITY_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
-const HEADER_UTILITY_DANGER_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--state-danger-text)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
+const HEADER_UTILITY_TEXT_CLASS = 'shell-header-action px-2.5 py-1 font-medium text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
+const HEADER_UTILITY_DANGER_TEXT_CLASS = 'shell-header-action px-2.5 py-1 font-medium text-[color:var(--state-danger-text)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
 const ADMIN_NAV_GROUP_ORDER: AdminNavGroupKey[] = ['trust', 'evidence', 'dataOps', 'support'];
 
 function isAdminOpsRoute(pathname: string): boolean {

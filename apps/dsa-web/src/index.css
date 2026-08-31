@@ -7960,6 +7960,8 @@ html[data-theme-style='paper'] {
 
   --theme-shell-bg: var(--wolfy-app-background);
   --theme-shell-overlay: none;
+  --theme-shell-utility-font-size: 12px;
+  --theme-shell-search-font-size: 12px;
   --theme-overlay-backdrop: rgb(54 48 40 / 0.18);
   --theme-panel-radius-lg: var(--radius);
   --theme-panel-radius-md: var(--radius-sm);
@@ -8812,6 +8814,7 @@ html[data-theme-style='paper'] .shell-header-action {
   justify-content: center;
   border-radius: 999px;
   color: var(--wolfy-text-muted);
+  font-size: var(--theme-shell-utility-font-size);
   white-space: nowrap;
 }
 
@@ -8819,6 +8822,10 @@ html[data-theme-style='paper'] .shell-header-action:hover,
 html[data-theme-style='paper'] .shell-header-action.is-active {
   color: var(--wolfy-text-primary);
   background: rgb(107 143 113 / 0.08);
+}
+
+html[data-theme-style='paper'] .shell-account-center-trigger {
+  font-size: var(--theme-shell-utility-font-size);
 }
 
 html[data-theme-style='paper'] .shell-stock-search {
@@ -8862,9 +8869,9 @@ html[data-theme-style='paper'] .shell-stock-search__field {
   min-height: 2rem;
   align-items: center;
   gap: 0.45rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--wolfy-border-default);
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.64);
+  background: var(--wolfy-surface-input);
   padding: 0 0.68rem;
   color: var(--wolfy-text-muted);
 }
@@ -8887,7 +8894,7 @@ html[data-theme-style='paper'] .shell-stock-search__input {
   background: transparent;
   color: var(--wolfy-text-primary);
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: var(--theme-shell-search-font-size);
   outline: none;
 }
 
