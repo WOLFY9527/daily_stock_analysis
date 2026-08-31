@@ -92,7 +92,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 30_000 });
     const search = page.locator('#shell-stock-search-header');
     await expect(search).toBeVisible({ timeout: 30_000 });
-    const empty = await inspectShell(page, '#shell-stock-search-header input');
+    const empty = await inspectShell(page, '#shell-stock-search-header');
     expect(empty.theme).toBe(theme);
     expect(empty.inputRatio).toBeGreaterThanOrEqual(4.5);
     expect(empty.placeholderRatio).toBeGreaterThanOrEqual(4.5);
@@ -101,11 +101,11 @@ for (const theme of ['light', 'dark'] as const) {
       expect(Number.parseFloat(action.fontSize), `${action.text} utility size`).toBeGreaterThanOrEqual(12);
       expect(action.ratio, `${action.text} utility contrast`).toBeGreaterThanOrEqual(4.5);
     }
-    await search.locator('input').fill('AAPL');
-    const typed = await inspectShell(page, '#shell-stock-search-header input');
+    await search.fill('AAPL');
+    const typed = await inspectShell(page, '#shell-stock-search-header');
     expect(typed.inputRatio).toBeGreaterThanOrEqual(4.5);
     await search.locator('input').focus();
-    const focused = await inspectShell(page, '#shell-stock-search-header input');
+    const focused = await inspectShell(page, '#shell-stock-search-header');
     expect(focused.fieldBoxShadow).not.toBe('none');
     expect(focused.fieldBorderRatio).toBeGreaterThanOrEqual(3);
   });
@@ -123,9 +123,9 @@ test('T738 mobile drawer preserves readable search and identity', async ({ page 
   await page.getByRole('button', { name: '打开导航菜单' }).click();
   const drawer = page.getByTestId('shell-mobile-navigation-menu');
   await expect(drawer).toBeVisible();
-  const input = drawer.locator('#shell-stock-search-drawer input');
+  const input = drawer.locator('#shell-stock-search-drawer');
   await expect(input).toBeVisible({ timeout: 30_000 });
-  const evidence = await inspectShell(page, '#shell-stock-search-drawer input');
+  const evidence = await inspectShell(page, '#shell-stock-search-drawer');
   expect(evidence.theme).toBe('dark');
   expect(evidence.inputRatio).toBeGreaterThanOrEqual(4.5);
   expect(evidence.placeholderRatio).toBeGreaterThanOrEqual(4.5);
