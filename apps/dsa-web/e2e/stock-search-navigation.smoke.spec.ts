@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
 type SearchNavigationWindow = Window & {
@@ -50,6 +50,176 @@ async function stabilizeUnrelatedData(page: Page) {
   });
   await page.route('**/api/v1/options/**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+}
+
+function stockSymbolFromDetailRead(route: Route): string {
+  if (route.request().method() !== 'GET') {
+    throw new Error(`Stock detail fixture received unexpected ${route.request().method()} request.`);
+  }
+
+  const [, encodedSymbol] = new URL(route.request().url()).pathname.match(/^\/api\/v1\/stocks\/([^/]+)\//) || [];
+  const symbol = typeof encodedSymbol === 'string' ? decodeURIComponent(encodedSymbol).trim().toUpperCase() : '';
+  if (!['AAPL', 'HK00700', 'ORCL'].includes(symbol)) {
+    throw new Error(`Stock detail fixture received unexpected symbol ${symbol || '(empty)'}.`);
+  }
+  return symbol;
+}
+
+function stockFixtureMarket(symbol: string): 'us' | 'hk' {
+  return symbol.startsWith('HK') ? 'hk' : 'us';
+}
+
+async function installStockDetailReadRoutes(page: Page) {
+  const sourceConfidence = {
+    source_label: 'Playwright fixture boundary',
+    as_of: null,
+    freshness: 'synthetic',
+    is_stale: false,
+    is_partial: true,
+    is_synthetic: true,
+    is_unavailable: true,
+  };
+
+  await page.route('**/api/v1/stocks/*/quote', async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        stock_code: symbol,
+        stock_name: `${symbol} fixture identity`,
+        current_price: null,
+        change: null,
+        change_percent: null,
+        update_time: null,
+        freshness: 'synthetic',
+        is_stale: false,
+        is_partial: true,
+        is_synthetic: true,
+        is_unavailable: true,
+        source_confidence: sourceConfidence,
+      }),
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/research-packet', async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        symbol,
+        market: stockFixtureMarket(symbol),
+        identity: { name: `${symbol} fixture identity`, exchange: null, sector: null, industry: null },
+        quote: { state: 'unknown', price: null, change_percent: null, as_of: null },
+        history: { state: 'unknown', bars: null, period: 'daily', as_of: null },
+        structure: { state: 'unknown', label: null, confidence: null, as_of: null },
+        fundamentals: { state: 'not_integrated', fields_available: [] },
+        events: { state: 'missing', latest: [] },
+        peer: { state: 'insufficient', benchmark: null },
+        missing_data: ['fundamentals', 'events', 'peer'],
+        research_status: 'partial',
+        next_data_action: 'Observed evidence is required before research is complete.',
+        observation_only: true,
+        decision_grade: false,
+        no_advice_disclosure: 'Research observation only.',
+      }),
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/structure-decision', async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        schema_version: 't739_stock_detail_fixture_v1',
+        ticker: symbol,
+        structure_state: 'unknown',
+        confidence: null,
+        confidence_state: { status: 'partial', label: 'Fixture evidence limited', reasons: ['Fixture data is not live evidence.'] },
+        explanation: {
+          why_this_structure: null,
+          what_confirms_it: [],
+          what_invalidates_it: [],
+          key_levels: [],
+        },
+        research_notes: { watch_next: [], needs_more_evidence: ['Observed evidence'], risk_flags: ['Fixture data is not decision-grade.'] },
+        data_quality: { status: 'partial', period: 'daily', requested_days: 180, observed_bars: null, usable_bars: null, reason: 'Fixture supplies no observed history.' },
+        missing_evidence: [{ kind: 'quote', message: 'Observed quote evidence is unavailable in this fixture.' }],
+        observation_only: true,
+        decision_grade: false,
+        no_advice_disclosure: 'Research observation only.',
+      }),
+    });
+  });
+
+  await page.route(/\/api\/v1\/stocks\/[^/?]+\/history(?:\?.*)?$/, async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        stock_code: symbol,
+        stock_name: `${symbol} fixture identity`,
+        period: 'daily',
+        source: 'playwright_fixture',
+        source_confidence: sourceConfidence,
+        data: [],
+      }),
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/technical-indicators', async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contract_version: 'stock_technical_indicators_v1',
+        symbol,
+        status: 'insufficient_history',
+        timeframe: 'daily',
+        as_of: null,
+        freshness: 'synthetic',
+        source_label: 'Playwright fixture boundary',
+        data_quality: { status: 'insufficient_history', required_bars: 200, observed_bars: null, usable_bars: null, missing_bars: null, freshness: 'synthetic' },
+        indicators: {},
+        no_advice_disclosure: 'Research observation only.',
+      }),
+    });
+  });
+
+  await page.route(/\/api\/v1\/stocks\/[^/?]+\/evidence(?:\?.*)?$/, async (route) => {
+    const symbol = stockSymbolFromDetailRead(route);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        symbols: [symbol],
+        items: [{
+          symbol,
+          market: stockFixtureMarket(symbol).toUpperCase(),
+          quote: { state: 'unknown' },
+          technical: { state: 'insufficient' },
+          fundamental: null,
+          news: null,
+          symbol_evidence_readiness: {
+            symbol_evidence_readiness: true,
+            symbol,
+            readiness_tier: 'insufficient',
+            evidence_used: [],
+            evidence_missing: ['quote', 'history', 'fundamentals', 'events', 'peer'],
+            stale_inputs: [],
+            data_quality_notes: ['Playwright fixture data is partial.'],
+            observation_only: true,
+            no_advice_disclosure: 'Research observation only.',
+          },
+        }],
+        meta: { generated_at: null, source: 'playwright_fixture' },
+      }),
+    });
   });
 }
 
@@ -123,6 +293,7 @@ test('authenticated Home stock search reaches the canonical route through keyboa
   });
 
   await stabilizeUnrelatedData(page);
+  await installStockDetailReadRoutes(page);
   await installAuthenticatedHomeSession(page);
   await page.goto('/');
   await expect(page.getByTestId('home-bento-omnibar-input')).toBeVisible();
