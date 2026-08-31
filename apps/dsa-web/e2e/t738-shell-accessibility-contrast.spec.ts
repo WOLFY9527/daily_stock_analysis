@@ -111,24 +111,26 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('T738 mobile drawer preserves readable search and identity', async ({ page }) => {
-  test.skip(!test.info().project.name.includes('mobile'), 'mobile case runs in the mobile browser project');
-  await page.addInitScript(() => {
-    window.localStorage.setItem('dsa-theme-style', 'paper');
-    window.localStorage.setItem('dsa-theme-mode', 'dark');
+for (const theme of ['light', 'dark'] as const) {
+  test(`T738 mobile drawer preserves readable search and identity: ${theme}`, async ({ page }) => {
+    test.skip(!test.info().project.name.includes('mobile'), 'mobile case runs in the mobile browser project');
+    await page.addInitScript((selectedTheme) => {
+      window.localStorage.setItem('dsa-theme-style', 'paper');
+      window.localStorage.setItem('dsa-theme-mode', selectedTheme);
+    }, theme);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openAdminRouteWithHarness(page, '/zh/settings/system');
+    await expect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: '打开导航菜单' }).click();
+    const drawer = page.getByTestId('shell-mobile-navigation-menu');
+    await expect(drawer).toBeVisible();
+    const input = drawer.locator('#shell-stock-search-drawer');
+    await expect(input).toBeVisible({ timeout: 30_000 });
+    const evidence = await inspectShell(page, '#shell-stock-search-drawer');
+    expect(evidence.theme).toBe(theme);
+    expect(evidence.inputRatio).toBeGreaterThanOrEqual(4.5);
+    expect(evidence.placeholderRatio).toBeGreaterThanOrEqual(4.5);
+    expect(Number.parseFloat(evidence.inputFontSize)).toBeGreaterThanOrEqual(12);
+    await expect(drawer.getByTestId('shell-mobile-account-center')).toContainText('Playwright Admin');
   });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await openAdminRouteWithHarness(page, '/zh/settings/system');
-  await expect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: '打开导航菜单' }).click();
-  const drawer = page.getByTestId('shell-mobile-navigation-menu');
-  await expect(drawer).toBeVisible();
-  const input = drawer.locator('#shell-stock-search-drawer');
-  await expect(input).toBeVisible({ timeout: 30_000 });
-  const evidence = await inspectShell(page, '#shell-stock-search-drawer');
-  expect(evidence.theme).toBe('dark');
-  expect(evidence.inputRatio).toBeGreaterThanOrEqual(4.5);
-  expect(evidence.placeholderRatio).toBeGreaterThanOrEqual(4.5);
-  expect(Number.parseFloat(evidence.inputFontSize)).toBeGreaterThanOrEqual(12);
-  await expect(drawer.getByTestId('shell-mobile-account-center')).toContainText('Playwright Admin');
-});
+}
