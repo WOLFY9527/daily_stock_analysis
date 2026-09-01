@@ -53,6 +53,24 @@ async function installSignedInHomeRoutes(page: Page) {
     await fulfillJson(route, signedInUser);
   });
 
+  await page.route('**/api/v1/history?**', async (route) => {
+    await fulfillJson(route, {
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [{
+        id: 3,
+        query_id: 'q3',
+        stock_code: 'ORCL',
+        stock_name: 'Oracle',
+        company_name: 'Oracle Corporation',
+        created_at: '2026-04-27T08:00:00Z',
+        generated_at: '2026-04-27T08:03:00Z',
+        is_test: false,
+      }],
+    });
+  });
+
   await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
     await fulfillJson(route, {
       symbols: ['ORCL'],

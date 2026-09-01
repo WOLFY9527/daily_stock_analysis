@@ -62,6 +62,19 @@ const MARKET_OPTIONS = [
   { id: 'CRYPTO', labelKey: 'markets.crypto' },
 ] as const;
 
+function selectedRotationMarketFromSearch(search: string): string {
+  const selectedMarket = new URLSearchParams(search).get('market') || '';
+  return MARKET_OPTIONS.some((market) => market.id === selectedMarket)
+    ? selectedMarket
+    : DEFAULT_MARKET;
+}
+
+function selectedRotationMarketFromCurrentUrl(): string {
+  return typeof window === 'undefined'
+    ? DEFAULT_MARKET
+    : selectedRotationMarketFromSearch(window.location.search);
+}
+
 const STAGE_LABEL_KEYS: Record<MarketRotationStage, string> = {
   early_watch: 'stages.earlyWatch',
   confirmed_rotation: 'stages.confirmedRotation',
@@ -2461,15 +2474,17 @@ type RadarPageAction =
   | { type: 'selectTheme'; themeId: string }
   | { type: 'setSearchQuery'; searchQuery: string };
 
-const initialRadarPageState: RadarPageState = {
-  payload: null,
-  loading: true,
-  loadingRequestId: 0,
-  error: null,
-  selectedMarket: DEFAULT_MARKET,
-  selectedThemeId: '',
-  searchQuery: '',
-};
+function createInitialRadarPageState(selectedMarket: string): RadarPageState {
+  return {
+    payload: null,
+    loading: true,
+    loadingRequestId: 0,
+    error: null,
+    selectedMarket,
+    selectedThemeId: '',
+    searchQuery: '',
+  };
+}
 
 function radarPageReducer(state: RadarPageState, action: RadarPageAction): RadarPageState {
   switch (action.type) {
@@ -2519,10 +2534,13 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
 
 const MarketRotationRadarPage: React.FC = () => {
   const { t } = useI18n();
-  const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
+  const [state, dispatch] = useReducer(
+    radarPageReducer,
+    selectedRotationMarketFromCurrentUrl(),
+    createInitialRadarPageState,
+  );
   const [showLoadingFallback, setShowLoadingFallback] = useState(false);
   const activeRequestIdRef = useRef(0);
-  const selectedMarketRef = useRef(DEFAULT_MARKET);
 
   const loadRadar = useCallback(async (market: string) => {
     const requestId = activeRequestIdRef.current + 1;
@@ -2562,12 +2580,12 @@ const MarketRotationRadarPage: React.FC = () => {
 
   useEffect(() => {
     queueMicrotask(() => {
-      void loadRadar(selectedMarketRef.current);
+      void loadRadar(state.selectedMarket);
     });
     return () => {
       activeRequestIdRef.current += 1;
     };
-  }, [loadRadar]);
+  }, [loadRadar, state.selectedMarket]);
 
   useEffect(() => {
     if (!state.loading || state.payload) {
@@ -2587,9 +2605,10 @@ const MarketRotationRadarPage: React.FC = () => {
     if (market === state.selectedMarket) {
       return;
     }
-    selectedMarketRef.current = market;
+    const search = new URLSearchParams(window.location.search);
+    search.set('market', market);
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${search.toString()}${window.location.hash}`);
     dispatch({ type: 'selectMarket', market });
-    void loadRadar(market);
   };
 
   const handleRefresh = () => {

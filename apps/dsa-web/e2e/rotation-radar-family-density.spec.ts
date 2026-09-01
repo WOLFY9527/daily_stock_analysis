@@ -308,7 +308,7 @@ appTest.describe('rotation radar family density', () => {
       await appExpect(page.getByTestId('rotation-radar-universe-list')).toContainText('中国 AI 应用');
 
       await switchRotationLanguage(page);
-      await appExpect(page).toHaveURL(/\/en\/market\/rotation-radar$/);
+      await appExpect(page).toHaveURL(/\/en\/market\/rotation-radar\?market=CN$/);
       await appExpect(page.getByRole('heading', { name: 'Rotation Radar' })).toBeVisible();
       await baseExpect.poll(() => requestedMarkets.at(-1)).toBe('CN');
       await appExpect(page.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');

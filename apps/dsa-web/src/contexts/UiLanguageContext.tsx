@@ -155,7 +155,9 @@ export const UiLanguageRouteSynchronizer: React.FC = () => {
   }
 
   const navigateToLanguage = useCallback((nextLanguage: UiLanguage) => {
-    const currentPath = `${location.pathname}${location.search}${location.hash}`;
+    const currentPath = typeof window === 'undefined'
+      ? `${location.pathname}${location.search}${location.hash}`
+      : `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const nextPath = shouldLocalizePath(location.pathname)
       ? buildLocalizedPath(currentPath, nextLanguage)
       : currentPath;

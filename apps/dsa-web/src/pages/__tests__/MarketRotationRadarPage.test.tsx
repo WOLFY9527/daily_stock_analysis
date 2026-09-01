@@ -1580,6 +1580,7 @@ describe('MarketRotationRadarPage', () => {
     fireEvent.click(screen.getByTestId('rotation-market-tab-CN'));
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
     await waitFor(() => expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力'));
+    expect(window.location.search).toBe('?market=CN');
     const callsBeforeLanguageSwitch = vi.mocked(marketRotationApi.getRotationRadar).mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: 'Toggle rotation language' }));
@@ -1587,6 +1588,7 @@ describe('MarketRotationRadarPage', () => {
     await screen.findByRole('heading', { level: 1, name: 'Rotation Radar' });
     await waitFor(() => expect(vi.mocked(marketRotationApi.getRotationRadar)).toHaveBeenCalledTimes(callsBeforeLanguageSwitch + 1));
     expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN');
+    expect(screen.getByTestId('rotation-location-path')).toHaveTextContent('/en/market/rotation-radar?market=CN');
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
   });
