@@ -260,12 +260,26 @@ test.describe.serial('qualified release real runtime', () => {
 
   test('professional backtest parsing preserves explicit identity and rejects unqualified indicator prose', async ({ page }) => {
     const pageErrors: Error[] = [];
+    const consoleErrors: string[] = [];
+    let parseRequestCount = 0;
+    let parse5xx = 0;
     let ruleRunRequests = 0;
     let mainFrameNavigations = 0;
     page.on('pageerror', (error) => pageErrors.push(error));
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
     page.on('request', (request) => {
+      if (request.url().endsWith('/api/v1/backtest/rule/parse') && request.method() === 'POST') {
+        parseRequestCount += 1;
+      }
       if (request.url().endsWith('/api/v1/backtest/rule/run') && request.method() === 'POST') {
         ruleRunRequests += 1;
+      }
+    });
+    page.on('response', (response) => {
+      if (response.url().endsWith('/api/v1/backtest/rule/parse') && response.request().method() === 'POST' && response.status() >= 500) {
+        parse5xx += 1;
       }
     });
     page.on('framenavigated', (frame) => {
@@ -275,16 +289,19 @@ test.describe.serial('qualified release real runtime', () => {
     await login(page, memberUsername, memberPassword, '/en/backtest');
     await page.getByRole('tab', { name: 'Research diagnostics' }).click();
     await expect(page.getByTestId('pro-backtest-workspace')).toBeVisible();
+    await page.getByTestId('pro-workflow-step-assets').click();
+    const assetsStep = page.getByTestId('pro-step-assets');
+    await expect(assetsStep).toBeVisible();
+    const ticker = assetsStep.getByLabel('Ticker');
+    await expect(ticker).toHaveValue('');
     await page.getByTestId('pro-workflow-step-strategy').click();
     const strategyStep = page.getByTestId('pro-step-strategy');
     await expect(strategyStep).toBeVisible();
 
-    const ticker = page.getByLabel('Ticker');
     const strategyText = page.getByLabel('Strategy text');
-    const confirmation = page.getByLabel('Confirm strategy parse result');
+    const confirmation = strategyStep.getByLabel('Confirm parse result');
     const execute = page.getByRole('button', { name: 'Execute backtest task' });
     const indicatorStrategy = 'RSI below 30 buy and RSI above 70 sell';
-    await expect(ticker).toHaveValue('');
     await strategyText.fill(indicatorStrategy);
 
     const beforeMissingParseNavigations = mainFrameNavigations;
@@ -308,13 +325,15 @@ test.describe.serial('qualified release real runtime', () => {
     expect(missingSpec).not.toHaveProperty('symbol');
     expect(missingDetails.map((item) => item.code)).toContain('unsupported_missing_symbol');
     expect(missingDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
-    await expect(ticker).toHaveValue('');
     await expect(page.getByTestId('pro-unsupported-guidance')).toBeVisible();
+    await expect(page.getByTestId('pro-execution-rail')).toContainText('--');
     await expect(confirmation).toBeDisabled();
     await expect(execute).toBeDisabled();
     expect(mainFrameNavigations).toBe(beforeMissingParseNavigations);
 
-    await page.getByTestId('backtest-control-section-run').getByRole('button', { name: 'Reset' }).click();
+    await strategyStep.getByRole('button', { name: 'Reset' }).click();
+    await page.getByTestId('pro-workflow-step-assets').click();
+    await expect(assetsStep).toBeVisible();
     await ticker.fill('AAPL');
     await page.getByTestId('pro-workflow-step-strategy').click();
     await expect(strategyStep).toBeVisible();
@@ -338,14 +357,17 @@ test.describe.serial('qualified release real runtime', () => {
     expect(explicitPayload.executable).toBe(true);
     expect(explicitSpec.symbol).toBe('AAPL');
     expect(explicitDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
-    await expect(ticker).toHaveValue('AAPL');
     await expect(page.getByTestId('pro-unsupported-guidance')).toHaveCount(0);
+    await expect(page.getByTestId('pro-execution-rail')).toContainText('AAPL');
     await expect(confirmation).toBeEnabled();
     await confirmation.check();
     await expect(execute).toBeEnabled();
     expect(mainFrameNavigations).toBe(beforeExplicitParseNavigations);
+    expect(parseRequestCount).toBeGreaterThanOrEqual(2);
+    expect(parse5xx).toBe(0);
     expect(ruleRunRequests).toBe(0);
     expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
     await expect(page).toHaveURL(/\/en\/backtest$/);
     expect((await page.context().cookies(baseUrl)).some((cookie) => cookie.name === 'dsa_session')).toBe(true);
   });
