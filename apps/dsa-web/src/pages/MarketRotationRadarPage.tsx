@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -2522,8 +2522,9 @@ const MarketRotationRadarPage: React.FC = () => {
   const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
   const [showLoadingFallback, setShowLoadingFallback] = useState(false);
   const activeRequestIdRef = useRef(0);
+  const selectedMarketRef = useRef(DEFAULT_MARKET);
 
-  const loadRadar = async (market: string) => {
+  const loadRadar = useCallback(async (market: string) => {
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
     dispatch({ type: 'loadStarted', requestId });
@@ -2557,16 +2558,16 @@ const MarketRotationRadarPage: React.FC = () => {
         window.clearTimeout(timeoutHandle);
       }
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     queueMicrotask(() => {
-      void loadRadar(DEFAULT_MARKET);
+      void loadRadar(selectedMarketRef.current);
     });
     return () => {
       activeRequestIdRef.current += 1;
     };
-  }, [t]);
+  }, [loadRadar]);
 
   useEffect(() => {
     if (!state.loading || state.payload) {
@@ -2586,6 +2587,7 @@ const MarketRotationRadarPage: React.FC = () => {
     if (market === state.selectedMarket) {
       return;
     }
+    selectedMarketRef.current = market;
     dispatch({ type: 'selectMarket', market });
     void loadRadar(market);
   };

@@ -1573,6 +1573,24 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用 Cluster');
   });
 
+  it('preserves the selected market and its payload when the language changes', async () => {
+    renderLocalizedRotation('/zh/market/rotation-radar', { includeLanguageToggle: true });
+
+    await screen.findByTestId('rotation-radar-mode-controls');
+    fireEvent.click(screen.getByTestId('rotation-market-tab-CN'));
+    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
+    await waitFor(() => expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力'));
+    const callsBeforeLanguageSwitch = vi.mocked(marketRotationApi.getRotationRadar).mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle rotation language' }));
+
+    await screen.findByRole('heading', { level: 1, name: 'Rotation Radar' });
+    await waitFor(() => expect(vi.mocked(marketRotationApi.getRotationRadar)).toHaveBeenCalledTimes(callsBeforeLanguageSwitch + 1));
+    expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN');
+    expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
+  });
+
   it('shows a bounded user-visible fallback while the route request remains unresolved', async () => {
     vi.useFakeTimers();
     vi.mocked(marketRotationApi.getRotationRadar).mockImplementationOnce(

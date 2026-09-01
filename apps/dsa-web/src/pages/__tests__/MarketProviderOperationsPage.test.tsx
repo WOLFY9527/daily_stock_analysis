@@ -32,6 +32,8 @@ const { getProfessionalDataCapabilitiesAdmin } = vi.hoisted(() => ({
   getProfessionalDataCapabilitiesAdmin: vi.fn(),
 }));
 
+const languageState = vi.hoisted(() => ({ language: 'zh' as 'zh' | 'en' }));
+
 vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
@@ -53,12 +55,15 @@ vi.mock('../../api/market', async () => {
   };
 });
 
-vi.mock('../../contexts/UiLanguageContext', () => ({
-  useI18n: () => ({
-    language: 'zh',
-    t: (key: string) => key,
-  }),
-}));
+vi.mock('../../contexts/UiLanguageContext', async () => {
+  const { translate } = await vi.importActual<typeof import('../../i18n/core')>('../../i18n/core');
+  return {
+    useI18n: () => ({
+      language: languageState.language,
+      t: (key: string, vars?: Record<string, string | number | undefined>) => translate(languageState.language, key, vars),
+    }),
+  };
+});
 
 const populatedPayload = {
   generatedAt: '2026-05-06T09:10:00+08:00',
@@ -1274,6 +1279,7 @@ async function renderMarketProviderOperationsPage() {
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    languageState.language = 'zh';
     window.history.replaceState({}, '', '/zh/admin/market-providers');
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
@@ -1649,6 +1655,21 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
     expect(matrixDisclosure).toHaveTextContent('score=false');
     expect(matrixDisclosure).toHaveTextContent('cache-required');
+  });
+
+  it('projects the provider L0 impact, action, evidence, and surface labels through the English catalog', async () => {
+    languageState.language = 'en';
+    window.history.replaceState({}, '', '/en/admin/market-providers');
+    getOperations.mockResolvedValue(populatedPayload);
+
+    await renderMarketProviderOperationsPage();
+
+    const overviewStrip = await screen.findByTestId('market-provider-l0-overview-strip');
+    expect(within(overviewStrip).getByText('2 degraded signals affect Market Overview, Liquidity Monitor, Scanner, and 4 more')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Review source gaps first, then verify local readiness diagnostics.')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Roadmap / local market readiness diagnostics / Admin Logs')).toBeInTheDocument();
+    expect(overviewStrip).not.toHaveTextContent('个降级信号');
+    expect(overviewStrip).not.toHaveTextContent('先看来源缺口');
   });
 
   it('renders historicalOhlcvCachePreflight for representative CN and US symbols without enabling seed by default', async () => {

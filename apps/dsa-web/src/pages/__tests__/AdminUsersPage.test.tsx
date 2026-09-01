@@ -28,6 +28,8 @@ const {
   useProductSurfaceMock: vi.fn(),
 }));
 
+const languageState = vi.hoisted(() => ({ language: 'zh' as 'zh' | 'en' }));
+
 vi.mock('../../api/adminUsers', async () => {
   const actual = await vi.importActual<typeof import('../../api/adminUsers')>('../../api/adminUsers');
   return {
@@ -47,12 +49,15 @@ vi.mock('../../api/adminUsers', async () => {
   };
 });
 
-vi.mock('../../contexts/UiLanguageContext', () => ({
-  useI18n: () => ({
-    language: 'zh',
-    t: (key: string) => key,
-  }),
-}));
+vi.mock('../../contexts/UiLanguageContext', async () => {
+  const { translate } = await vi.importActual<typeof import('../../i18n/core')>('../../i18n/core');
+  return {
+    useI18n: () => ({
+      language: languageState.language,
+      t: (key: string, vars?: Record<string, string | number | undefined>) => translate(languageState.language, key, vars),
+    }),
+  };
+});
 
 vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
@@ -291,6 +296,9 @@ function renderAt(path: string) {
         <Route path="/zh/admin/users" element={<AdminUsersPage />} />
         <Route path="/zh/admin/users/:userId" element={<AdminUsersPage />} />
         <Route path="/zh/admin/users/:userId/activity" element={<AdminUsersPage />} />
+        <Route path="/en/admin/users" element={<AdminUsersPage />} />
+        <Route path="/en/admin/users/:userId" element={<AdminUsersPage />} />
+        <Route path="/en/admin/users/:userId/activity" element={<AdminUsersPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -324,6 +332,7 @@ function expectNoSecrets() {
 describe('AdminUsersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    languageState.language = 'zh';
     useProductSurfaceMock.mockReturnValue(fullCapabilities);
   });
 
@@ -352,6 +361,20 @@ describe('AdminUsersPage', () => {
     expect(screen.getAllByText('只读投影').length).toBeGreaterThan(0);
     expect(screen.getByText('Admin Logs')).toHaveAttribute('href', '/zh/admin/logs?user_id=user-123');
     expectNoSecrets();
+  });
+
+  it('projects the L0 user summary through the English catalog without changing the user payload', async () => {
+    languageState.language = 'en';
+    listUsers.mockResolvedValue({ items: [userItem], total: 1, limit: 50, offset: 0, hasMore: false });
+
+    renderAt('/en/admin/users');
+
+    const overviewStrip = await screen.findByTestId('admin-users-l0-overview-strip');
+    await waitFor(() => expect(overviewStrip).toHaveTextContent('1 users / 1 active sessions'));
+    expect(within(overviewStrip).getByText('Open user details or admin logs')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('User directory / Admin Logs')).toBeInTheDocument();
+    expect(overviewStrip).not.toHaveTextContent('个用户');
+    expect(overviewStrip).not.toHaveTextContent('打开用户详情');
   });
 
   it('hides admin log drill-through links without ops log capability', async () => {

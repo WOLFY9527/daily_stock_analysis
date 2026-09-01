@@ -1208,7 +1208,7 @@ const AdminUsersPage: React.FC = () => {
   const { userId } = useParams<{ userId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const {
     canReadUsers,
     canReadUserActivity,
@@ -1332,24 +1332,27 @@ const AdminUsersPage: React.FC = () => {
   const directoryActiveSessions = (usersState.data?.items || []).reduce((sum, user) => sum + (user.sessionSummary?.activeCount || 0), 0);
   const headerCurrentState = userId
     ? activeUser
-      ? `${activeUser.isActive ? '活跃' : '停用'} · ${activeUser.sessionSummary.activeCount} 个活跃会话`
+      ? t('adminL0.users.detailCurrentState', {
+        status: t(activeUser.isActive ? 'adminL0.users.statusActive' : 'adminL0.users.statusInactive'),
+        sessions: activeUser.sessionSummary.activeCount,
+      })
       : detailState.loading
-      ? '读取用户详情'
-      : '等待用户详情'
+      ? t('adminL0.users.loadingDetail')
+      : t('adminL0.users.waitingDetail')
     : usersState.data
-    ? `${usersState.data.total} 个用户 / ${directoryActiveSessions} 个活跃会话`
+    ? t('adminL0.users.directoryCurrentState', { users: usersState.data.total, sessions: directoryActiveSessions })
     : usersState.loading
-    ? '读取用户目录'
-    : '等待目录快照';
+    ? t('adminL0.users.loadingDirectory')
+    : t('adminL0.users.waitingDirectory');
   const headerNextAction = userId
     ? activeDetailTab === 'security'
-      ? '核对审计原因与确认短语'
+      ? t('adminL0.users.actionSecurity')
       : activeDetailTab === 'portfolio'
-      ? '核对组合只读投影'
+      ? t('adminL0.users.actionPortfolio')
       : mode === 'activity'
-      ? '筛选活动时间线'
-      : '查看活动、组合或安全页签'
-    : '打开用户详情或审计日志';
+      ? t('adminL0.users.actionActivity')
+      : t('adminL0.users.actionDetail')
+    : t('adminL0.users.actionDirectory');
   const headerTrustState: AdminOpsTrustState = userId
     ? activeUser
       ? activeUser.isActive
@@ -1368,13 +1371,13 @@ const AdminUsersPage: React.FC = () => {
         ? 'unknown'
         : 'unknown';
   const headerImpact = userId
-    ? `${headerCurrentState} · 当前页只显示账号、会话与活动的安全投影。`
-    : `${headerCurrentState} · 目录支持下钻详情、活动与组合只读投影。`;
+    ? t('adminL0.users.impactDetail', { state: headerCurrentState })
+    : t('adminL0.users.impactDirectory', { state: headerCurrentState });
   const headerEvidenceRef = mode === 'activity'
-    ? '用户活动 / 时间线筛选'
+    ? t('adminL0.users.evidenceActivity')
     : userId
-      ? '用户详情 / 组合 / 安全页签'
-      : '用户目录 / Admin Logs';
+      ? t('adminL0.users.evidenceDetail')
+      : t('adminL0.users.evidenceDirectory');
   const headerLastUpdated = userId
     ? formatDate(activeUser?.updatedAt || activeUser?.lastSeenAt || detailState.data?.sessions?.[0]?.lastSeenAt || activityState.data?.items?.[0]?.timestamp || null)
     : formatDate(usersState.data?.items?.[0]?.updatedAt || usersState.data?.items?.[0]?.lastSeenAt || null);

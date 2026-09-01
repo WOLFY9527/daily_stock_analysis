@@ -197,6 +197,9 @@ async function installSignedInHomeRoutes(page: Page) {
             stopLoss: '117.40',
             buildStrategy: 'Use mocked data only to review the chart surface.',
           },
+          highlights: {
+            latestNews: ['2026-06-02 Oracle announces cloud infrastructure contract.'],
+          },
         },
         analysisResult: {
           singleStockEvidencePacket: {
@@ -327,6 +330,8 @@ test.describe('Home chart browser smoke', () => {
     await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('缩放');
     await expect(page.getByTestId('home-candlestick-chart-fallback')).toHaveCount(0);
     await expect(page.getByTestId('home-candlestick-unavailable')).toHaveCount(0);
+    await expect(page.getByTestId('home-linear-events')).toContainText('高优先');
+    await expect(page.getByRole('button', { name: '完整报告' })).toBeVisible();
 
     const regionText = await chartSection.innerText();
     expect(regionText).not.toMatch(homeChartLeakPattern);
@@ -339,6 +344,13 @@ test.describe('Home chart browser smoke', () => {
     await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('Price');
     await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('Volume');
     await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('Zoom');
+    await expect(page.getByTestId('home-linear-events')).toContainText('High priority');
+    await expect(page.getByTestId('home-linear-events')).not.toContainText('高优先');
+    await page.getByRole('button', { name: 'Full Report' }).click();
+    const fullReport = page.getByTestId('home-bento-full-report-drawer');
+    await expect(fullReport).toBeVisible();
+    await expect(fullReport).toContainText('Research status');
+    await expect(fullReport).not.toContainText('研究状态');
     await expectNoHorizontalOverflow(page);
     expect(consoleErrors).toEqual([]);
     expect(unhandledApiRoutes).toEqual([]);

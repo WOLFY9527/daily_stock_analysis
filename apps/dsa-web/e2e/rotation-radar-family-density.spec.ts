@@ -18,12 +18,13 @@ async function switchRotationLanguage(page: Parameters<typeof openSignedInRoute>
   await toggle.click();
 }
 
-function familyDensityPayload() {
+function familyDensityPayload(market = 'US') {
   const timestamp = '2026-05-07T09:50:00Z';
+  const primaryThemeName = market === 'CN' ? '中国 AI 应用' : 'AI 应用';
 
   return {
     endpoint: '/api/v1/market/rotation-radar',
-    market: 'US',
+    market,
     supportedMarkets: ['US', 'CN', 'HK', 'CRYPTO'],
     generatedAt: timestamp,
     source: 'computed',
@@ -60,7 +61,7 @@ function familyDensityPayload() {
       strongestThemes: [
         {
           id: 'ai_applications',
-          name: 'AI 应用',
+          name: primaryThemeName,
           rotationScore: 78,
           confidence: 0.72,
           stage: 'confirmed_rotation',
@@ -84,7 +85,7 @@ function familyDensityPayload() {
           familyId: 'ai',
           familyName: 'AI / 软件',
           themeIds: ['ai_applications'],
-          themeNames: ['AI 应用'],
+          themeNames: [primaryThemeName],
           leaderThemeIds: ['ai_applications'],
           themeCount: 1,
           signalThemeCount: 1,
@@ -121,7 +122,7 @@ function familyDensityPayload() {
     themes: [
       {
         id: 'ai_applications',
-        name: 'AI 应用',
+        name: primaryThemeName,
         englishName: 'AI Applications',
         focus: '应用层软件、数据工作流与企业 AI 落地',
         benchmark: 'QQQ',
@@ -243,7 +244,7 @@ function familyDensityPayload() {
       },
     ],
     consumerEvidenceSnapshot: {
-      market: 'US',
+      market,
       generatedAt: timestamp,
       asOf: timestamp,
       freshness: 'partial',
@@ -267,8 +268,11 @@ appTest.describe('rotation radar family density', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installSignedInSessionRoutes(page);
+      const requestedMarkets: string[] = [];
       await page.route('**/api/v1/market/rotation-radar**', async (route) => {
-        await fulfillJson(route, familyDensityPayload());
+        const requestedMarket = new URL(route.request().url()).searchParams.get('market') || 'US';
+        requestedMarkets.push(requestedMarket);
+        await fulfillJson(route, familyDensityPayload(requestedMarket));
       });
 
       await openSignedInRoute(page, '/zh/market/rotation-radar');
@@ -299,10 +303,16 @@ appTest.describe('rotation radar family density', () => {
       baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
 
+      await page.getByTestId('rotation-market-tab-CN').click();
+      await baseExpect.poll(() => requestedMarkets.at(-1)).toBe('CN');
+      await appExpect(page.getByTestId('rotation-radar-universe-list')).toContainText('中国 AI 应用');
+
       await switchRotationLanguage(page);
       await appExpect(page).toHaveURL(/\/en\/market\/rotation-radar$/);
       await appExpect(page.getByRole('heading', { name: 'Rotation Radar' })).toBeVisible();
-      await appExpect(page.getByTestId('rotation-market-tab-US')).toContainText('US');
+      await baseExpect.poll(() => requestedMarkets.at(-1)).toBe('CN');
+      await appExpect(page.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
+      await appExpect(page.getByTestId('rotation-radar-universe-list')).toContainText('中国 AI 应用');
       await appExpect(page.getByPlaceholder('Search themes, English names, or members')).toBeVisible();
       await appExpect(page.getByTestId('rotation-radar-mechanics-details').getByRole('button', { name: 'Expand How to read rotation' })).toHaveAttribute('aria-expanded', 'false');
       await appExpect(page.locator('html')).toHaveAttribute('lang', 'en');

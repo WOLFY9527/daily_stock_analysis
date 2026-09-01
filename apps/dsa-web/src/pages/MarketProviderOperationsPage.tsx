@@ -1070,6 +1070,34 @@ function resolveChecklistReadinessSurfaces(check: MarketDataReadinessCheck): str
   );
 }
 
+function localizedL0SurfaceLabel(
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+  surface: string,
+): string {
+  if (surface === 'Market Overview') return t('adminL0.surfaces.marketOverview');
+  if (surface === 'Liquidity Monitor') return t('adminL0.surfaces.liquidityMonitor');
+  if (surface === 'Rotation Radar') return t('adminL0.surfaces.rotationRadar');
+  if (surface === 'Scanner') return t('adminL0.surfaces.scanner');
+  if (surface === 'Portfolio') return t('adminL0.surfaces.portfolio');
+  if (surface === 'Watchlist') return t('adminL0.surfaces.watchlist');
+  if (surface === 'Options Lab') return t('adminL0.surfaces.optionsLab');
+  if (surface === 'Backtest') return t('adminL0.surfaces.backtest');
+  if (surface === PROVIDER_OPS_DIAGNOSTIC_SURFACE) return t('adminL0.surfaces.providerOps');
+  return surface;
+}
+
+function formatL0SurfaceList(
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+  surfaces: string[],
+): string {
+  const labels = surfaces.map((surface) => localizedL0SurfaceLabel(t, surface));
+  if (!labels.length) return t('adminL0.provider.affectedSurfaceFallback');
+  const visible = labels.slice(0, 3).join(t('adminL0.provider.affectedSurfaceSeparator'));
+  return labels.length > 3
+    ? t('adminL0.provider.affectedSurfaceMore', { surfaces: visible, remaining: labels.length - 3 })
+    : visible;
+}
+
 function pushChecklistBadge(
   badges: SetupChecklistBadge[],
   condition: boolean,
@@ -4205,7 +4233,7 @@ const EmptyErrorState: React.FC = () => (
 );
 
 const MarketProviderOperationsPage: React.FC = () => {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
@@ -4449,17 +4477,20 @@ const MarketProviderOperationsPage: React.FC = () => {
           ? 'healthy'
           : 'observe';
   const l0Impact = summaryState === 'unavailable'
-    ? '运维汇总不可用，无法确认跨页面影响。'
+    ? t('adminL0.provider.impactUnavailable')
     : topSummary.affectedSurfaces.length
-    ? `${formatNumber(degradedCount, 0)} 个降级信号，影响 ${formatReadableList(topSummary.affectedSurfaces, '影响面待汇总')}`
-    : (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 个降级信号待核对` : '当前未见跨页面影响汇总');
+    ? t('adminL0.provider.impactDegradedSurfaces', {
+      count: formatNumber(degradedCount, 0),
+      surfaces: formatL0SurfaceList(t, topSummary.affectedSurfaces),
+    })
+    : (degradedCount > 0 ? t('adminL0.provider.impactDegraded', { count: formatNumber(degradedCount, 0) }) : t('adminL0.provider.impactNone'));
   const l0RecommendedAction = summaryState === 'unavailable'
-    ? '重新读取运维快照后再判断数据源状态。'
+    ? t('adminL0.provider.actionUnavailable')
     : topSummary.missingSources.length > 0
-    ? '先看来源缺口，再核对本地就绪诊断。'
+    ? t('adminL0.provider.actionMissingSources')
     : degradedCount > 0
-      ? '先看失败率、熔断与缓存，再下钻最近异常。'
-      : '保持只读观察，按需切换影响面。';
+      ? t('adminL0.provider.actionDegraded')
+      : t('adminL0.provider.actionObserve');
 
   return (
     <div
@@ -4486,7 +4517,7 @@ const MarketProviderOperationsPage: React.FC = () => {
             systemTrustState={l0TrustState}
             impact={l0Impact}
             recommendedAction={l0RecommendedAction}
-            evidenceRef="路线图 / 本地行情就绪诊断 / Admin Logs"
+            evidenceRef={t('adminL0.provider.evidenceRef')}
             lastUpdated={formatDisplayDate(response?.generatedAt, '待统计')}
           />
           {/* First viewport prioritizes blocked / degraded / needs-action before drill chrome */}

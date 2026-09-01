@@ -539,19 +539,52 @@ test.describe('admin system-control rail contract', () => {
     });
   }
 
-  test('projects Admin Logs product chrome in both route locales without overflow', async ({ page }) => {
+  test('projects Admin Logs product chrome and L0 owners in both route locales without overflow', async ({ page }) => {
     await installAdminRailMocks(page);
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       for (const locale of ['zh', 'en'] as const) {
         await page.setViewportSize(viewport);
-        await page.goto(`/${locale}/admin/logs`);
+        await page.goto(`/${locale}/admin/logs?eventId=admin-rail-contract-event`);
         await page.waitForLoadState('domcontentloaded');
 
         await expect(page.getByTestId('admin-logs-workspace')).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
         await expect(page.getByRole('heading', { name: locale === 'en' ? 'Admin Logs' : '管理员日志' })).toBeVisible();
         await expect(page.getByRole('textbox', { name: locale === 'en' ? 'Search logs' : '搜索日志' })).toBeVisible();
+        const storageTitle = locale === 'en'
+          ? 'L4 storage advisory and explicit cleanup: size / retention / preview'
+          : 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览';
+        await expect(
+          page.getByTestId('admin-logs-storage-disclosure').getByRole('button', {
+            name: `${locale === 'en' ? 'Expand' : '展开'} ${storageTitle}`,
+          }),
+        ).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.getByTestId('admin-logs-drill-highlight')).toContainText(
+          locale === 'en'
+            ? 'Filters were prefilled from a safe reference; highlighted event reference: admin-rail-contract-event'
+            : '已从安全引用预填筛选，当前高亮事件引用：admin-rail-contract-event',
+        );
+        await expectNoHorizontalOverflow(page);
+
+        await page.goto(`/${locale}/admin/users`);
+        const usersL0 = page.getByTestId('admin-users-l0-overview-strip');
+        await expect(usersL0).toBeVisible({ timeout: 15_000 });
+        await expect(usersL0).toContainText(locale === 'en' ? 'L0 Overview' : 'L0 总览');
+        await expect(usersL0).toContainText(locale === 'en' ? 'Recommended action' : '建议动作');
+        if (locale === 'en') {
+          expect(await usersL0.innerText()).not.toMatch(/[一-龥]/);
+        }
+        await expectNoHorizontalOverflow(page);
+
+        await page.goto(`/${locale}/admin/market-providers`);
+        const providerL0 = page.getByTestId('market-provider-l0-overview-strip');
+        await expect(providerL0).toBeVisible({ timeout: 15_000 });
+        await expect(providerL0).toContainText(locale === 'en' ? 'L0 Overview' : 'L0 总览');
+        await expect(providerL0).toContainText(locale === 'en' ? 'Evidence reference' : '证据参考');
+        if (locale === 'en') {
+          expect(await providerL0.innerText()).not.toMatch(/[一-龥]/);
+        }
         await expectNoHorizontalOverflow(page);
       }
     }

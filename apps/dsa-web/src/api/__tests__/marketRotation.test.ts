@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import apiClient from '../index';
 import {
   buildAlpacaQuoteAuthorityReadinessView,
@@ -14,6 +15,8 @@ vi.mock('../index', () => ({
 }));
 
 describe('marketRotationApi', () => {
+  const zhRotationCopy = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -128,7 +131,7 @@ describe('marketRotationApi', () => {
     } as never);
 
     const payload = await marketRotationApi.getRotationRadar();
-    const view = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness);
+    const view = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness, zhRotationCopy);
 
     expect(payload.alpacaQuoteAuthorityReadiness?.providerConfigured).toBe(false);
     expect(payload.alpacaQuoteAuthorityReadiness?.sourceAuthority).toBe('unavailable');
@@ -191,7 +194,7 @@ describe('marketRotationApi', () => {
   });
 
   it('keeps missing ETF quote readiness backward compatible with safe defaults', () => {
-    const view = buildAlpacaQuoteAuthorityReadinessView(undefined);
+    const view = buildAlpacaQuoteAuthorityReadinessView(undefined, zhRotationCopy);
 
     expect(view.label).toBe('ETF引用待补');
     expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '报价待补', '评分待确认']);
@@ -203,7 +206,7 @@ describe('marketRotationApi', () => {
   });
 
   it('keeps absent rotation evidence readiness fail-closed', () => {
-    const view = buildMarketRotationEvidenceBoundaryView(undefined);
+    const view = buildMarketRotationEvidenceBoundaryView(undefined, zhRotationCopy);
 
     expect(view.label).toBe('证据边界待确认');
     expect(view.chips.map((chip) => chip.label)).toEqual(['证据边界待确认', '广度待补', '板块轮动待补', '风险状态待补']);
@@ -269,7 +272,7 @@ describe('marketRotationApi', () => {
           },
         ],
       },
-    } as MarketRotationRadarResponse);
+    } as MarketRotationRadarResponse, zhRotationCopy);
 
     expect(view.label).toBe('演示样本，仅观察');
     expect(view.nextEvidence).toBe('仅保留观察，不升格结论。');
