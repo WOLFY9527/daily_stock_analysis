@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AnalysisReport } from '../../../types/analysis';
+import { translate } from '../../../i18n/core';
 import FullDecisionReportDrawer from '../FullDecisionReportDrawer';
 
 vi.mock('../../common/Drawer', () => ({
@@ -12,6 +13,8 @@ vi.mock('../../common/Drawer', () => ({
 
 const forbiddenConsumerReportPattern =
   /小仓试错|第二笔|25%-35%|强行交易|投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|仓位|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|battle plan|sniper|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
+
+const t = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
 
 function buildUnsafeReportFixture(): AnalysisReport {
   return {
@@ -209,6 +212,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         }}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildUnsafeReportFixture()}
       />,
     );
@@ -245,6 +250,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         }}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildMismatchedReportFixture()}
       />,
     );
@@ -284,6 +291,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         }}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildUnsafeReportFixture()}
       />,
     );
@@ -331,6 +340,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         }}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildUnsafeReportFixture()}
       />,
     );
@@ -373,6 +384,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         dashboard={maliciousDashboardFixture()}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildMaliciousIdentityReportFixture()}
       />,
     );
@@ -433,6 +446,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         }}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildUnsafeReportFixture()}
       />,
     );
@@ -474,6 +489,8 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
         dashboard={maliciousDashboardFixture()}
         isOpen
         onClose={() => undefined}
+        language="zh"
+        t={t}
         report={buildMaliciousIdentityReportFixture()}
       />,
     );
