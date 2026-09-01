@@ -147,6 +147,8 @@ type HomeBentoDashboardPageProps = {
   isGuest?: boolean;
 };
 
+type HomeTranslate = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
 type GuestMarketSnapshotState = 'loading' | 'ready' | 'limited' | 'unavailable';
 
 type GuestMarketSnapshotView = {
@@ -3506,9 +3508,11 @@ function HomeFundamentalsSummaryBlock({
 function LinearEventsStrip({
   locale,
   report,
+  t,
 }: {
   locale: DashboardLocale;
   report?: AnalysisReport | null;
+  t: HomeTranslate;
 }) {
   const isEnglish = locale === 'en';
   const events = buildHomeCatalystEvents(report, locale);
@@ -3555,7 +3559,7 @@ function LinearEventsStrip({
                 >
                   {catalystImpactLabel(event, locale)}
                 </span>
-                <span>{event.importance === 'high' ? '高优先' : '中优先'}</span>
+                <span>{event.importance === 'high' ? t('home.events.priority.high') : t('home.events.priority.medium')}</span>
               </div>
             </div>
             <div className="shrink-0 text-right text-[11px] text-[color:var(--wolfy-text-muted)]">
@@ -6592,12 +6596,12 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
   );
 }
 
-function FullDecisionReportDrawerFallback({ onClose }: { onClose: () => void }) {
+function FullDecisionReportDrawerFallback({ onClose, t }: { onClose: () => void; t: HomeTranslate }) {
   return (
     <Drawer
       isOpen
       onClose={onClose}
-      title="完整报告"
+      title={t('home.fullReport.title')}
       width="max-w-[min(100vw,65rem)]"
       zIndex={90}
       bodyClassName="overflow-x-hidden"
@@ -6607,9 +6611,9 @@ function FullDecisionReportDrawerFallback({ onClose }: { onClose: () => void }) 
         data-testid="home-bento-full-report-drawer-fallback"
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">WOLFYSTOCK EQUITY RESEARCH</p>
-        <h2 className="mt-3 text-xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">完整报告加载中</h2>
+        <h2 className="mt-3 text-xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{t('home.fullReport.loadingTitle')}</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
-          正在按需加载完整报告视图，报告内容、复制、导出和打印行为保持不变。
+          {t('home.fullReport.loadingBody')}
         </p>
         <div className="mt-5 space-y-3">
           {[0, 1, 2].map((item) => (
@@ -8560,6 +8564,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             <LinearEventsStrip
                               locale={locale}
                               report={activeTraceReport}
+                              t={t}
                             />
                           </div>
                         ) : null}
@@ -8585,12 +8590,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       />
 
       {isFullReportDrawerOpen ? (
-        <Suspense fallback={<FullDecisionReportDrawerFallback onClose={closeFullReportDrawer} />}>
+        <Suspense fallback={<FullDecisionReportDrawerFallback onClose={closeFullReportDrawer} t={t} />}>
           <LazyFullDecisionReportDrawer
             isOpen={isFullReportDrawerOpen}
             onClose={closeFullReportDrawer}
             report={activeTraceReport}
             dashboard={dashboardData}
+            language={language}
+            t={t}
           />
         </Suspense>
       ) : null}

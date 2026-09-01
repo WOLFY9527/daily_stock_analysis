@@ -11,7 +11,6 @@ import type {
 import {
   buildInstitutionalReportMarkdown,
   consumerSafeReportPriceContext,
-  consumerSafeReportStatus,
   consumerSafeReportText,
   getCompanyDisplayName,
   getCompanyWithTicker,
@@ -49,6 +48,8 @@ type FullDecisionReportDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
   report: AnalysisReport | null;
+  language: 'en' | 'zh';
+  t: FullReportTranslate;
 };
 
 type FullReportSection = {
@@ -58,6 +59,8 @@ type FullReportSection = {
   bullets?: string[];
   checklist?: Array<{ label: string; status: string }>;
 };
+
+type FullReportTranslate = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
 type ReportIdentity = {
   companyName: string;
@@ -121,7 +124,7 @@ function getReportSource(report: AnalysisReport | null): StandardReport | undefi
 
 function listOrMissing(
   items?: Array<string | undefined | null>,
-  fallback = '暂无明确记录',
+  fallback = '--',
   mode: 'text' | 'price' = 'text',
 ): string[] {
   const seen = new Set<string>();
@@ -139,9 +142,9 @@ function listOrMissing(
   return values.length ? values : [fallback];
 }
 
-function normalizeChecklistStatus(item: StandardReportChecklistItem | string): { label: string; status: string } {
+function normalizeChecklistStatus(item: StandardReportChecklistItem | string, t: FullReportTranslate): { label: string; status: string } {
   if (typeof item === 'string') {
-    return { label: consumerSafeReportText(item, '研究包完整度待复核。'), status: '未知' };
+    return { label: consumerSafeReportText(item, t('home.fullReport.fallbacks.checklistReview')), status: t('home.fullReport.status.unknown') };
   }
   const status = String(item.status || '').toLowerCase();
   const normalized = status === 'pass'
@@ -149,14 +152,14 @@ function normalizeChecklistStatus(item: StandardReportChecklistItem | string): {
     : status === 'fail'
       ? 'FAIL'
       : status === 'warn'
-        ? 'WARN'
-        : status === 'na'
-          ? 'N/A'
-          : '未知';
-  return { label: consumerSafeReportText(item.text, '研究包完整度待复核。'), status: normalized };
+      ? 'WARN'
+      : status === 'na'
+        ? 'N/A'
+          : t('home.fullReport.status.unknown');
+  return { label: consumerSafeReportText(item.text, t('home.fullReport.fallbacks.checklistReview')), status: normalized };
 }
 
-function formatReportDateTime(value?: string): string {
+function formatReportDateTime(value: string | undefined, locale: 'en' | 'zh'): string {
   const text = String(value || '').trim();
   if (!text) {
     return '--';
@@ -165,10 +168,30 @@ function formatReportDateTime(value?: string): string {
   if (Number.isNaN(date.getTime())) {
     return text;
   }
-  return REPORT_DATE_FORMATTER.format(date);
+  if (locale === 'zh') {
+    return REPORT_DATE_FORMATTER.format(date);
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
 }
 
-function buildReportIdentity(report: AnalysisReport | null, dashboard?: DashboardPayload, override?: Partial<ReportIdentity>): ReportIdentity {
+function reportStatusLabel(value: unknown, t: FullReportTranslate): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'used' || normalized === 'available' || normalized === 'ready') return t('home.fullReport.status.available');
+  if (normalized === 'fallback' || normalized === 'stale' || normalized === 'cached') return t('home.fullReport.status.recentData');
+  if (normalized === 'partial' || normalized === 'degraded') return t('home.fullReport.status.partialData');
+  if (normalized === 'missing' || normalized === 'error' || normalized === 'unavailable') return t('home.fullReport.status.insufficientData');
+  return t('home.fullReport.status.unconfirmed');
+}
+
+function buildReportIdentity(report: AnalysisReport | null, dashboard: DashboardPayload | undefined, t: FullReportTranslate, locale: 'en' | 'zh', override?: Partial<ReportIdentity>): ReportIdentity {
   const ticker = override?.ticker || getSymbolDisplay(report) || dashboard?.ticker || '--';
   const companyName = override?.companyName || getCompanyDisplayName(report) || dashboard?.decision.company || ticker;
   const generatedAt = override?.generatedAt
@@ -191,20 +214,19 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
   const statuses = dataSources.flatMap((source) => source.status ? [source.status] : []);
   const sourceStatus = statuses.length
     ? statuses.map((status) => {
-      const normalized = String(status || '').trim().toLowerCase();
-      return consumerSafeReportStatus(normalized);
+      return reportStatusLabel(status, t);
     }).join(' / ')
-    : '数据覆盖未确认';
+    : t('home.fullReport.fallbacks.coverageUnconfirmed');
 
   return {
     companyName,
     ticker,
     companyWithTicker: getCompanyWithTicker(report || { companyName, symbol: ticker }),
-    generatedAt: formatReportDateTime(generatedAt),
+    generatedAt: formatReportDateTime(generatedAt, locale),
     market: override?.market || report?.decisionTrace?.market || '--',
     currency: override?.currency || safeReportValue(readObjectField(report, ['details', 'standardReport', 'summaryPanel', 'currency']) || readObjectField(report, ['details', 'standardReport', 'market', 'currency'])),
     providers: override?.providers || providers || '--',
-    horizon: override?.horizon || safeReportValue(report?.details?.standardReport?.summaryPanel?.timeSensitivity || report?.details?.standardReport?.decisionPanel?.marketStructure || '短线 / 中短线'),
+    horizon: override?.horizon || safeReportValue(report?.details?.standardReport?.summaryPanel?.timeSensitivity || report?.details?.standardReport?.decisionPanel?.marketStructure || t('home.fullReport.fallbacks.horizon')),
     dataStatus: override?.dataStatus || sourceStatus || '--',
   };
 }
@@ -219,7 +241,7 @@ function hasReportIdentityMismatch(report: AnalysisReport | null, dashboard: Das
   return Boolean(report && dashboardTicker && reportTicker && dashboardTicker !== reportTicker);
 }
 
-function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload): FullReportSection[] {
+function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload, t: FullReportTranslate): FullReportSection[] {
   const standardReport = getReportSource(report);
   const summaryPanel = standardReport?.summaryPanel;
   const decisionPanel = standardReport?.decisionPanel;
@@ -237,137 +259,137 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
   const sentimentFields = standardReport?.sentimentFields || [];
   const battleFields = standardReport?.battleFields || [];
   const coverageNotes = standardReport?.coverageNotes;
-  const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map(normalizeChecklistStatus);
+  const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map((item) => normalizeChecklistStatus(item, t));
   const battleCards = standardReport?.battlePlanCompact?.cards || [];
   const battleNotes = standardReport?.battlePlanCompact?.notes || [];
 
   return [
     {
       id: 'summary',
-      title: '研究包完整度',
+      title: t('home.fullReport.sections.summary'),
       rows: [
-        { label: '继续跟踪', value: consumerSafeReportText(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel, '继续跟踪') },
-        { label: '评分', value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
-        { label: '情景参考', value: consumerSafeReportText(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue, '情景参考') },
-        { label: '研究摘要', value: consumerSafeReportText(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary, '当前研究包仍不完整，仅支持继续跟踪。') },
-        { label: '关键理由', value: consumerSafeReportText(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate || dashboard.decision.reasonBody, '价格与证据仍需继续跟踪。') },
+        { label: t('home.fullReport.fields.observe'), value: consumerSafeReportText(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel, t('home.fullReport.fallbacks.observe')) },
+        { label: t('home.fullReport.fields.score'), value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
+        { label: t('home.fullReport.fields.scenarioReference'), value: consumerSafeReportText(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue, t('home.fullReport.fallbacks.scenarioReference')) },
+        { label: t('home.fullReport.fields.researchSummary'), value: consumerSafeReportText(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary, t('home.fullReport.fallbacks.researchSummary')) },
+        { label: t('home.fullReport.fields.keyReason'), value: consumerSafeReportText(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate || dashboard.decision.reasonBody, t('home.fullReport.fallbacks.keyReason')) },
       ],
     },
     {
       id: 'important-brief',
-      title: '重要信息速览',
+      title: t('home.fullReport.sections.importantBrief'),
       rows: [
-        { label: '舆情情绪', value: consumerSafeReportText(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel, '数据不足') },
-        { label: '业绩预期', value: consumerSafeReportText(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps']), '数据不足') },
-        { label: '最新动态', value: consumerSafeReportText(reasonLayer?.latestKeyUpdate || highlights?.latestNews?.[0], '数据不足') },
+        { label: t('home.fullReport.fields.sentiment'), value: consumerSafeReportText(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel, t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.earningsOutlook'), value: consumerSafeReportText(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps']), t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.latestUpdate'), value: consumerSafeReportText(reasonLayer?.latestKeyUpdate || highlights?.latestNews?.[0], t('home.fullReport.fallbacks.insufficientData')) },
       ],
-      bullets: listOrMissing(highlights?.latestNews, '暂无最新动态字段'),
+      bullets: listOrMissing(highlights?.latestNews, t('home.fullReport.fallbacks.latestNews')),
     },
     {
       id: 'risks',
-      title: '风险边界',
+      title: t('home.fullReport.sections.risks'),
       bullets: listOrMissing([
         reasonLayer?.topRisk,
         ...(highlights?.riskAlerts || []),
         ...(highlights?.bearishFactors || []),
-      ], '暂无明确风险条目', 'price'),
+      ], t('home.fullReport.fallbacks.risks'), 'price'),
     },
     {
       id: 'catalysts',
-      title: '情景参考',
+      title: t('home.fullReport.sections.catalysts'),
       bullets: listOrMissing([
         reasonLayer?.topCatalyst,
         ...(highlights?.positiveCatalysts || []),
         ...(highlights?.bullishFactors || []),
-      ], '暂无明确利好催化'),
+      ], t('home.fullReport.fallbacks.catalysts')),
     },
     {
       id: 'market',
-      title: '当日行情',
+      title: t('home.fullReport.sections.market'),
       rows: [
-        { label: '开盘', value: fieldValue(marketFields, ['open', '开盘']) || safeReportValue(market?.regularMetrics?.open) },
-        { label: '最高', value: fieldValue(marketFields, ['high', '最高']) || safeReportValue(market?.regularMetrics?.high) },
-        { label: '最低', value: fieldValue(marketFields, ['low', '最低']) || safeReportValue(market?.regularMetrics?.low) },
-        { label: '收盘', value: fieldValue(marketFields, ['close', '收盘', 'current']) || safeReportValue(summaryPanel?.currentPrice || market?.regularMetrics?.close) },
-        { label: '涨跌幅', value: fieldValue(marketFields, ['change pct', 'change%', '涨跌幅']) || safeReportValue(summaryPanel?.changePct || market?.regularMetrics?.changePct) },
-        { label: '成交量', value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
-        { label: '成交额', value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
-        { label: '价格上下文', value: consumerSafeReportText(summaryPanel?.priceContextNote || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail, '数据不足') },
+        { label: t('home.fullReport.fields.open'), value: fieldValue(marketFields, ['open', '开盘']) || safeReportValue(market?.regularMetrics?.open) },
+        { label: t('home.fullReport.fields.high'), value: fieldValue(marketFields, ['high', '最高']) || safeReportValue(market?.regularMetrics?.high) },
+        { label: t('home.fullReport.fields.low'), value: fieldValue(marketFields, ['low', '最低']) || safeReportValue(market?.regularMetrics?.low) },
+        { label: t('home.fullReport.fields.close'), value: fieldValue(marketFields, ['close', '收盘', 'current']) || safeReportValue(summaryPanel?.currentPrice || market?.regularMetrics?.close) },
+        { label: t('home.fullReport.fields.changePct'), value: fieldValue(marketFields, ['change pct', 'change%', '涨跌幅']) || safeReportValue(summaryPanel?.changePct || market?.regularMetrics?.changePct) },
+        { label: t('home.fullReport.fields.volume'), value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
+        { label: t('home.fullReport.fields.turnover'), value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
+        { label: t('home.fullReport.fields.priceContext'), value: consumerSafeReportText(summaryPanel?.priceContextNote || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail, t('home.fullReport.fallbacks.insufficientData')) },
       ],
     },
     {
       id: 'data-lens',
-      title: '数据透视',
+      title: t('home.fullReport.sections.dataLens'),
       rows: [
         { label: 'MA alignment', value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
-        { label: 'Current price', value: safeReportValue(summaryPanel?.currentPrice || decisionPanel?.analysisPrice) },
+        { label: t('home.fullReport.fields.currentPrice'), value: safeReportValue(summaryPanel?.currentPrice || decisionPanel?.analysisPrice) },
         { label: 'MA5', value: fieldValue(technicalFields, ['MA5', '5日']) },
         { label: 'MA10', value: fieldValue(technicalFields, ['MA10', '10日']) },
         { label: 'MA20', value: fieldValue(technicalFields, ['MA20', '20日']) },
         { label: 'MA60', value: fieldValue(technicalFields, ['MA60', '60日']) },
-        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
-        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit, '数据不足') },
+        { label: t('home.fullReport.fields.keyPriceRange'), value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.upperWatch'), value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit, t('home.fullReport.fallbacks.insufficientData')) },
         { label: 'Volume / turnover', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) || fieldValue(marketFields, ['volume', 'turnover', 'amount', '成交']) },
-        { label: '筹码观察', value: consumerSafeReportText(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView, '数据不足') },
+        { label: t('home.fullReport.fields.chipObservation'), value: consumerSafeReportText(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView, t('home.fullReport.fallbacks.insufficientData')) },
       ],
     },
     {
       id: 'technical',
-      title: '技术透视',
+      title: t('home.fullReport.sections.technical'),
       rows: [
-        { label: '均线排列', value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
+        { label: t('home.fullReport.fields.movingAverageArrangement'), value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
         { label: 'RSI', value: fieldValue(technicalFields, ['RSI-14', 'RSI14', 'RSI']) },
         { label: 'MACD', value: fieldValue(technicalFields, ['MACD']) },
-        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
-        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit, '数据不足') },
-        { label: '量价判断', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
+        { label: t('home.fullReport.fields.keyPriceRange'), value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.upperWatch'), value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit, t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.volumePrice'), value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
       ],
     },
     {
       id: 'fundamentals',
-      title: '基本面摘要',
+      title: t('home.fullReport.sections.fundamentals'),
       rows: [
-        { label: '营收', value: fieldValue(fundamentalFields, ['Revenue', 'Revenue Growth', '收入', '营收']) || '--' },
+        { label: t('home.fullReport.fields.revenue'), value: fieldValue(fundamentalFields, ['Revenue', 'Revenue Growth', '收入', '营收']) || '--' },
         { label: 'ROE', value: fieldValue(fundamentalFields, ['ROE']) || '--' },
-        { label: '利润率', value: fieldValue(fundamentalFields, ['Margin', 'EBITDA MARGIN', '毛利率', '利润率']) || '--' },
+        { label: t('home.fullReport.fields.margin'), value: fieldValue(fundamentalFields, ['Margin', 'EBITDA MARGIN', '毛利率', '利润率']) || '--' },
         { label: 'EPS', value: fieldValue(fundamentalFields, ['EPS', 'LATEST EPS']) || '--' },
-        { label: '估值', value: fieldValue(fundamentalFields, ['PE', 'Forward PE', '市盈率', '估值']) || '--' },
+        { label: t('home.fullReport.fields.valuation'), value: fieldValue(fundamentalFields, ['PE', 'Forward PE', '市盈率', '估值']) || '--' },
       ],
     },
     {
       id: 'observation-plan',
-      title: '继续跟踪',
+      title: t('home.fullReport.sections.observationPlan'),
       rows: [
-        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足') },
-        { label: '参考区间', value: consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足') },
-        { label: '风险边界', value: consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), '数据不足') },
-        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足') },
-        { label: '风险边界说明', value: consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, '风险边界仅作情景约束。') },
-        { label: '继续跟踪', value: consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, '继续跟踪，等待研究包补齐。') },
-        { label: '风险边界', value: consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, '风险边界用于说明不确定性。') },
-        { label: '数据不足', value: consumerSafeReportText(decisionPanel?.noPositionAdvice, '数据不足，仅支持继续跟踪。') },
-        { label: '继续跟踪说明', value: consumerSafeReportText(decisionPanel?.holderAdvice, '继续跟踪，不输出配置建议。') },
+        { label: t('home.fullReport.fields.keyPriceRange'), value: consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.referenceRange'), value: consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.riskBoundary'), value: consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.upperWatch'), value: consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), t('home.fullReport.fallbacks.insufficientData')) },
+        { label: t('home.fullReport.fields.riskBoundaryNote'), value: consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, t('home.fullReport.fallbacks.riskBoundaryNote')) },
+        { label: t('home.fullReport.fields.observe'), value: consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, t('home.fullReport.fallbacks.observeWait')) },
+        { label: t('home.fullReport.fields.riskBoundary'), value: consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, t('home.fullReport.fallbacks.riskBoundaryContext')) },
+        { label: t('home.fullReport.fields.insufficientData'), value: consumerSafeReportText(decisionPanel?.noPositionAdvice, t('home.fullReport.fallbacks.insufficientObserve')) },
+        { label: t('home.fullReport.fields.observeDescription'), value: consumerSafeReportText(decisionPanel?.holderAdvice, t('home.fullReport.fallbacks.observeDescription')) },
       ],
-      bullets: listOrMissing(decisionPanel?.executionReminders, '暂无额外提醒'),
+      bullets: listOrMissing(decisionPanel?.executionReminders, t('home.fullReport.fallbacks.reminders')),
     },
     {
       id: 'checklist',
-      title: '研究清单',
+      title: t('home.fullReport.sections.checklist'),
       checklist: checklistItems.length ? checklistItems : [
-        { label: '研究包完整度待复核', status: '未知' },
-        { label: '关键价格区间仅作背景', status: '未知' },
-        { label: '风险边界明确', status: '未知' },
-        { label: '数据覆盖充分', status: '未知' },
-        { label: '冲突已标注', status: '未知' },
+        { label: t('home.fullReport.checklist.review'), status: t('home.fullReport.status.unknown') },
+        { label: t('home.fullReport.checklist.priceContext'), status: t('home.fullReport.status.unknown') },
+        { label: t('home.fullReport.checklist.riskBoundary'), status: t('home.fullReport.status.unknown') },
+        { label: t('home.fullReport.checklist.coverage'), status: t('home.fullReport.status.unknown') },
+        { label: t('home.fullReport.checklist.conflicts'), status: t('home.fullReport.status.unknown') },
       ],
     },
     {
       id: 'data-notes',
-      title: '研究包说明',
+      title: t('home.fullReport.sections.dataNotes'),
       bullets: [
-        ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段显示为 --'),
-        ...listOrMissing(coverageNotes?.conflictNotes, '暂无额外冲突说明'),
-        ...listOrMissing(coverageNotes?.methodNotes, '本报告为 AI 辅助分析，不构成投资建议'),
+        ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, t('home.fullReport.fallbacks.missingFields')),
+        ...listOrMissing(coverageNotes?.conflictNotes, t('home.fullReport.fallbacks.conflicts')),
+        ...listOrMissing(coverageNotes?.methodNotes, t('home.fullReport.fallbacks.methodNote')),
       ],
     },
   ];
@@ -378,6 +400,8 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   isOpen,
   onClose,
   report,
+  language,
+  t,
 }) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const identityMismatch = hasReportIdentityMismatch(report, dashboard);
@@ -387,7 +411,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
       <Drawer
         isOpen={isOpen}
         onClose={onClose}
-        title="完整报告"
+        title={t('home.fullReport.title')}
         width="max-w-[min(100vw,65rem)]"
         zIndex={90}
         bodyClassName="overflow-x-hidden"
@@ -396,37 +420,37 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           className="min-w-0 space-y-4 rounded-l-[28px] border border-[color:var(--wolfy-market-warn)]/30 bg-[var(--wolfy-surface-panel)] p-4 text-[color:var(--wolfy-text-primary)] shadow-[var(--wolfy-shadow-panel)] sm:p-7"
           data-testid="home-bento-full-report-drawer"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/60">REPORT UNAVAILABLE</p>
-          <h2 className="break-words text-2xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">报告暂不可用</h2>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/60">{t('home.fullReport.unavailableEyebrow')}</p>
+          <h2 className="break-words text-2xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{t('home.fullReport.unavailableTitle')}</h2>
           <p className="max-w-2xl break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            当前选择标的为 {currentTicker}，历史报告身份不一致，已停止展示这份报告内容。
+            {t('home.fullReport.unavailableBody', { ticker: currentTicker })}
           </p>
           <p className="rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
-            请重新打开对应历史记录，或重新分析当前标的。
+            {t('home.fullReport.unavailableAction')}
           </p>
         </article>
       </Drawer>
     );
   }
-  const sections = buildFullReportSections(report, dashboard);
-  const identity = buildReportIdentity(report, dashboard);
+  const sections = buildFullReportSections(report, dashboard, t);
+  const identity = buildReportIdentity(report, dashboard, t, language);
   const markdown = normalizeFullReportBrand(buildInstitutionalReportMarkdown(report));
   const summarySection = sections.find((section) => section.id === 'summary');
   const riskSection = sections.find((section) => section.id === 'risks');
   const observationSection = sections.find((section) => section.id === 'observation-plan');
   const primaryReportSections = [riskSection, observationSection].filter((section): section is FullReportSection => Boolean(section));
   const technicalSections = sections.filter((section) => !['summary', 'risks', 'observation-plan'].includes(section.id));
-  const summaryLine = summarySection?.rows?.find((row) => row.label === '研究摘要')?.value
-    || consumerSafeReportText(dashboard.decision.summary, '当前研究包仍不完整，仅支持继续跟踪。')
+  const summaryLine = summarySection?.rows?.find((row) => row.label === t('home.fullReport.fields.researchSummary'))?.value
+    || consumerSafeReportText(dashboard.decision.summary, t('home.fullReport.fallbacks.researchSummary'))
     || '--';
-  const observationLine = summarySection?.rows?.find((row) => row.label === '继续跟踪')?.value
-    || consumerSafeReportText(dashboard.decision.signalLabel, '继续跟踪')
+  const observationLine = summarySection?.rows?.find((row) => row.label === t('home.fullReport.fields.observe'))?.value
+    || consumerSafeReportText(dashboard.decision.signalLabel, t('home.fullReport.fallbacks.observe'))
     || '--';
   const confidenceLine = dashboard.decision.confidenceValue || '--';
   const riskLine = riskSection?.bullets?.find((item) => item && item !== '--')
-    || observationSection?.rows?.find((row) => row.label === '风险边界' || row.label === '风险边界说明')?.value
+    || observationSection?.rows?.find((row) => row.label === t('home.fullReport.fields.riskBoundary') || row.label === t('home.fullReport.fields.riskBoundaryNote'))?.value
     || '--';
-  const headerSignalLabel = consumerSafeReportText(dashboard.decision.signalLabel, '继续跟踪') || '继续跟踪';
+  const headerSignalLabel = consumerSafeReportText(dashboard.decision.signalLabel, t('home.fullReport.fallbacks.observe')) || t('home.fullReport.fallbacks.observe');
 
   const handleCopyReport = async () => {
     if (!navigator.clipboard?.writeText) {
@@ -498,7 +522,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
     <Drawer
       isOpen={isOpen}
       onClose={onClose}
-      title="完整报告"
+      title={t('home.fullReport.title')}
       width="max-w-[min(100vw,65rem)]"
       zIndex={90}
       bodyClassName="overflow-x-hidden"
@@ -515,11 +539,11 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 {identity.companyWithTicker}
               </h2>
               <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-[color:var(--wolfy-text-secondary)] sm:grid-cols-2">
-                <span>研究状态：{headerSignalLabel}</span>
-                <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
-                <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
-                <span>生成时间：{identity.generatedAt}</span>
-                <span className="sm:col-span-2">覆盖状态：{identity.dataStatus}</span>
+                <span>{t('home.fullReport.fields.researchStatus')}：{headerSignalLabel}</span>
+                <span>{t('home.fullReport.fields.score')}：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
+                <span>{t('home.fullReport.fields.confidence')}：{dashboard.decision.confidenceValue || '--'}</span>
+                <span>{t('home.fullReport.fields.generatedAt')}：{identity.generatedAt}</span>
+                <span className="sm:col-span-2">{t('home.fullReport.fields.coverageStatus')}：{identity.dataStatus}</span>
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap gap-2">
@@ -529,7 +553,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 text-sm font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-primary)]"
               >
                 <Download className="size-4" />
-                导出 Markdown
+                {t('home.fullReport.actions.exportMarkdown')}
               </button>
               <button
                 type="button"
@@ -537,7 +561,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 text-sm font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-primary)]"
               >
                 <Printer className="size-4" />
-                导出 PDF
+                {t('home.fullReport.actions.exportPdf')}
               </button>
               <button
                 type="button"
@@ -545,18 +569,18 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 onClick={() => { void handleCopyReport(); }}
               >
                 <Copy className="size-4" />
-                {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
+                {copyState === 'copied' ? t('home.fullReport.actions.copied') : copyState === 'failed' ? t('home.fullReport.actions.copyFailed') : t('home.fullReport.actions.copyReport')}
               </button>
             </div>
           </div>
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
-            <span>市场：{identity.market}</span>
-            <span>币种：{identity.currency}</span>
-            <span className="min-w-0 truncate">覆盖状态：{identity.dataStatus}</span>
-            <span>周期：{identity.horizon}</span>
+            <span>{t('home.fullReport.fields.market')}：{identity.market}</span>
+            <span>{t('home.fullReport.fields.currency')}：{identity.currency}</span>
+            <span className="min-w-0 truncate">{t('home.fullReport.fields.coverageStatus')}：{identity.dataStatus}</span>
+            <span>{t('home.fullReport.fields.horizon')}：{identity.horizon}</span>
           </div>
           <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
-            AI 洞察仅供参考，不构成投资建议。
+            {t('home.fullReport.advisory')}
           </p>
         </header>
 
@@ -565,18 +589,18 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           data-testid="home-bento-report-executive-summary"
         >
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">RESEARCH SUMMARY</p>
-          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">研究包完整度</h3>
+          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{t('home.fullReport.sections.summary')}</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
-            {['继续跟踪', '参考区间', '风险边界', '上方观察区'].map((label) => (
+            {[t('home.fullReport.fields.observe'), t('home.fullReport.fields.referenceRange'), t('home.fullReport.fields.riskBoundary'), t('home.fullReport.fields.upperWatch')].map((label) => (
               <span key={label} className="rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-2 py-1">{label}</span>
             ))}
           </div>
           <p className="mt-3 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{summaryLine}</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
             {[
-              { label: '研究状态', value: observationLine },
-              { label: '置信度', value: confidenceLine },
-              { label: '风险边界', value: riskLine },
+              { label: t('home.fullReport.fields.researchStatus'), value: observationLine },
+              { label: t('home.fullReport.fields.confidence'), value: confidenceLine },
+              { label: t('home.fullReport.fields.riskBoundary'), value: riskLine },
             ].map((item) => (
               <div key={item.label} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
@@ -616,7 +640,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           data-testid="home-bento-full-report-technical-details"
         >
           <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
-            技术细节
+            {t('home.fullReport.technicalDetails')}
           </summary>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4">
             {technicalSections.map((section) => (

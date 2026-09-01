@@ -340,6 +340,35 @@ export const enCatalog = {
       loadingReport: 'Loading report...',
       loadingTitle: 'Syncing report context',
       loadingBody: 'Layers load sequentially into the workspace. Non-blocking interface.',
+      events: {
+        priority: {
+          high: 'High priority',
+          medium: 'Medium priority',
+        },
+      },
+      fullReport: {
+        title: 'Full Report',
+        unavailableEyebrow: 'REPORT UNAVAILABLE',
+        unavailableTitle: 'Report unavailable',
+        unavailableBody: 'The selected symbol is {ticker}; this historical report belongs to a different symbol, so its contents are hidden.',
+        unavailableAction: 'Reopen the matching history record or rerun analysis for the selected symbol.',
+        loadingTitle: 'Loading full report',
+        loadingBody: 'Loading the full report view on demand. Report content and copy, export, and print actions remain unchanged.',
+        advisory: 'AI insights are for reference only and do not constitute investment advice.',
+        technicalDetails: 'Technical details',
+        actions: { exportMarkdown: 'Export Markdown', exportPdf: 'Export PDF', copied: 'Copied', copyFailed: 'Copy failed', copyReport: 'Copy report' },
+        sections: {
+          summary: 'Research package completeness', importantBrief: 'Important information', risks: 'Risk boundaries', catalysts: 'Scenario reference', market: 'Daily market', dataLens: 'Data lens', technical: 'Technical view', fundamentals: 'Fundamentals summary', observationPlan: 'Observation plan', checklist: 'Research checklist', dataNotes: 'Research package notes',
+        },
+        fields: {
+          observe: 'Observation', score: 'Score', scenarioReference: 'Scenario reference', researchSummary: 'Research summary', keyReason: 'Key reason', sentiment: 'Sentiment', earningsOutlook: 'Earnings outlook', latestUpdate: 'Latest update', open: 'Open', high: 'High', low: 'Low', close: 'Close', changePct: 'Change %', volume: 'Volume', turnover: 'Turnover', priceContext: 'Price context', currentPrice: 'Current price', keyPriceRange: 'Key price range', upperWatch: 'Upper watch zone', chipObservation: 'Positioning observation', movingAverageArrangement: 'Moving-average alignment', volumePrice: 'Volume / price view', revenue: 'Revenue', margin: 'Margin', valuation: 'Valuation', referenceRange: 'Reference range', riskBoundary: 'Risk boundary', riskBoundaryNote: 'Risk boundary note', insufficientData: 'Insufficient data', observeDescription: 'Observation notes', researchStatus: 'Research status', confidence: 'Confidence', generatedAt: 'Generated at', coverageStatus: 'Coverage status', market: 'Market', currency: 'Currency', horizon: 'Horizon',
+        },
+        fallbacks: {
+          catalysts: 'No clear positive catalyst', checklistReview: 'Research package completeness requires review.', conflicts: 'No additional conflict notes', coverageUnconfirmed: 'Coverage unconfirmed', horizon: 'Short term / short-to-medium term', insufficientData: 'Insufficient data', insufficientObserve: 'Insufficient data; observation only.', keyReason: 'Price and evidence still require follow-up.', latestNews: 'No latest news field', methodNote: 'This report is AI-assisted research and does not constitute investment advice.', missingFields: 'Missing fields are shown as --.', observe: 'Observation', observeDescription: 'Continue observing; no allocation guidance is provided.', observeWait: 'Continue observing while waiting for the research package to be completed.', reminders: 'No additional reminders', researchSummary: 'The research package is still incomplete; observation only.', riskBoundaryContext: 'Risk boundaries describe uncertainty.', riskBoundaryNote: 'Risk boundaries are scenario constraints only.', risks: 'No clear risk items', scenarioReference: 'Scenario reference',
+        },
+        status: { available: 'Available', recentData: 'Latest available data used', partialData: 'Partial data unavailable', insufficientData: 'Insufficient data', unconfirmed: 'Status unconfirmed', unknown: 'Unknown' },
+        checklist: { review: 'Research package completeness needs review', priceContext: 'Key price ranges are context only', riskBoundary: 'Risk boundary is clear', coverage: 'Data coverage is sufficient', conflicts: 'Conflicts are marked' },
+      },
       emptyEyebrow: 'Awaiting a new research run',
       emptyTitle: 'Start an analysis',
       emptyBody: 'Enter ticker to start analysis, or load from archive. Expands: Overview, Market, Technicals, Fundamentals, Earnings, Plan.',

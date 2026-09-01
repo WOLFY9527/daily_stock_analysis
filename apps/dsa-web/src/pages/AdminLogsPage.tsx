@@ -1333,6 +1333,7 @@ function AdminLogsTerminalSection({
   children,
   defaultOpen = false,
   className = '',
+  locale,
   'data-testid': dataTestId,
 }: {
   title: React.ReactNode;
@@ -1340,11 +1341,14 @@ function AdminLogsTerminalSection({
   children: React.ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  locale: AdminLogsLanguage;
   'data-testid'?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const titleText = typeof title === 'string' ? title : '';
-  const actionLabel = open ? `收起 ${titleText}` : `展开 ${titleText}`;
+  const actionLabel = locale === 'zh'
+    ? (open ? `收起 ${titleText}` : `展开 ${titleText}`)
+    : (open ? `Collapse ${titleText}` : `Expand ${titleText}`);
   return (
     <TerminalPanel
       dense
@@ -1365,7 +1369,7 @@ function AdminLogsTerminalSection({
           className="shrink-0 px-2 py-1 text-[11px]"
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? '收起' : '展开'}
+          {locale === 'zh' ? (open ? '收起' : '展开') : (open ? 'Collapse' : 'Expand')}
         </TerminalButton>
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
@@ -1393,6 +1397,7 @@ function CallCard({
       title={`${type === 'llm' ? 'LLM' : 'API'} #${index + 1}`}
       summary={name}
       defaultOpen={index === 0}
+      locale={locale}
       className="px-4 py-3"
     >
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
@@ -2145,7 +2150,9 @@ const AdminLogsPage: React.FC = () => {
             />
             {drillHighlight ? (
               <TerminalNotice data-testid="admin-logs-drill-highlight" variant="info" className="mt-1">
-                已从安全引用预填筛选，当前高亮事件引用：{drillHighlight}
+                {locale === 'zh'
+                  ? `已从安全引用预填筛选，当前高亮事件引用：${drillHighlight}`
+                  : `Filters were prefilled from a safe reference; highlighted event reference: ${drillHighlight}`}
               </TerminalNotice>
             ) : null}
 
@@ -2768,6 +2775,7 @@ const AdminLogsPage: React.FC = () => {
           data-testid="admin-logs-storage-disclosure"
           title={locale === 'zh' ? 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览' : 'L4 storage advisory and explicit cleanup: size / retention / preview'}
           summary={locale === 'zh' ? '默认折叠 · 仅建议，不自动执行' : 'collapsed by default · advisory only, no automatic execution'}
+          locale={locale}
           className="px-4 py-3"
         >
           <section
@@ -2990,7 +2998,7 @@ const AdminLogsPage: React.FC = () => {
                 </TerminalPanel>
               </div>
               <div className="mt-4">
-                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} locale={locale} className="bg-[var(--wolfy-surface-input)] px-3 py-3">
                   <JsonBlock value={businessDetail.metadata || {}} />
                 </AdminLogsTerminalSection>
               </div>
@@ -3022,7 +3030,7 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${operatorSafeText(step.label || step.name, locale)} · ${formatDuration(step.durationMs)}`} summary={operatorSafeText([step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · '), locale, '--')} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs">
+                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${operatorSafeText(step.label || step.name, locale)} · ${formatDuration(step.durationMs)}`} summary={operatorSafeText([step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · '), locale, '--')} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} locale={locale} className="bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs">
                       <div className="mb-3 flex justify-end">
                         <StatusChip status={status} locale={locale} />
                       </div>
@@ -3142,7 +3150,7 @@ const AdminLogsPage: React.FC = () => {
               </TerminalPanel>
             ) : null}
 
-            <AdminLogsTerminalSection title={locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'} defaultOpen={false} className="px-5 py-4">
+            <AdminLogsTerminalSection title={locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'} defaultOpen={false} locale={locale} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {aiCallEntries.length ? aiCallEntries.map(({ item, key }, index) => (
                   <CallCard key={key} item={item} index={index} type="llm" locale={locale} />
@@ -3150,7 +3158,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </AdminLogsTerminalSection>
 
-            <AdminLogsTerminalSection title={locale === 'zh' ? '数据源调用' : 'Data source calls'} defaultOpen={false} className="px-5 py-4">
+            <AdminLogsTerminalSection title={locale === 'zh' ? '数据源调用' : 'Data source calls'} defaultOpen={false} locale={locale} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {dataSourceCallEntries.length ? dataSourceCallEntries.map(({ item, key }, index) => (
                   <CallCard key={key} item={item} index={index} type="data" locale={locale} />
@@ -3159,7 +3167,7 @@ const AdminLogsPage: React.FC = () => {
             </AdminLogsTerminalSection>
 
             <section className="grid gap-4 xl:grid-cols-2">
-              <AdminLogsTerminalSection title={locale === 'zh' ? '系统回退记录' : 'System fallback records'} defaultOpen={false} className="px-5 py-4">
+              <AdminLogsTerminalSection title={locale === 'zh' ? '系统回退记录' : 'System fallback records'} defaultOpen={false} locale={locale} className="px-5 py-4">
                 <div className="mt-4 space-y-2">
                   {systemFallbackEntries.length ? systemFallbackEntries.map(({ item, key }) => (
                     <TerminalNotice key={key} variant="caution">
@@ -3176,7 +3184,7 @@ const AdminLogsPage: React.FC = () => {
               </TerminalPanel>
             </section>
 
-            <AdminLogsTerminalSection title={t('adminLogs.operationTimelineTitle')} defaultOpen={false} className="px-5 py-4">
+            <AdminLogsTerminalSection title={t('adminLogs.operationTimelineTitle')} defaultOpen={false} locale={locale} className="px-5 py-4">
               <div className="mt-4 space-y-2">
                 {timelineEntries.length ? timelineEntries.map(({ item, key }) => {
                   const status = normalizeStatus(String(item.status || ''));
@@ -3193,7 +3201,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </AdminLogsTerminalSection>
 
-            <AdminLogsTerminalSection title={locale === 'zh' ? '元数据详情' : 'Metadata detail'} defaultOpen={false} className="px-5 py-4">
+            <AdminLogsTerminalSection title={locale === 'zh' ? '元数据详情' : 'Metadata detail'} defaultOpen={false} locale={locale} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {drawerDetail.events.length ? drawerDetail.events.map((event) => (
                   <TerminalNestedBlock key={event.id} className="text-xs">
@@ -3208,7 +3216,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </AdminLogsTerminalSection>
 
-            <AdminLogsTerminalSection title={t('adminLogs.diagnosticsTitle')} defaultOpen={false} className="border-rose-400/15 bg-rose-500/[0.025] px-5 py-4">
+            <AdminLogsTerminalSection title={t('adminLogs.diagnosticsTitle')} defaultOpen={false} locale={locale} className="border-rose-400/15 bg-rose-500/[0.025] px-5 py-4">
               <div className="mt-4 space-y-2">
                 {diagnosticEntries.length ? diagnosticEntries.map(({ item, key }) => (
                   <TerminalNotice key={key} variant="danger">

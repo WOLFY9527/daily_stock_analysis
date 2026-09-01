@@ -5,9 +5,9 @@ import { zhCatalog } from '../catalogs/zh';
 
 type CatalogEntry = readonly [key: string, value: string];
 
-const PRE_CHANGE_CATALOG_BASELINE = {
-  en: { entryCount: 2629, sha256: '60e7c1cfdd1be516174f8029470f84fd04d7acbe843d5ef950107e218cac6d30' },
-  zh: { entryCount: 2629, sha256: '9f70fa9d174311028704caa7b93d53bdf7ba922415abdd04a899134e2b72ac92' },
+const CATALOG_FINGERPRINT = {
+  en: { entryCount: 2729, sha256: 'df599e0f4e343904fb8d5dc7695cf7ebf25ddcf9ad51899fc3a076c0cf0987ab' },
+  zh: { entryCount: 2729, sha256: '356b18ce02363b6fd3ffeed5fd448d9b8590d48237852895aa33070e83296745' },
 } as const;
 
 function collectCatalogEntries(value: unknown, prefix = ''): CatalogEntry[] {
@@ -42,6 +42,6 @@ describe('locale catalogs', () => {
     expect({
       en: catalogFingerprint(enCatalog),
       zh: catalogFingerprint(zhCatalog),
-    }).toEqual(PRE_CHANGE_CATALOG_BASELINE);
+    }).toEqual(CATALOG_FINGERPRINT);
   });
 });

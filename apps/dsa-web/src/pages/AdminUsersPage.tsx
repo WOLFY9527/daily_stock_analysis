@@ -339,6 +339,7 @@ function sensitiveFieldCount(metadata?: Record<string, unknown>): number {
 
 const PageHeader: React.FC<{
   mode: PageMode;
+  language: 'zh' | 'en';
   user?: AdminUserListItem | null;
   currentState: string;
   nextAction: string;
@@ -346,7 +347,7 @@ const PageHeader: React.FC<{
   impact: string;
   evidenceRef: string;
   lastUpdated: string;
-}> = ({ mode, user, currentState, nextAction, trustState, impact, evidenceRef, lastUpdated }) => {
+}> = ({ mode, language, user, currentState, nextAction, trustState, impact, evidenceRef, lastUpdated }) => {
   const title = mode === 'directory'
     ? '用户目录'
     : mode === 'activity'
@@ -375,6 +376,7 @@ const PageHeader: React.FC<{
         </div>
         <AdminOpsL0OverviewStrip
           dataTestId="admin-users-l0-overview-strip"
+          language={language}
           systemTrustState={trustState}
           impact={impact}
           recommendedAction={nextAction}
@@ -1458,6 +1460,7 @@ const AdminUsersPage: React.FC = () => {
         </div>
         <PageHeader
           mode={mode}
+          language={language}
           user={activeUser}
           currentState={headerCurrentState}
           nextAction={headerNextAction}

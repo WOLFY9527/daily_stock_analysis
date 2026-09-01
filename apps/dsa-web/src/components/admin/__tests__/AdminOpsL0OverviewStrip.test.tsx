@@ -16,6 +16,7 @@ describe('AdminOpsL0OverviewStrip', () => {
     );
 
     const strip = screen.getByTestId('admin-ops-l0-overview-strip');
+    expect(screen.getByRole('region', { name: 'L0 总览' })).toBe(strip);
     expect(within(strip).getByText('L0 总览')).toBeInTheDocument();
     expect(within(strip).getByText('信任状态')).toBeInTheDocument();
     expect(within(strip).getByText('影响范围')).toBeInTheDocument();
@@ -43,6 +44,7 @@ describe('AdminOpsL0OverviewStrip', () => {
     );
 
     expect(screen.getByText('L0 Overview')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'L0 Overview' })).toBeInTheDocument();
     expect(screen.getByText('Trust state')).toBeInTheDocument();
     expect(screen.getByText('Review required')).toBeInTheDocument();
   });

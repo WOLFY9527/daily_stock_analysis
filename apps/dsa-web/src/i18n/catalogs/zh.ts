@@ -338,6 +338,35 @@ export const zhCatalog = {
       loadingReport: '加载报告中...',
       loadingTitle: '正在同步报告上下文',
       loadingBody: '结论、计划与图表按顺序载入工作区。非阻塞式渲染。',
+      events: {
+        priority: {
+          high: '高优先',
+          medium: '中优先',
+        },
+      },
+      fullReport: {
+        title: '完整报告',
+        unavailableEyebrow: '报告不可用',
+        unavailableTitle: '报告暂不可用',
+        unavailableBody: '当前选择标的为 {ticker}，历史报告身份不一致，已停止展示这份报告内容。',
+        unavailableAction: '请重新打开对应历史记录，或重新分析当前标的。',
+        loadingTitle: '完整报告加载中',
+        loadingBody: '正在按需加载完整报告视图，报告内容、复制、导出和打印行为保持不变。',
+        advisory: 'AI 洞察仅供参考，不构成投资建议。',
+        technicalDetails: '技术细节',
+        actions: { exportMarkdown: '导出 Markdown', exportPdf: '导出 PDF', copied: '已复制', copyFailed: '复制失败', copyReport: '复制报告' },
+        sections: {
+          summary: '研究包完整度', importantBrief: '重要信息速览', risks: '风险边界', catalysts: '情景参考', market: '当日行情', dataLens: '数据透视', technical: '技术透视', fundamentals: '基本面摘要', observationPlan: '继续跟踪', checklist: '研究清单', dataNotes: '研究包说明',
+        },
+        fields: {
+          observe: '继续跟踪', score: '评分', scenarioReference: '情景参考', researchSummary: '研究摘要', keyReason: '关键理由', sentiment: '舆情情绪', earningsOutlook: '业绩预期', latestUpdate: '最新动态', open: '开盘', high: '最高', low: '最低', close: '收盘', changePct: '涨跌幅', volume: '成交量', turnover: '成交额', priceContext: '价格上下文', currentPrice: '当前价格', keyPriceRange: '关键价格区间', upperWatch: '上方观察区', chipObservation: '筹码观察', movingAverageArrangement: '均线排列', volumePrice: '量价判断', revenue: '营收', margin: '利润率', valuation: '估值', referenceRange: '参考区间', riskBoundary: '风险边界', riskBoundaryNote: '风险边界说明', insufficientData: '数据不足', observeDescription: '继续跟踪说明', researchStatus: '研究状态', confidence: '置信度', generatedAt: '生成时间', coverageStatus: '覆盖状态', market: '市场', currency: '币种', horizon: '周期',
+        },
+        fallbacks: {
+          catalysts: '暂无明确利好催化', checklistReview: '研究包完整度待复核。', conflicts: '暂无额外冲突说明', coverageUnconfirmed: '数据覆盖未确认', horizon: '短线 / 中短线', insufficientData: '数据不足', insufficientObserve: '数据不足，仅支持继续跟踪。', keyReason: '价格与证据仍需继续跟踪。', latestNews: '暂无最新动态字段', methodNote: '本报告为 AI 辅助分析，不构成投资建议', missingFields: '缺失字段显示为 --', observe: '继续跟踪', observeDescription: '继续跟踪，不输出配置建议。', observeWait: '继续跟踪，等待研究包补齐。', reminders: '暂无额外提醒', researchSummary: '当前研究包仍不完整，仅支持继续跟踪。', riskBoundaryContext: '风险边界用于说明不确定性。', riskBoundaryNote: '风险边界仅作情景约束。', risks: '暂无明确风险条目', scenarioReference: '情景参考',
+        },
+        status: { available: '可用', recentData: '已使用最近一次可用数据', partialData: '部分数据暂不可用', insufficientData: '数据不足', unconfirmed: '状态待确认', unknown: '未知' },
+        checklist: { review: '研究包完整度待复核', priceContext: '关键价格区间仅作背景', riskBoundary: '风险边界明确', coverage: '数据覆盖充分', conflicts: '冲突已标注' },
+      },
       emptyEyebrow: '等待新的研究任务',
       emptyTitle: '开始分析',
       emptyBody: '输入代码启动研究，或从档案加载。内容依序展开：总览、行情、技术、基本面、财报、计划。',

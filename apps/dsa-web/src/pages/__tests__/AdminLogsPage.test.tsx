@@ -830,7 +830,15 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-page-shell')).toHaveClass('py-5', 'md:py-6');
     expect(screen.getByTestId('admin-logs-header-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('admin-logs-storage-disclosure')).toHaveAttribute('data-terminal-primitive', 'disclosure');
-    expect(screen.getByText('L4 日志容量建议与显式清理：容量 / 保留期 / 预览')).toBeInTheDocument();
+    const storageDisclosure = screen.getByTestId('admin-logs-storage-disclosure');
+    const storageTitle = 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览';
+    expect(screen.getByText(storageTitle)).toBeInTheDocument();
+    const zhStorageToggle = within(storageDisclosure).getByRole('button', { name: `展开 ${storageTitle}` });
+    expect(zhStorageToggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(zhStorageToggle);
+    const zhExpandedStorageToggle = within(storageDisclosure).getByRole('button', { name: `收起 ${storageTitle}` });
+    expect(zhExpandedStorageToggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(zhExpandedStorageToggle);
     expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '股票分析' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '扫描器' })).toBeInTheDocument();
@@ -1800,6 +1808,7 @@ describe('AdminLogsPage', () => {
 
   it('renders English page-local copy on English routes', async () => {
     mockLanguage = 'en';
+    window.history.replaceState({}, '', '/en/admin/logs?eventId=market-card-failed');
 
     render(<AdminLogsPage />);
 
@@ -1807,6 +1816,19 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: 'Business events' })).toBeInTheDocument();
     expect(screen.getByLabelText('Status filter')).toBeInTheDocument();
     expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
+    const overviewStrip = screen.getByTestId('admin-logs-l0-overview-strip');
+    expect(within(overviewStrip).getByText('L0 Overview')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Trust state')).toBeInTheDocument();
+    expect(within(overviewStrip).queryByText('信任状态')).not.toBeInTheDocument();
+    const storageDisclosure = screen.getByTestId('admin-logs-storage-disclosure');
+    const storageTitle = 'L4 storage advisory and explicit cleanup: size / retention / preview';
+    const enStorageToggle = within(storageDisclosure).getByRole('button', { name: `Expand ${storageTitle}` });
+    expect(enStorageToggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(enStorageToggle);
+    expect(within(storageDisclosure).getByRole('button', { name: `Collapse ${storageTitle}` })).toHaveAttribute('aria-expanded', 'true');
+    const drillHighlight = screen.getByTestId('admin-logs-drill-highlight');
+    expect(drillHighlight).toHaveTextContent('Filters were prefilled from a safe reference; highlighted event reference: market-card-failed');
+    expect(drillHighlight).not.toHaveTextContent('已从安全引用预填筛选');
   });
 
   it('initializes safe query params and renders sanitized drill-through controls for issue triage', async () => {

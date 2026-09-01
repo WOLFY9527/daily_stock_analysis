@@ -13,7 +13,7 @@ import { stockEvidenceApi } from '../../api/stockEvidence';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
-import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { UiLanguageProvider, UiLanguageRouteSynchronizer } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores/stockPoolStore';
 import { textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
 import { setTestViewport } from '../../test-utils/viewportHarness';
@@ -691,6 +691,7 @@ describe('HomeSurfacePage', () => {
     <MemoryRouter initialEntries={[initialPath]}>
       <UiPreferencesProvider>
         <UiLanguageProvider>
+          <UiLanguageRouteSynchronizer />
           <HomeSurfacePage />
         </UiLanguageProvider>
       </UiPreferencesProvider>
@@ -702,6 +703,7 @@ describe('HomeSurfacePage', () => {
       <LocationProbe />
       <UiPreferencesProvider>
         <UiLanguageProvider>
+          <UiLanguageRouteSynchronizer />
           <HomeSurfacePage />
         </UiLanguageProvider>
       </UiPreferencesProvider>
@@ -1792,7 +1794,36 @@ describe('HomeSurfacePage', () => {
     expect(events).not.toHaveTextContent('均线结构修复');
     expect(events).not.toHaveTextContent('数据状态可用');
     expect(events).not.toHaveTextContent('财报跟踪');
+    expect(events).toHaveTextContent('高优先');
+    expect(events).toHaveTextContent('中优先');
     expect(screen.queryByTestId('home-linear-events-empty')).not.toBeInTheDocument();
+  });
+
+  it('localizes high and medium catalyst priorities on English routes', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      details: {
+        ...defaultHistoryReport.details,
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          highlights: {
+            latestNews: ['Oracle earnings event 2026-06-12'],
+            positiveCatalysts: ['Oracle product launch 2026-06-20'],
+          },
+        },
+      },
+    } as never);
+
+    renderSurface('/en');
+    await screen.findByText('Oracle Corporation');
+
+    const events = screen.getByTestId('home-linear-events');
+    expect(events).toHaveTextContent('High priority');
+    expect(events).toHaveTextContent('Medium priority');
+    expect(events).not.toHaveTextContent('高优先');
+    expect(events).not.toHaveTextContent('中优先');
   });
 
   it('keeps source diagnostics out of the main flow and shows source gaps in the decision drawer', async () => {
@@ -3245,6 +3276,37 @@ describe('HomeSurfacePage', () => {
     expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
     expect(within(report).getByText('Tempus AI (TEM)')).toBeInTheDocument();
     expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
+  });
+
+  it('opens the full report with English UI chrome on an English route', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const originalPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.replaceState(window.history.state, '', '/en?fixture=analysis-trace&report=open');
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    try {
+      renderSurface('/en?fixture=analysis-trace&report=open');
+
+      const report = await screen.findByTestId('home-bento-full-report-drawer');
+      await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Full Report'));
+      expect(within(report).getByText('Research package completeness')).toBeInTheDocument();
+      expect(within(report).getByRole('button', { name: 'Export Markdown' })).toBeInTheDocument();
+      expect(within(report).getByRole('button', { name: 'Export PDF' })).toBeInTheDocument();
+      expect(within(report).getByRole('button', { name: 'Copy report' })).toBeInTheDocument();
+      expect(within(report).getByText('Technical details')).toBeInTheDocument();
+      expect(within(report).queryByText('完整报告')).not.toBeInTheDocument();
+      expect(within(report).queryByText('导出 Markdown')).not.toBeInTheDocument();
+      expect(within(report).queryByText('导出 PDF')).not.toBeInTheDocument();
+      expect(within(report).queryByText('复制报告')).not.toBeInTheDocument();
+    } finally {
+      window.history.replaceState(window.history.state, '', originalPath);
+    }
   });
 
   it('renders history titles with company plus ticker without duplicate ticker strings', async () => {

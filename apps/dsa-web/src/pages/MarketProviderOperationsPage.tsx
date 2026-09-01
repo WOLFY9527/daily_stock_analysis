@@ -4482,6 +4482,7 @@ const MarketProviderOperationsPage: React.FC = () => {
           <AdminOpsL0OverviewStrip
             dataTestId="market-provider-l0-overview-strip"
             className="mt-4"
+            language={language}
             systemTrustState={l0TrustState}
             impact={l0Impact}
             recommendedAction={l0RecommendedAction}
