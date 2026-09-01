@@ -90,6 +90,11 @@ async function logoutFromShell(page: Page): Promise<Response> {
   return responsePromise;
 }
 
+function publicSymbolProjection(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return (value as Record<string, unknown>).symbol;
+}
+
 test.describe.serial('qualified release real runtime', () => {
   test.beforeAll(async () => {
     expectedCandidateSha = requiredEnv('WOLFYSTOCK_RELEASE_CANDIDATE_SHA');
@@ -313,7 +318,13 @@ test.describe.serial('qualified release real runtime', () => {
     const missingRequest = missingParse.request().postDataJSON() as Record<string, unknown>;
     const missingPayload = await missingParse.json() as Record<string, unknown>;
     const missingParsed = missingPayload.parsed_strategy as Record<string, unknown>;
-    const missingSpec = missingParsed.strategy_spec as Record<string, unknown>;
+    const missingSpec = missingParsed.strategy_spec;
+    const missingSetup = missingParsed.setup;
+    const missingIdentityProjections = [
+      missingPayload.code,
+      publicSymbolProjection(missingSpec),
+      publicSymbolProjection(missingSetup),
+    ];
     const missingDetails = missingPayload.unsupported_details as Array<Record<string, unknown>>;
 
     expect(missingParse.status()).toBe(200);
@@ -322,7 +333,18 @@ test.describe.serial('qualified release real runtime', () => {
     expect(missingPayload.code).toBeNull();
     expect(missingPayload.executable).toBe(false);
     expect(missingPayload.normalization_state).toBe('unsupported');
-    expect(missingSpec).not.toHaveProperty('symbol');
+    expect(
+      missingSpec === null
+      || (
+        typeof missingSpec === 'object'
+        && !Array.isArray(missingSpec)
+        && [null, undefined].includes(publicSymbolProjection(missingSpec))
+      ),
+    ).toBe(true);
+    expect(missingIdentityProjections).toEqual([null, undefined, undefined]);
+    for (const fabricatedIdentity of ['BUY', 'SELL', 'RSI', 'NONE']) {
+      expect(missingIdentityProjections).not.toContain(fabricatedIdentity);
+    }
     expect(missingDetails.map((item) => item.code)).toContain('unsupported_missing_symbol');
     expect(missingDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
     await expect(page.getByTestId('pro-unsupported-guidance')).toBeVisible();
@@ -348,14 +370,19 @@ test.describe.serial('qualified release real runtime', () => {
     const explicitRequest = explicitParse.request().postDataJSON() as Record<string, unknown>;
     const explicitPayload = await explicitParse.json() as Record<string, unknown>;
     const explicitParsed = explicitPayload.parsed_strategy as Record<string, unknown>;
-    const explicitSpec = explicitParsed.strategy_spec as Record<string, unknown>;
+    const explicitIdentityProjections = [
+      explicitPayload.code,
+      publicSymbolProjection(explicitParsed.strategy_spec),
+      publicSymbolProjection(explicitParsed.setup),
+    ].filter((value): value is string => typeof value === 'string');
     const explicitDetails = explicitPayload.unsupported_details as Array<Record<string, unknown>>;
 
     expect(explicitParse.status()).toBe(200);
     expect(explicitRequest).toMatchObject({ code: 'AAPL', strategy_text: indicatorStrategy });
     expect(explicitPayload.code).toBe('AAPL');
     expect(explicitPayload.executable).toBe(true);
-    expect(explicitSpec.symbol).toBe('AAPL');
+    expect(publicSymbolProjection(explicitParsed.strategy_spec)).toBe('AAPL');
+    expect(new Set(explicitIdentityProjections)).toEqual(new Set(['AAPL']));
     expect(explicitDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
     await expect(page.getByTestId('pro-unsupported-guidance')).toHaveCount(0);
     await expect(page.getByTestId('pro-execution-rail')).toContainText('AAPL');
