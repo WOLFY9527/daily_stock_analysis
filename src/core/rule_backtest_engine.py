@@ -636,12 +636,12 @@ class RuleBacktestParser:
             return None
 
         quantity_match = re.search(
-            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*股\s*([A-Za-z][A-Za-z0-9.\-]{0,9})?",
+            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*股",
             normalized_text,
             flags=re.IGNORECASE,
         )
         amount_match = re.search(
-            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*(元|块|块钱)\s*([A-Za-z][A-Za-z0-9.\-]{0,9})?",
+            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*(元|块|块钱)",
             normalized_text,
             flags=re.IGNORECASE,
         )
@@ -656,11 +656,9 @@ class RuleBacktestParser:
         if quantity_match is not None:
             order_mode = "fixed_shares"
             quantity_per_trade = float(quantity_match.group(1))
-            symbol = quantity_match.group(2)
         else:
             order_mode = "fixed_amount"
             amount_per_trade = float(amount_match.group(1))
-            symbol = amount_match.group(3)
 
         ambiguities: List[Dict[str, Any]] = []
         if capital_match is None:
@@ -672,8 +670,8 @@ class RuleBacktestParser:
         if not symbol:
             ambiguities.append({
                 "code": "missing_symbol",
-                "message": "未在自然语言中识别到股票代码。",
-                "suggestion": "请在文本中写出类似 ORCL / AAPL 的单一股票代码。",
+                "message": "未提供回测标的代码。",
+                "suggestion": "请通过 code 请求字段提供单一、可规范化的股票代码。",
             })
 
         cash_stop = "stop_when_insufficient_cash" if re.search(r"(资金耗尽|现金不足|资金不足)", normalized_text) else "skip_when_insufficient_cash"

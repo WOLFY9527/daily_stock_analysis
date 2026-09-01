@@ -1242,7 +1242,10 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_parse_chinese_periodic_buy_instruction_into_structured_draft(self) -> None:
         service = RuleBacktestService(self.db)
-        parsed = service.parse_strategy("资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止")
+        parsed = service.parse_strategy(
+            "资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止",
+            code="ORCL",
+        )
 
         self.assertEqual(parsed["strategy_kind"], "periodic_accumulation")
         self.assertEqual(parsed["strategy_spec"]["strategy_type"], "periodic_accumulation")
@@ -1261,7 +1264,10 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_parse_chinese_periodic_amount_instruction_into_structured_draft(self) -> None:
         service = RuleBacktestService(self.db)
-        parsed = service.parse_strategy("资金100000，从2025-01-01到2025-12-31，每天买1000元ORCL，买到区间结束")
+        parsed = service.parse_strategy(
+            "资金100000，从2025-01-01到2025-12-31，每天买1000元ORCL，买到区间结束",
+            code="ORCL",
+        )
 
         self.assertEqual(parsed["strategy_kind"], "periodic_accumulation")
         self.assertEqual(parsed["strategy_spec"]["strategy_type"], "periodic_accumulation")
@@ -1337,6 +1343,91 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(parsed["executable"])
         self.assertEqual(parsed["normalization_state"], "assumed")
         self.assertTrue(any(item.get("key") == "rsi_period" for item in parsed["assumptions"]))
+
+    def test_parse_strategy_keeps_ordinary_english_words_out_of_symbol_identity(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        for text in (
+            "RSI below 30 buy and RSI above 70 sell",
+            "MACD golden cross; MACD crosses below signal",
+        ):
+            with self.subTest(text=text):
+                parsed = service.parse_strategy(
+                    text,
+                    code="AAPL",
+                    start_date="2024-01-01",
+                    end_date="2024-12-31",
+                )
+
+                self.assertTrue(parsed["executable"])
+                self.assertEqual(parsed["strategy_spec"]["symbol"], "AAPL")
+                self.assertNotIn(
+                    "unsupported_multi_symbol",
+                    [item.get("code") for item in parsed["unsupported_details"]],
+                )
+
+    def test_parse_strategy_represents_missing_indicator_symbol_without_guessing(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service.parse_strategy(
+            "RSI below 30 buy and RSI above 70 sell",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+        )
+
+        self.assertFalse(parsed["executable"])
+        self.assertEqual(parsed["normalization_state"], "unsupported")
+        self.assertNotIn("symbol", parsed["strategy_spec"])
+        self.assertIn(
+            "unsupported_missing_symbol",
+            [item.get("code") for item in parsed["unsupported_details"]],
+        )
+        self.assertNotIn(
+            "unsupported_multi_symbol",
+            [item.get("code") for item in parsed["unsupported_details"]],
+        )
+
+        periodic = service.parse_strategy(
+            "资金100000，从2025-01-01到2025-12-31，每天买100股BUY，买到资金耗尽为止",
+        )
+        self.assertFalse(periodic["executable"])
+        self.assertEqual(periodic["normalization_state"], "unsupported")
+        self.assertNotIn("symbol", periodic["strategy_spec"])
+        self.assertIn(
+            "unsupported_missing_symbol",
+            [item.get("code") for item in periodic["unsupported_details"]],
+        )
+
+        malformed = service.parse_strategy(
+            "MACD golden cross; MACD crosses below signal",
+            code="AAPL?",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+        )
+        self.assertFalse(malformed["executable"])
+        self.assertNotIn("symbol", malformed["strategy_spec"])
+        self.assertIn(
+            "unsupported_missing_symbol",
+            [item.get("code") for item in malformed["unsupported_details"]],
+        )
+
+    def test_parse_strategy_request_code_precedes_periodic_text_symbol(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service.parse_strategy(
+            "资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止",
+            code="AAPL",
+        )
+
+        self.assertTrue(parsed["executable"])
+        self.assertEqual(parsed["strategy_spec"]["symbol"], "AAPL")
+
+        qualified = service.parse_strategy(
+            "MACD golden cross; MACD crosses below signal",
+            code="0700.HK",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+        )
+        self.assertTrue(qualified["executable"])
+        self.assertEqual(qualified["strategy_spec"]["symbol"], "HK00700")
 
     def test_strategy_template_registry_is_immutable_and_complete(self) -> None:
         registry = RuleBacktestService._STRATEGY_TEMPLATE_REGISTRY
@@ -1479,9 +1570,9 @@ class RuleBacktestTestCase(unittest.TestCase):
                     fee_bps=0.0,
                     slippage_bps=0.0,
                 )
-                self.assertEqual(missing_symbol.normalization_state, "assumed")
-                self.assertIsNone(missing_symbol.unsupported_reason)
-                self.assertEqual(missing_symbol_spec["symbol"], "NONE")
+                self.assertEqual(missing_symbol.normalization_state, "unsupported")
+                self.assertEqual(missing_symbol.unsupported_reason, "missing_symbol")
+                self.assertNotIn("symbol", missing_symbol_spec)
                 self.assertEqual(missing_symbol_spec["strategy_type"], strategy_kind)
 
     def test_unknown_indicator_identifier_fails_explicitly(self) -> None:
@@ -1521,17 +1612,17 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertFalse(parsed["executable"])
         self.assertEqual(parsed["normalization_state"], "unsupported")
-        self.assertIn("单一标的", parsed["unsupported_reason"])
+        self.assertIn("分批", parsed["unsupported_reason"])
         self.assertEqual(parsed["strategy_spec"]["support"]["normalization_state"], "unsupported")
-        self.assertIn("单一标的", parsed["strategy_spec"]["support"]["unsupported_reason"])
+        self.assertIn("分批", parsed["strategy_spec"]["support"]["unsupported_reason"])
         self.assertEqual(parsed["detected_strategy_family"], "macd_crossover")
         self.assertIn("MACD", parsed["core_intent_summary"])
         self.assertTrue(parsed["supported_portion_summary"])
         self.assertTrue(parsed["unsupported_details"])
-        self.assertEqual(parsed["unsupported_details"][0]["code"], "unsupported_multi_symbol")
+        self.assertEqual(parsed["unsupported_details"][0]["code"], "unsupported_position_scaling")
         self.assertGreaterEqual(len(parsed["unsupported_extensions"]), 2)
         self.assertGreaterEqual(len(parsed["rewrite_suggestions"]), 1)
-        self.assertTrue(any("AAPL" in item["strategy_text"] or "NVDA" in item["strategy_text"] for item in parsed["rewrite_suggestions"]))
+        self.assertTrue(any("MACD" in item["strategy_text"] for item in parsed["rewrite_suggestions"]))
 
     def test_re_normalization_prefers_explicit_indicator_strategy_spec_over_setup_defaults(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1570,7 +1661,10 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_re_normalization_prefers_explicit_periodic_strategy_spec_over_setup_defaults(self) -> None:
         service = RuleBacktestService(self.db)
-        parsed_dict = service.parse_strategy("资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止")
+        parsed_dict = service.parse_strategy(
+            "资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止",
+            code="ORCL",
+        )
         parsed_dict["setup"]["order_mode"] = "fixed_shares"
         parsed_dict["setup"]["quantity_per_trade"] = 100
         parsed_dict["strategy_spec"]["entry"]["order"]["mode"] = "fixed_amount"

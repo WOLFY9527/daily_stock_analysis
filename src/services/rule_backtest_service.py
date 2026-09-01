@@ -10236,9 +10236,9 @@ class RuleBacktestService:
             start_date=self._first_defined(start_date, spec_value("date_range", "start_date"), setup.get("start_date")),
             end_date=self._first_defined(end_date, spec_value("date_range", "end_date"), setup.get("end_date")),
         )
-        symbol = str(self._first_defined(code, spec_value("symbol"), setup.get("symbol"), "")).strip().upper()
-        if not symbol:
-            raise ValueError("periodic accumulation requires a single symbol")
+        symbol = self._canonical_requested_strategy_symbol(
+            self._first_defined(code, spec_value("symbol"), setup.get("symbol"))
+        )
 
         order_mode = str(
             self._first_defined(
@@ -10260,6 +10260,17 @@ class RuleBacktestService:
             if amount_per_trade is None or amount_per_trade <= 0:
                 raise ValueError("fixed_amount periodic accumulation requires amount_per_trade")
             quantity_per_trade = None
+
+        if not symbol:
+            parsed.executable = False
+            parsed.normalization_state = "unsupported"
+            parsed.assumptions = []
+            parsed.assumption_groups = []
+            parsed.unsupported_reason = "missing_symbol"
+            return {
+                "strategy_type": parsed.strategy_kind,
+                "timeframe": parsed.timeframe,
+            }
 
         resolved_initial_capital = float(
             initial_capital
@@ -10326,9 +10337,9 @@ class RuleBacktestService:
     ) -> Dict[str, Any]:
         setup = dict(parsed.setup or {})
         existing_spec = dict(parsed.strategy_spec or {})
-        symbol = str(
-            self._first_defined(code, self._nested_value(existing_spec, "symbol"), setup.get("symbol"), "")
-        ).strip().upper()
+        symbol = self._canonical_requested_strategy_symbol(
+            self._first_defined(code, self._nested_value(existing_spec, "symbol"), setup.get("symbol"))
+        )
         normalized_start_date, normalized_end_date = self._normalize_date_range(
             start_date=start_date or self._nested_value(existing_spec, "date_range", "start_date"),
             end_date=end_date or self._nested_value(existing_spec, "date_range", "end_date"),
@@ -10636,7 +10647,6 @@ class RuleBacktestService:
     def _classify_unsupported_input(self, parsed: ParsedStrategy) -> Optional[Dict[str, Any]]:
         raw_text = str(parsed.source_text or "")
         upper_text = raw_text.upper()
-        tickers = self._extract_uppercase_tickers(raw_text)
         details: List[Dict[str, Any]] = []
 
         if (
@@ -10648,9 +10658,6 @@ class RuleBacktestService:
 
         if self._contains_any(upper_text, ["做空", "SHORT", "SELL SHORT", "SHORT SELL"]):
             details.append(self._build_unsupported_detail("unsupported_short_selling", "做空方向", "当前 deterministic MVP 仅支持 long-only，不支持做空。"))
-
-        if len(tickers) > 1:
-            details.append(self._build_unsupported_detail("unsupported_multi_symbol", "多标的输入", f"当前一次只能回测单一标的，已识别到 {', '.join(tickers[:3])}。"))
 
         if self._contains_any(upper_text, ["分三批", "三批", "分批", "分三次", "三次", "HALF POSITION", "HALF-POSITION", "HALF POSITION", "半仓", "EACH HALF", "EACH 50%", "SCALE IN", "PYRAMID"]):
             details.append(self._build_unsupported_detail("unsupported_position_scaling", "分批建仓 / 仓位缩放", "当前只支持单次入场，不支持分批买入、半仓或逐级加仓。"))
@@ -10670,6 +10677,8 @@ class RuleBacktestService:
             details.append(self._build_unsupported_detail("unsupported_nested_logic", "嵌套条件", "当前不支持带 if/else 分支的策略逻辑，请改写成单一入场条件 + 单一离场条件。"))
 
         unsupported_codes = {str(item.get("code") or "") for item in parsed.ambiguities}
+        if parsed.unsupported_reason == "missing_symbol":
+            details.append(self._build_unsupported_detail("unsupported_missing_symbol", "缺少标的代码", "请通过 code 请求字段提供单一、可规范化的股票代码。"))
         if "missing_exit" in unsupported_codes:
             details.append(self._build_unsupported_detail("unsupported_missing_exit_rule", "缺少离场规则", "当前 deterministic backtest 需要明确离场条件或使用已支持的默认离场模板。"))
 
@@ -10679,7 +10688,7 @@ class RuleBacktestService:
         deduped_details = self._dedupe_unsupported_details(details)
         if not deduped_details:
             return None
-        return self._unsupported_taxonomy_payload(parsed, deduped_details, symbols=tickers[:2])
+        return self._unsupported_taxonomy_payload(parsed, deduped_details)
 
     def _unsupported_taxonomy_payload(
         self,
@@ -10898,13 +10907,14 @@ class RuleBacktestService:
             return {"code": "unsupported_parse_ambiguity", "message": "当前输入还不能稳定执行。"}
         priority = {
             "unsupported_multi_symbol": 0,
-            "unsupported_position_scaling": 1,
-            "unsupported_strategy_combination": 2,
-            "unsupported_parameter_optimization": 3,
-            "unsupported_short_selling": 4,
-            "unsupported_nested_logic": 5,
-            "unsupported_missing_exit_rule": 6,
-            "unsupported_parse_ambiguity": 7,
+            "unsupported_missing_symbol": 1,
+            "unsupported_position_scaling": 2,
+            "unsupported_strategy_combination": 3,
+            "unsupported_parameter_optimization": 4,
+            "unsupported_short_selling": 5,
+            "unsupported_nested_logic": 6,
+            "unsupported_missing_exit_rule": 7,
+            "unsupported_parse_ambiguity": 8,
         }
         return sorted(details, key=lambda item: priority.get(str(item.get("code") or ""), 99))[0]
 
@@ -11004,19 +11014,6 @@ class RuleBacktestService:
         }
 
     @staticmethod
-    def _extract_uppercase_tickers(text: str) -> List[str]:
-        matches = re.findall(r"(?<![A-Z])[A-Z]{1,5}(?![A-Z])", str(text or "").upper())
-        filtered = [item for item in matches if item not in {"MACD", "RSI", "SMA", "EMA", "MA", "BUY", "SELL", "IF", "THEN", "ELSE"}]
-        ordered: List[str] = []
-        seen = set()
-        for item in filtered:
-            if item in seen:
-                continue
-            seen.add(item)
-            ordered.append(item)
-        return ordered
-
-    @staticmethod
     def _contains_any(text: str, patterns: List[str]) -> bool:
         upper_text = str(text or "").upper()
         return any(pattern.upper() in upper_text for pattern in patterns)
@@ -11068,6 +11065,13 @@ class RuleBacktestService:
                 continue
             return value
         return None
+
+    @staticmethod
+    def _canonical_requested_strategy_symbol(code: Optional[str]) -> str:
+        identity = parse_canonical_symbol(str(code or "").strip())
+        if identity is None or identity.ambiguous:
+            return ""
+        return identity.symbol
 
     @staticmethod
     def _has_meaningful_node(node: Optional[Dict[str, Any]]) -> bool:
@@ -11388,7 +11392,7 @@ class RuleBacktestService:
         for field in self._parsed_strategy_expected_fields(normalized_payload):
             stored_value = self._nested_value(stored_payload, *field.split("."))
             normalized_value = self._nested_value(normalized_payload, *field.split("."))
-            if stored_value is None:
+            if stored_value is None and normalized_value is not None:
                 missing_fields.append(field)
                 continue
             if isinstance(normalized_value, dict) and normalized_value and not isinstance(stored_value, dict):

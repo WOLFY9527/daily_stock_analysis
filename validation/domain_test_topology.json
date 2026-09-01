@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8316,
-      "sha256": "3c2001058689d27ae211d7d23947071bdf1de030632c51410e1d755a59ea6018"
+      "count": 8319,
+      "sha256": "332a67796be0867b64c2d85388dc79dcec1200e4d0827c457199413dd16344f6"
     },
     "tests": [
       {
@@ -35939,6 +35939,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_keeps_ordinary_english_words_out_of_symbol_identity",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_marks_parameter_optimization_unsupported_with_fixed_parameter_rewrite",
         "domain": "backtest",
         "baseline": true
@@ -35952,6 +35957,16 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_preserves_ma_core_intent_when_stop_extension_is_unsupported",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_represents_missing_indicator_symbol_without_guessing",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_request_code_precedes_periodic_text_symbol",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_strategy_returns_compact_unsupported_rewrite_guidance",
