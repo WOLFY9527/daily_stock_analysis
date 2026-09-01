@@ -291,7 +291,7 @@ appTest.describe('rotation radar family density', () => {
       await appExpect(collapsedRow).toBeVisible();
       await appExpect(collapsedRow).toContainText('低信号防御');
       await appExpect(collapsedRow).toContainText('0/1 个有信号');
-      await appExpect(collapsedRow).toContainText('默认折叠保留查阅入口');
+      await appExpect(collapsedRow).toContainText('默认折叠。');
 
       const bodyText = await page.locator('body').innerText();
       baseExpect(bodyText).not.toMatch(forbiddenRotationInternalPattern);
