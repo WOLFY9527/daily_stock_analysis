@@ -279,6 +279,14 @@ async function openSignedInHome(page: Page) {
   await expect(page.getByText('Oracle Corporation')).toBeVisible({ timeout: 15_000 });
 }
 
+async function switchHomeLanguage(page: Page) {
+  const toggle = page.getByRole('button', { name: /切换语言|Switch language/ });
+  if (!await toggle.isVisible()) {
+    await page.getByRole('button', { name: /打开导航菜单|Open navigation/ }).click();
+  }
+  await toggle.click();
+}
+
 async function expectNoHorizontalOverflow(page: Page) {
   await baseExpect
     .poll(async () => page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)))
@@ -324,6 +332,14 @@ test.describe('Home chart browser smoke', () => {
     expect(regionText).not.toMatch(homeChartLeakPattern);
     expect(regionText).not.toMatch(tradingPattern);
     await expectNoHorizontalOverflow(page);
+
+    await switchHomeLanguage(page);
+    await expect(page).toHaveURL(/\/en$/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('Price');
+    await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('Volume');
+    await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('Zoom');
+    await expectNoHorizontalOverflow(page);
     expect(consoleErrors).toEqual([]);
     expect(unhandledApiRoutes).toEqual([]);
   });
@@ -359,6 +375,14 @@ test.describe('Home chart browser smoke', () => {
       const regionText = await chartSection.innerText();
       expect(regionText).not.toMatch(homeChartLeakPattern);
       expect(regionText).not.toMatch(tradingPattern);
+      await expectNoHorizontalOverflow(page);
+
+      await switchHomeLanguage(page);
+      await expect(page).toHaveURL(/\/en$/);
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('Price');
+      await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('Volume');
+      await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('Zoom');
       await expectNoHorizontalOverflow(page);
     }
     expect(consoleErrors).toEqual([]);

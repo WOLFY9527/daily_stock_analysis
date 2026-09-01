@@ -538,6 +538,24 @@ test.describe('admin system-control rail contract', () => {
       }
     });
   }
+
+  test('projects Admin Logs product chrome in both route locales without overflow', async ({ page }) => {
+    await installAdminRailMocks(page);
+
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      for (const locale of ['zh', 'en'] as const) {
+        await page.setViewportSize(viewport);
+        await page.goto(`/${locale}/admin/logs`);
+        await page.waitForLoadState('domcontentloaded');
+
+        await expect(page.getByTestId('admin-logs-workspace')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('html')).toHaveAttribute('lang', locale);
+        await expect(page.getByRole('heading', { name: locale === 'en' ? 'Admin Logs' : '管理员日志' })).toBeVisible();
+        await expect(page.getByRole('textbox', { name: locale === 'en' ? 'Search logs' : '搜索日志' })).toBeVisible();
+        await expectNoHorizontalOverflow(page);
+      }
+    }
+  });
 });
 
 type RecoverySessionKind = 'guest' | 'user' | 'admin';
