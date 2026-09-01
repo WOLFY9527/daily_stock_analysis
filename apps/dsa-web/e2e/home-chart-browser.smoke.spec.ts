@@ -38,6 +38,10 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
 }
 
 async function installSignedInHomeRoutes(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('dsa-selected-history-id', '3');
+  });
+
   await page.route('**/api/v1/auth/status**', async (route) => {
     await fulfillJson(route, {
       authEnabled: true,
