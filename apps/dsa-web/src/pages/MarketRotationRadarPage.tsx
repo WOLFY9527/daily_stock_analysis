@@ -21,6 +21,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import { useI18n } from '../contexts/UiLanguageContext';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   buildAlpacaQuoteAuthorityReadinessView,
@@ -55,102 +56,83 @@ const DEFAULT_MARKET = 'US';
 const ROTATION_RADAR_LOADING_FALLBACK_MS = 5000;
 const ROTATION_RADAR_ROUTE_TIMEOUT_MS = 12000;
 const MARKET_OPTIONS = [
-  { id: 'US', label: '美股' },
-  { id: 'CN', label: 'A股' },
-  { id: 'HK', label: '港股' },
-  { id: 'CRYPTO', label: '加密' },
+  { id: 'US', labelKey: 'markets.us' },
+  { id: 'CN', labelKey: 'markets.cn' },
+  { id: 'HK', labelKey: 'markets.hk' },
+  { id: 'CRYPTO', labelKey: 'markets.crypto' },
 ] as const;
 
-const STAGE_LABELS: Record<MarketRotationStage, string> = {
-  early_watch: '早期观察',
-  confirmed_rotation: '确认轮动',
-  extended_watch: '延展观察',
-  cooling_watch: '降温观察',
-  weak_or_no_signal: '信号较弱',
+const STAGE_LABEL_KEYS: Record<MarketRotationStage, string> = {
+  early_watch: 'stages.earlyWatch',
+  confirmed_rotation: 'stages.confirmedRotation',
+  extended_watch: 'stages.extendedWatch',
+  cooling_watch: 'stages.coolingWatch',
+  weak_or_no_signal: 'stages.weakOrNoSignal',
 };
 
 const REAL_FLOW_EVIDENCE_TYPES = new Set(['real_flow', 'mixed_real_and_proxy']);
-const DATA_GAP_LABELS: Record<string, string> = {
-  true_flow_data_missing: '信号待确认',
-  flow_methodology_missing: '信号待确认',
-  source_authority_rejected: '信号待确认',
-  stale_quote_window: '数据延迟',
-  benchmark_proxy_missing: '走势分化',
-  proxy_coverage_incomplete: '走势分化',
-  taxonomy_only: '分类浏览',
-  missing_required_windows: '信号待确认',
-  no_headline_theme: '走势分化',
+const DATA_GAP_LABEL_KEYS: Record<string, string> = {
+  true_flow_data_missing: 'gaps.signalPending',
+  flow_methodology_missing: 'gaps.signalPending',
+  source_authority_rejected: 'gaps.signalPending',
+  stale_quote_window: 'gaps.dataDelayed',
+  benchmark_proxy_missing: 'gaps.divergence',
+  proxy_coverage_incomplete: 'gaps.divergence',
+  taxonomy_only: 'gaps.taxonomy',
+  missing_required_windows: 'gaps.signalPending',
+  no_headline_theme: 'gaps.divergence',
 };
-const THEME_FLOW_STATE_LABELS: Record<string, string> = {
-  leading: '领涨观察',
-  broadening: '扩散跟涨',
-  rotating: '轮动切换',
-  crowded: '拥挤观察',
-  fading: '热度回落',
-  mixed: '信号分化',
-  insufficient_evidence: '数据不足',
+const THEME_FLOW_STATE_LABEL_KEYS: Record<string, string> = {
+  leading: 'flowStates.leading',
+  broadening: 'flowStates.broadening',
+  rotating: 'flowStates.rotating',
+  crowded: 'flowStates.crowded',
+  fading: 'flowStates.fading',
+  mixed: 'flowStates.mixed',
+  insufficient_evidence: 'flowStates.insufficientEvidence',
 };
-const THEME_FLOW_REASON_LABELS: Record<string, string> = {
-  fallback_source: '最近一次可用数据',
-  stale_source: '数据延迟',
-  partial_source: '走势分化',
-  source_authority_missing: '信号待确认',
-  conflicting_signal_inputs: '强弱与扩散信号分化',
+const THEME_FLOW_REASON_LABEL_KEYS: Record<string, string> = {
+  fallback_source: 'flowReasons.fallbackSource',
+  stale_source: 'flowReasons.staleSource',
+  partial_source: 'flowReasons.partialSource',
+  source_authority_missing: 'flowReasons.sourceAuthorityMissing',
+  conflicting_signal_inputs: 'flowReasons.conflictingInputs',
 };
-const THEME_PARTICIPATION_LABELS: Record<string, string> = {
-  broad_group: '广泛扩散',
-  leader_concentrated: '少数龙头集中',
-  mixed_or_partial: '分化观察',
-  insufficient_evidence: '证据不足',
+const THEME_PARTICIPATION_LABEL_KEYS: Record<string, string> = {
+  broad_group: 'participation.broadGroup',
+  leader_concentrated: 'participation.leaderConcentrated',
+  mixed_or_partial: 'participation.mixedOrPartial',
+  insufficient_evidence: 'participation.insufficientEvidence',
 };
-const THEME_LEADERSHIP_LABELS: Record<string, string> = {
-  balanced: '分布均衡',
-  moderate: '中度集中',
-  concentrated: '龙头集中',
-  unknown: '集中度待补齐',
+const THEME_LEADERSHIP_LABEL_KEYS: Record<string, string> = {
+  balanced: 'leadership.balanced',
+  moderate: 'leadership.moderate',
+  concentrated: 'leadership.concentrated',
+  unknown: 'leadership.unknown',
 };
-const THEME_CORRELATION_LABELS: Record<string, string> = {
-  aligned: '同步相关',
-  mixed: '相关性分化',
-  weak: '相关性偏弱',
-  missing: '同步证据待补齐',
+const THEME_CORRELATION_LABEL_KEYS: Record<string, string> = {
+  aligned: 'correlation.aligned',
+  mixed: 'correlation.mixed',
+  weak: 'correlation.weak',
+  missing: 'correlation.missing',
 };
-const THEME_BREADTH_LABELS: Record<string, string> = {
-  broad: '广度扩散',
-  mixed: '广度分化',
-  thin: '广度偏窄',
-  missing: '广度待补齐',
+const THEME_BREADTH_LABEL_KEYS: Record<string, string> = {
+  broad: 'breadth.broad',
+  mixed: 'breadth.mixed',
+  thin: 'breadth.thin',
+  missing: 'breadth.missing',
 };
-const SNAPSHOT_INPUT_LABELS: Record<string, string> = {
-  fallback_source: '最近一次可用数据',
-  stale_source: '数据延迟',
-  partial_source: '部分样本待补齐',
-  breadth_percent_up: '上涨广度待补齐',
-  breadth_percent_outperforming_benchmark: '跑赢广度待补齐',
-  correlation_same_direction_percent: '成员同步待补齐',
-  correlation_above_vwap_percent: '均线同步待补齐',
-  leadership_concentration_percent: '龙头集中度待补齐',
-  market_runtime_evidence: '市场观察样本待补齐',
+const SNAPSHOT_INPUT_LABEL_KEYS: Record<string, string> = {
+  fallback_source: 'snapshotInputs.fallbackSource',
+  stale_source: 'snapshotInputs.staleSource',
+  partial_source: 'snapshotInputs.partialSource',
+  breadth_percent_up: 'snapshotInputs.breadthPercentUp',
+  breadth_percent_outperforming_benchmark: 'snapshotInputs.breadthOutperforming',
+  correlation_same_direction_percent: 'snapshotInputs.correlationSameDirection',
+  correlation_above_vwap_percent: 'snapshotInputs.correlationAboveVwap',
+  leadership_concentration_percent: 'snapshotInputs.leadershipConcentration',
+  market_runtime_evidence: 'snapshotInputs.marketRuntimeEvidence',
 };
-const SNAPSHOT_NEXT_STEP_LABELS: Record<string, string> = {
-  'Watch whether broad participation persists across the next observation window.': '继续观察广泛参与能否延续到下一观察窗口。',
-  'Compare top-member moves with the rest of the theme before drawing a group-level conclusion.': '先对比龙头成员与其余成员，再判断主题整体扩散。',
-  'Collect member-level breadth and synchronization evidence before classifying participation.': '补齐成员广度与同步证据后，再分类参与状态。',
-  'Refresh stale theme inputs before treating the snapshot as current.': '先等待数据更新，再把快照视为当前状态。',
-  'Review whether breadth, synchronization, and leadership remain consistent in the next snapshot.': '下一次快照继续复核广度、同步与龙头分布是否一致。',
-};
-const ROTATION_ENGLISH_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/\bAI Applications?\b/g, 'AI 应用'],
-  [/\bAI Observation Theme\b/g, 'AI 观察主题'],
-  [/\bAI Proxy Candidate\b/g, 'AI 观察候选'],
-  [/\bSemiconductor Real Flow\b/g, '半导体确认信号'],
-  [/\bRobotics\b/g, '机器人'],
-  [/\bTheme\b/g, '主题'],
-  [/\bCluster\b/g, '主题簇'],
-  [/\bObservation\b/g, '观察'],
-  [/\bProxy Candidate\b/g, '观察候选'],
-  [/\bReal Flow\b/g, '确认信号'],
-];
 const ROTATION_PAPER_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_84%,transparent)]';
 const ROTATION_PAPER_SOFT_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_70%,transparent)]';
 const ROTATION_PAPER_TEXT_PRIMARY_CLASS = 'text-[color:var(--wolfy-text-primary)]';
@@ -216,12 +198,25 @@ type RotationFamilyView = {
   hasUsefulSignal: boolean;
 };
 
+type RotationTranslate = ReturnType<typeof useI18n>['t'];
+type RotationLanguage = ReturnType<typeof useI18n>['language'];
+
+function rotationCopy(t: RotationTranslate, key: string, vars?: Record<string, string | number | undefined>): string {
+  return t(`rotationRadar.${key}`, vars);
+}
+
+function themePresentationName(language: RotationLanguage, theme?: MarketRotationTheme): string {
+  const primary = language === 'en' ? theme?.englishName : theme?.name;
+  const fallback = language === 'en' ? theme?.name : theme?.englishName;
+  return String(primary || fallback || '').trim();
+}
+
 const ROTATION_MATRIX_STAGE_ORDER: RotationMatrixStageMeta[] = [
-  { key: 'confirmed_rotation', label: '确认轮动' },
-  { key: 'extended_watch', label: '延展观察' },
-  { key: 'early_watch', label: '早期观察' },
-  { key: 'cooling_watch', label: '降温观察' },
-  { key: 'weak_or_no_signal', label: '信号较弱' },
+  { key: 'confirmed_rotation', label: 'stages.confirmedRotation' },
+  { key: 'extended_watch', label: 'stages.extendedWatch' },
+  { key: 'early_watch', label: 'stages.earlyWatch' },
+  { key: 'cooling_watch', label: 'stages.coolingWatch' },
+  { key: 'weak_or_no_signal', label: 'stages.weakOrNoSignal' },
 ];
 
 function hasMomentumProxyInputs(theme: MarketRotationTheme): boolean {
@@ -326,12 +321,14 @@ function resolveEvidenceQuality(theme: MarketRotationTheme): MarketRotationEvide
   }
 }
 
-function formatGapLabel(value?: string | null): string {
+function formatGapLabel(t: RotationTranslate, value?: string | null): string {
   const normalized = String(value || '').trim();
   if (!normalized) {
-    return '信号仍待补齐';
+    return rotationCopy(t, 'gaps.signalPending');
   }
-  return DATA_GAP_LABELS[normalized] || '信号仍待补齐';
+  return DATA_GAP_LABEL_KEYS[normalized]
+    ? rotationCopy(t, DATA_GAP_LABEL_KEYS[normalized])
+    : rotationCopy(t, 'gaps.signalPending');
 }
 
 function themeDataGaps(theme: MarketRotationTheme): string[] {
@@ -343,90 +340,85 @@ function themeDataGaps(theme: MarketRotationTheme): string[] {
   }, []);
 }
 
-function consumerThemeSubtitle(theme: MarketRotationTheme): string {
+function consumerThemeSubtitle(t: RotationTranslate, theme: MarketRotationTheme): string {
   const raw = theme.focus || theme.englishName || theme.benchmark || '';
-  const normalized = localizeRotationEnglishCopy(String(raw).trim());
+  const normalized = String(raw).trim();
   if (!normalized) {
-    return '观察线索';
+    return rotationCopy(t, 'labels.observationClue');
   }
   if (/^[\w\s/.:+-]+$/.test(normalized) && theme.focus) {
-    return '观察线索';
+    return rotationCopy(t, 'labels.observationClue');
   }
   if (/proxy|provider|source|debug|trace|raw|schema|代理|来源|提供方|诊断/i.test(normalized)) {
-    return '观察线索';
+    return rotationCopy(t, 'labels.observationClue');
   }
-  return sanitizeRotationText(normalized, '观察线索');
+  return sanitizeRotationText(normalized, rotationCopy(t, 'labels.observationClue'));
 }
 
-function localizeRotationEnglishCopy(value: string): string {
-  return ROTATION_ENGLISH_COPY_REPLACEMENTS.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    value,
-  );
-}
-
-function consumerFreshnessLabel(freshness?: string | null, isFallback?: boolean, isStale?: boolean): string {
+function consumerFreshnessLabel(t: RotationTranslate, freshness?: string | null, isFallback?: boolean, isStale?: boolean): string {
   if (isFallback || freshness === 'fallback' || isStale || freshness === 'stale') {
-    return '数据延迟，已使用最近一次可用数据。';
+    return rotationCopy(t, 'freshness.fallback');
   }
   if (freshness === 'delayed') {
-    return '数据延迟。';
+    return rotationCopy(t, 'freshness.delayed');
   }
   if (freshness === 'live') {
-    return '数据已更新。';
+    return rotationCopy(t, 'freshness.live');
   }
-  return '信号待确认，等待数据更新。';
+  return rotationCopy(t, 'freshness.pending');
 }
 
-function consumerConfidenceLabel(state: DecisionReadinessState): string {
+function consumerConfidenceLabel(t: RotationTranslate, state: DecisionReadinessState): string {
   if (state === 'ready') {
-    return '当前轮动信号可用，仍需持续观察走势分化。';
+    return rotationCopy(t, 'confidence.ready');
   }
   if (state === 'observe') {
-    return '信号待确认，先看板块强弱与走势分化。';
+    return rotationCopy(t, 'confidence.observe');
   }
-  return '轮动数据待确认';
+  return rotationCopy(t, 'confidence.unavailable');
 }
 
-function consumerSufficiencyLabel(state: DecisionReadinessState): string {
+function consumerSufficiencyLabel(t: RotationTranslate, state: DecisionReadinessState): string {
   if (state === 'ready') {
-    return '板块强弱可读。';
+    return rotationCopy(t, 'sufficiency.ready');
   }
   if (state === 'observe') {
-    return '部分数据延迟。';
+    return rotationCopy(t, 'sufficiency.observe');
   }
-  return '信号待确认。';
+  return rotationCopy(t, 'sufficiency.unavailable');
 }
 
-function consumerStatusLabel(state: DecisionReadinessState, payload: MarketRotationRadarResponse): string {
+function consumerStatusLabel(t: RotationTranslate, state: DecisionReadinessState, payload: MarketRotationRadarResponse): string {
   if (!payload.themes.length) {
-    return '轮动方向待确认';
+    return rotationCopy(t, 'status.directionPending');
   }
   if (state === 'ready') {
-    return payload.freshness === 'delayed' ? '数据延迟可读' : '板块强弱可读';
+    return payload.freshness === 'delayed' ? rotationCopy(t, 'status.delayedReadable') : rotationCopy(t, 'status.strengthReadable');
   }
   if (state === 'observe') {
-    return payload.isFallback || payload.isStale ? '数据延迟' : '信号待确认';
+    return payload.isFallback || payload.isStale ? rotationCopy(t, 'gaps.dataDelayed') : rotationCopy(t, 'gaps.signalPending');
   }
   if (isRotationLibraryMode(payload)) {
-    return '信号待确认';
+    return rotationCopy(t, 'gaps.signalPending');
   }
   if (payload.isFallback || payload.isStale) {
-    return '数据延迟';
+    return rotationCopy(t, 'gaps.dataDelayed');
   }
-  return payload.themes.length ? '信号待确认' : '轮动方向待确认';
+  return payload.themes.length ? rotationCopy(t, 'gaps.signalPending') : rotationCopy(t, 'status.directionPending');
 }
 
-function formatThemeStage(stage?: MarketRotationStage): string {
-  return stage ? STAGE_LABELS[stage] || stage : '待识别';
+function formatThemeStage(t: RotationTranslate, stage?: MarketRotationStage): string {
+  return stage ? rotationCopy(t, STAGE_LABEL_KEYS[stage] || 'labels.unidentified') : rotationCopy(t, 'labels.unidentified');
 }
 
-function formatThemeFlowState(state?: string | null): string {
+function formatThemeFlowState(t: RotationTranslate, state?: string | null): string {
   const normalized = String(state || '').trim();
   if (!normalized) {
-    return '待确认';
+    return rotationCopy(t, 'labels.pending');
   }
-  return THEME_FLOW_STATE_LABELS[normalized] || sanitizeRotationText(normalized, '待确认');
+  return THEME_FLOW_STATE_LABEL_KEYS[normalized]
+    ? rotationCopy(t, THEME_FLOW_STATE_LABEL_KEYS[normalized])
+    : sanitizeRotationText(normalized, rotationCopy(t, 'labels.pending'));
 }
 
 function themeFlowChipVariant(state?: string | null): 'success' | 'info' | 'caution' | 'neutral' {
@@ -445,7 +437,7 @@ function themeFlowChipVariant(state?: string | null): 'success' | 'info' | 'caut
   }
 }
 
-function formatThemeFlowConfidence(signal?: MarketRotationTheme['themeFlowSignal'] | null): string {
+function formatThemeFlowConfidence(t: RotationTranslate, signal?: MarketRotationTheme['themeFlowSignal'] | null): string {
   const raw = signal?.confidence;
   if (typeof raw === 'number' && Number.isFinite(raw)) {
     return `${Math.round(raw <= 1 ? raw * 100 : raw)}%`;
@@ -457,24 +449,25 @@ function formatThemeFlowConfidence(signal?: MarketRotationTheme['themeFlowSignal
     }
   }
   const label = String(signal?.confidenceLabel || signal?.confidenceText || '').trim();
-  return label || '待确认';
+  return label || rotationCopy(t, 'labels.pending');
 }
 
-function extractThemeFlowLeadershipEvidence(signal?: MarketRotationTheme['themeFlowSignal'] | null): string | null {
+function extractThemeFlowLeadershipEvidence(t: RotationTranslate, signal?: MarketRotationTheme['themeFlowSignal'] | null): string | null {
   const candidate = signal && typeof signal === 'object'
     ? (signal as ThemeFlowSignalView & { leadershipEvidence?: unknown }).leadershipEvidence
     : null;
   return typeof candidate === 'string' && candidate.trim()
-    ? sanitizeRotationText(candidate, '龙头线索待补齐。')
+    ? sanitizeRotationText(candidate, rotationCopy(t, 'evidence.leadershipMissing'))
     : null;
 }
 
-function themeFlowReasonLabels(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
+function themeFlowReasonLabels(t: RotationTranslate, signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
   const codes = Array.isArray(signal?.reasonCodes) ? signal.reasonCodes : [];
   const labels: string[] = [];
   const seen = new Set<string>();
   for (const code of codes) {
-    const label = THEME_FLOW_REASON_LABELS[String(code || '').trim()] || '';
+    const labelKey = THEME_FLOW_REASON_LABEL_KEYS[String(code || '').trim()];
+    const label = labelKey ? rotationCopy(t, labelKey) : '';
     if (!label || seen.has(label)) continue;
     seen.add(label);
     labels.push(label);
@@ -483,11 +476,11 @@ function themeFlowReasonLabels(signal?: MarketRotationTheme['themeFlowSignal'] |
   return labels;
 }
 
-function themeFlowEvidenceLines(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
+function themeFlowEvidenceLines(t: RotationTranslate, signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
   return [
-    extractThemeFlowLeadershipEvidence(signal) || '龙头线索待补齐。',
-    sanitizeRotationText(signal?.breadthEvidence, '广度证据待补齐。'),
-    sanitizeRotationText(signal?.relativeStrengthEvidence, '相对强弱证据待补齐。'),
+    extractThemeFlowLeadershipEvidence(t, signal) || rotationCopy(t, 'evidence.leadershipMissing'),
+    sanitizeRotationText(signal?.breadthEvidence, rotationCopy(t, 'evidence.breadthMissing')),
+    sanitizeRotationText(signal?.relativeStrengthEvidence, rotationCopy(t, 'evidence.relativeStrengthMissing')),
   ];
 }
 
@@ -506,100 +499,107 @@ function hasThemeCorrelationBreadthSnapshot(
 }
 
 function formatSnapshotState(
+  t: RotationTranslate,
   value: string | null | undefined,
   labels: Record<string, string>,
-  fallback: string,
+  fallbackKey: string,
 ): string {
   const normalized = String(value || '').trim();
   if (!normalized) {
-    return fallback;
+    return rotationCopy(t, fallbackKey);
   }
-  return labels[normalized] || sanitizeRotationText(normalized, fallback);
+  return labels[normalized]
+    ? rotationCopy(t, labels[normalized])
+    : sanitizeRotationText(normalized, rotationCopy(t, fallbackKey));
 }
 
-function formatSnapshotPercent(value?: number | string | null): string {
+function formatSnapshotPercent(t: RotationTranslate, value?: number | string | null): string {
   if (!Number.isFinite(Number(value))) {
-    return '待补齐';
+    return rotationCopy(t, 'labels.pending');
   }
   return `${Number(value).toFixed(1)}%`;
 }
 
-function formatSnapshotMemberCount(observed?: number | null, configured?: number | null): string {
+function formatSnapshotMemberCount(t: RotationTranslate, observed?: number | null, configured?: number | null): string {
   const observedNumber = Number(observed);
   const configuredNumber = Number(configured);
   if (!Number.isFinite(observedNumber) || !Number.isFinite(configuredNumber) || configuredNumber <= 0) {
-    return '样本待补齐';
+    return rotationCopy(t, 'snapshot.sampleMissing');
   }
-  return `${Math.max(0, Math.round(observedNumber))}/${Math.max(0, Math.round(configuredNumber))} 个成员`;
+  return rotationCopy(t, 'snapshot.memberCount', { observed: Math.max(0, Math.round(observedNumber)), configured: Math.max(0, Math.round(configuredNumber)) });
 }
 
-function formatSnapshotInputLabel(value?: string | null): string {
+function formatSnapshotInputLabel(t: RotationTranslate, value?: string | null): string {
   const normalized = String(value || '').trim();
   if (!normalized) {
     return '';
   }
   const fallbackWindow = normalized.match(/^fallback_window:(.+)$/);
   if (fallbackWindow?.[1]) {
-    return `${sanitizeRotationText(fallbackWindow[1], '该时窗')} 时窗数据待更新`;
+    return rotationCopy(t, 'snapshot.windowRefresh', { window: sanitizeRotationText(fallbackWindow[1], rotationCopy(t, 'snapshot.window')) });
   }
-  return SNAPSHOT_INPUT_LABELS[normalized] || sanitizeRotationText(normalized, '数据项待补齐');
+  return SNAPSHOT_INPUT_LABEL_KEYS[normalized]
+    ? rotationCopy(t, SNAPSHOT_INPUT_LABEL_KEYS[normalized])
+    : sanitizeRotationText(normalized, rotationCopy(t, 'snapshot.inputMissing'));
 }
 
-function formatSnapshotInputLabels(values?: string[] | null, fallback = '暂无'): string[] {
+function formatSnapshotInputLabels(t: RotationTranslate, values?: string[] | null, fallbackKey = 'labels.none'): string[] {
   const seen = new Set<string>();
   const labels: string[] = [];
   for (const value of values || []) {
-    const label = formatSnapshotInputLabel(value);
+    const label = formatSnapshotInputLabel(t, value);
     if (!label || seen.has(label)) {
       continue;
     }
     seen.add(label);
     labels.push(label);
   }
-  return labels.length ? labels : [fallback];
+  return labels.length ? labels : [rotationCopy(t, fallbackKey)];
 }
 
-function formatSnapshotNextSteps(values?: string[] | null): string[] {
+function formatSnapshotNextSteps(t: RotationTranslate, values?: string[] | null): string[] {
   const seen = new Set<string>();
   const labels: string[] = [];
   for (const value of values || []) {
     const raw = String(value || '').trim();
-    const label = SNAPSHOT_NEXT_STEP_LABELS[raw] || sanitizeRotationText(raw, '');
+    // researchNextSteps belongs to the response evidence contract, not product-owned UI.
+    const label = sanitizeRotationText(raw, '');
     if (!label || seen.has(label)) {
       continue;
     }
     seen.add(label);
     labels.push(label);
   }
-  return labels.length ? labels.slice(0, 3) : ['继续观察广度、同步与龙头分布是否发生变化。'];
+  return labels.length ? labels.slice(0, 3) : [rotationCopy(t, 'snapshotNextSteps.default')];
 }
 
 function formatSnapshotBoundaryLabels(
+  t: RotationTranslate,
   boundary?: MarketRotationThemeCorrelationBreadthSnapshot['observationBoundary'] | null,
 ): string[] {
   if (!boundary || typeof boundary !== 'object') {
-    return ['仅作研究观察'];
+    return [rotationCopy(t, 'boundary.researchOnly')];
   }
   const labels = [
-    boundary.scope === 'existing_theme_fields' ? '仅使用已展示主题字段' : '观察口径受限',
-    boundary.rankingImpact === 'none' ? '不改变排序' : null,
-    boundary.dataMutation === 'none' ? '不改动数据' : null,
-    boundary.dataFetches === 'none' ? '不新增取数' : null,
+    boundary.scope === 'existing_theme_fields' ? rotationCopy(t, 'boundary.existingFields') : rotationCopy(t, 'boundary.scopeLimited'),
+    boundary.rankingImpact === 'none' ? rotationCopy(t, 'boundary.noRankingChange') : null,
+    boundary.dataMutation === 'none' ? rotationCopy(t, 'boundary.noDataMutation') : null,
+    boundary.dataFetches === 'none' ? rotationCopy(t, 'boundary.noNewFetches') : null,
   ].filter((label): label is string => Boolean(label));
-  return labels.length ? labels : ['仅作研究观察'];
+  return labels.length ? labels : [rotationCopy(t, 'boundary.researchOnly')];
 }
 
-function snapshotSummary(snapshot: MarketRotationThemeCorrelationBreadthSnapshot): string {
-  const participation = formatSnapshotState(snapshot.participationState, THEME_PARTICIPATION_LABELS, '参与状态待补齐');
-  const breadth = formatSnapshotState(snapshot.breadthEvidence?.state, THEME_BREADTH_LABELS, '广度待补齐');
-  const correlation = formatSnapshotState(snapshot.correlationEvidence?.state, THEME_CORRELATION_LABELS, '同步证据待补齐');
+function snapshotSummary(t: RotationTranslate, snapshot: MarketRotationThemeCorrelationBreadthSnapshot): string {
+  const participation = formatSnapshotState(t, snapshot.participationState, THEME_PARTICIPATION_LABEL_KEYS, 'snapshot.participationMissing');
+  const breadth = formatSnapshotState(t, snapshot.breadthEvidence?.state, THEME_BREADTH_LABEL_KEYS, 'breadth.missing');
+  const correlation = formatSnapshotState(t, snapshot.correlationEvidence?.state, THEME_CORRELATION_LABEL_KEYS, 'correlation.missing');
   const staleCount = Array.isArray(snapshot.staleInputs) ? snapshot.staleInputs.length : 0;
   const missingCount = Array.isArray(snapshot.missingInputs) ? snapshot.missingInputs.length : 0;
   const dataState = missingCount > 0
-    ? `${missingCount} 项待补齐`
+    ? rotationCopy(t, 'snapshot.missingCount', { count: missingCount })
     : staleCount > 0
-      ? `${staleCount} 项待更新`
-      : '输入完整';
+      ? rotationCopy(t, 'snapshot.staleCount', { count: staleCount })
+      : rotationCopy(t, 'snapshot.complete');
   return `${participation} · ${breadth} · ${correlation} · ${dataState}`;
 }
 
@@ -613,30 +613,30 @@ function resolveRotationFamilyRollup(payload: MarketRotationRadarResponse): Mark
     : [];
 }
 
-function mapDataStateLabel(theme: DataStateFields): string {
+function mapDataStateLabel(t: RotationTranslate, theme: DataStateFields): string {
   const candidate = theme as MarketRotationTheme;
   if (isTaxonomyOnlyTheme(candidate)) {
-    return '观察资料不足';
+    return rotationCopy(t, 'status.insufficientObservation');
   }
   if (
     resolveSignalType(candidate) === 'insufficient_evidence'
     || resolveEvidenceQuality(candidate) === 'insufficient'
   ) {
-    return '观察资料不足';
+    return rotationCopy(t, 'status.insufficientObservation');
   }
   if (theme.isFallback || theme.freshness === 'fallback') {
-    return '最近一次可用';
+    return rotationCopy(t, 'status.latestAvailable');
   }
   if (theme.isStale || theme.freshness === 'stale') {
-    return '最近一次可用';
+    return rotationCopy(t, 'status.latestAvailable');
   }
   if (theme.freshness === 'delayed') {
-    return '延迟可用';
+    return rotationCopy(t, 'status.delayedAvailable');
   }
   if (theme.freshness === 'live') {
-    return '实时';
+    return rotationCopy(t, 'status.live');
   }
-  return '数据更新中';
+  return rotationCopy(t, 'status.refreshing');
 }
 
 function formatConfidenceValue(confidence?: number | null): string {
@@ -663,11 +663,11 @@ function themeSupportsQuantitativePrecision(theme?: MarketRotationTheme): theme 
   );
 }
 
-function themeConfidenceSummary(theme?: MarketRotationTheme): string {
+function themeConfidenceSummary(t: RotationTranslate, theme?: MarketRotationTheme): string {
   if (!themeSupportsQuantitativePrecision(theme)) {
-    return '信号待确认';
+    return rotationCopy(t, 'gaps.signalPending');
   }
-  return `信号 ${formatConfidenceValue(theme.confidence)}`;
+  return rotationCopy(t, 'labels.signalValue', { value: formatConfidenceValue(theme.confidence) });
 }
 
 function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null {
@@ -706,14 +706,14 @@ function resolveFamilyThemes(item: MarketRotationFamilyRollupItem, themes: Marke
   }, []);
 }
 
-function buildRotationFamilyViews(payload: MarketRotationRadarResponse): RotationFamilyView[] {
+function buildRotationFamilyViews(t: RotationTranslate, payload: MarketRotationRadarResponse): RotationFamilyView[] {
   const rollup = resolveRotationFamilyRollup(payload);
   const themes = payload.themes || [];
 
   return rollup
     .map((item, index) => {
       const familyThemes = resolveFamilyThemes(item, themes);
-      const familyName = String(item.familyName || item.familyId || `家族 ${index + 1}`).trim();
+      const familyName = String(item.familyName || item.familyId || rotationCopy(t, 'family.unnamed', { index: index + 1 })).trim();
       const familyKey = item.familyId
         || item.themeIds?.join('|')
         || item.leaderThemeIds?.join('|')
@@ -744,12 +744,12 @@ function buildRotationFamilyViews(payload: MarketRotationRadarResponse): Rotatio
         signalThemeCount,
         averageRotationScore,
         averageConfidence,
-        reasonLabels: themeFlowReasonLabels(item.themeFlowSignal),
+        reasonLabels: themeFlowReasonLabels(t, item.themeFlowSignal),
         preview: sanitizeRotationText(
           item.themeFlowSignal?.explanation,
           collapsedByDefault
-            ? `${familyName} 默认折叠`
-            : `${familyName} 当前仅保留家族级观察。`,
+            ? rotationCopy(t, 'family.collapsedPreview', { family: familyName })
+            : rotationCopy(t, 'family.observationPreview', { family: familyName }),
         ),
         collapsedByDefault,
         hasUsefulSignal,
@@ -791,18 +791,18 @@ function isObservationTheme(theme?: MarketRotationTheme): theme is MarketRotatio
     || resolveEvidenceQuality(theme) === 'observation_only';
 }
 
-function observationStateLabel(theme?: MarketRotationTheme): string | null {
+function observationStateLabel(t: RotationTranslate, theme?: MarketRotationTheme): string | null {
   if (!isObservationTheme(theme)) {
     return null;
   }
   const signalType = resolveSignalType(theme);
   if (signalType === 'relative_strength' || signalType === 'momentum_proxy' || resolveEvidenceQuality(theme) === 'degraded_proxy') {
-    return '对比样本观察';
+    return rotationCopy(t, 'observation.comparisonSample');
   }
-  return '观察信号';
+  return rotationCopy(t, 'observation.signal');
 }
 
-function observationDirectionCue(theme?: MarketRotationTheme): {
+function observationDirectionCue(t: RotationTranslate, theme?: MarketRotationTheme): {
   indicator: '↑' | '↓' | '→';
   label: string;
   changeText: string;
@@ -813,32 +813,32 @@ function observationDirectionCue(theme?: MarketRotationTheme): {
 
   const strength = themeRelativeStrengthValue(theme);
   const benchmark = String(theme?.relativeStrength?.benchmark || theme?.benchmark || '').trim();
-  const benchmarkPrefix = benchmark ? `相对 ${benchmark} ` : '';
+  const benchmarkPrefix = benchmark ? rotationCopy(t, 'observation.relativeBenchmark', { benchmark }) : '';
 
   if (strength !== null) {
     if (strength >= 0.5) {
-      return { indicator: '↑', label: '升温观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+      return { indicator: '↑', label: rotationCopy(t, 'observation.warming'), changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
     }
     if (strength <= -0.5) {
-      return { indicator: '↓', label: '降温观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+      return { indicator: '↓', label: rotationCopy(t, 'observation.cooling'), changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
     }
-    return { indicator: '→', label: '横向观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+    return { indicator: '→', label: rotationCopy(t, 'observation.flat'), changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
   }
 
   if (theme?.stage === 'cooling_watch' || theme?.stage === 'weak_or_no_signal') {
-    return { indicator: '↓', label: '降温观察', changeText: '方向仍待更多样本确认' };
+    return { indicator: '↓', label: rotationCopy(t, 'observation.cooling'), changeText: rotationCopy(t, 'observation.directionPending') };
   }
 
   if (theme?.stage === 'early_watch' || theme?.stage === 'extended_watch' || theme?.stage === 'confirmed_rotation') {
-    return { indicator: '↑', label: '升温观察', changeText: '方向仍待更多样本确认' };
+    return { indicator: '↑', label: rotationCopy(t, 'observation.warming'), changeText: rotationCopy(t, 'observation.directionPending') };
   }
 
-  return { indicator: '→', label: '横向观察', changeText: '方向仍待更多样本确认' };
+  return { indicator: '→', label: rotationCopy(t, 'observation.flat'), changeText: rotationCopy(t, 'observation.directionPending') };
 }
 
-function observationThemeSummary(theme?: MarketRotationTheme): string | null {
-  const stateLabel = observationStateLabel(theme);
-  const directionCue = observationDirectionCue(theme);
+function observationThemeSummary(t: RotationTranslate, theme?: MarketRotationTheme): string | null {
+  const stateLabel = observationStateLabel(t, theme);
+  const directionCue = observationDirectionCue(t, theme);
   const items = [stateLabel, directionCue?.label].filter(Boolean);
   return items.length ? items.join(' · ') : null;
 }
@@ -886,30 +886,13 @@ function sanitizeTradingActionWords(value: string): string {
     .replace(/\brecommend\b/gi, 'research frame');
 }
 
-function sanitizeRotationText(value?: string | null, fallback = '数据不足，结论仅供观察'): string {
-  const text = localizeRotationEnglishCopy(String(value || '').trim());
+function sanitizeRotationText(value?: string | null, fallback = ''): string {
+  const text = String(value || '').trim();
   if (!text) return fallback;
   if (isInternalRotationIssue(text)) {
-    return '部分轮动数据暂不可用。';
+    return fallback;
   }
-  const consumerText = text
-    .replaceAll('备用篮子', '备选分类')
-    .replaceAll('备用主题池', '备选分类')
-    .replaceAll('缺少可用行情与时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
-    .replaceAll('缺少可用行情和时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
-    .replaceAll('新鲜度', '数据更新')
-    .replaceAll('置信度', '信号确认')
-    .replaceAll('结论状态', '轮动方向')
-    .replaceAll('缺失证据', '信号待确认')
-    .replaceAll('缺失', '待确认')
-    .replaceAll('静态主题库', '分类浏览')
-    .replaceAll('主题库', '分类浏览')
-    .replaceAll('真实资金流', '确认信号')
-    .replaceAll('真实流向', '确认信号')
-    .replaceAll('权威来源', '确认信号')
-    .replaceAll('ETF 代理', '对比样本')
-    .replaceAll('代理证据', '观察信号');
-  return sanitizeTradingActionWords(sanitizeMarketGuidanceCopy(consumerText, fallback));
+  return sanitizeTradingActionWords(sanitizeMarketGuidanceCopy(text, fallback));
 }
 
 function sanitizeRotationNotes(notes?: string[]): string[] {
@@ -1061,8 +1044,9 @@ function matchesSearch(theme: MarketRotationTheme, query: string): boolean {
   return haystack.includes(normalized);
 }
 
-function marketLabel(market: string): string {
-  return MARKET_OPTIONS.find((option) => option.id === market)?.label || market;
+function marketLabel(t: RotationTranslate, market: string): string {
+  const option = MARKET_OPTIONS.find((candidate) => candidate.id === market);
+  return option ? rotationCopy(t, option.labelKey) : market;
 }
 
 function rotationScoreEligibleCount(payload: MarketRotationRadarResponse): number {
@@ -1136,30 +1120,30 @@ function primaryDisplayMode(tiers?: RotationTierView | null): RotationPrimaryDis
   return 'unavailable';
 }
 
-function primaryDisplayLabel(mode: RotationPrimaryDisplayMode): string {
+function primaryDisplayLabel(t: RotationTranslate, mode: RotationPrimaryDisplayMode): string {
   switch (mode) {
     case 'headline':
-      return '确认信号';
+      return rotationCopy(t, 'primary.headline');
     case 'observation':
-      return '观察数据';
+      return rotationCopy(t, 'primary.observation');
     case 'taxonomy':
-      return '分类浏览';
+      return rotationCopy(t, 'primary.taxonomy');
     default:
-      return '信号待确认';
+      return rotationCopy(t, 'gaps.signalPending');
   }
 }
 
-function primaryDisplayDetail(mode: RotationPrimaryDisplayMode): string {
+function primaryDisplayDetail(t: RotationTranslate, mode: RotationPrimaryDisplayMode): string {
   if (mode === 'headline') {
-    return '当前只展示已满足确认条件的头部主题，其他主题保留在下方观察列表。';
+    return rotationCopy(t, 'primary.headlineDetail');
   }
   if (mode === 'observation') {
-    return '当前为对比样本与观察数据，仅作走势观察，不形成强结论。';
+    return rotationCopy(t, 'primary.observationDetail');
   }
   if (mode === 'taxonomy') {
-    return '当前以分类浏览为主，等待更多行情覆盖后再确认强弱。';
+    return rotationCopy(t, 'primary.taxonomyDetail');
   }
-  return '当前结构化强弱维度仍待确认，暂不展示主视图。';
+  return rotationCopy(t, 'primary.unavailableDetail');
 }
 
 function deriveRotationDecisionState(
@@ -1196,22 +1180,23 @@ function hasBreadthEvidence(themes: MarketRotationTheme[]): boolean {
 }
 
 function deriveMissingEvidence(
+  t: RotationTranslate,
   payload: MarketRotationRadarResponse,
   tiers = deriveRotationTiers(payload),
   summaryThemes = deriveConclusionScopeThemes(payload, tiers),
 ): string[] {
   const missing = [
-    payload.themes.length === 0 ? '可比较样本不足' : '',
-    tiers.libraryMode ? '观察时窗不足' : '',
-    tiers.libraryMode ? '成员覆盖不足' : '',
-    tiers.confirmedLeaders.length === 0 ? '确认信号不足' : '',
-    rotationScoreEligibleCount(payload) === 0 ? '评分条件不足' : '',
-    !hasBreadthEvidence(summaryThemes) || tiers.confirmedLeaders.length === 0 ? '广度信息不足' : '',
-    payload.isFallback ? '最近数据不足' : '',
-    payload.isStale ? '最近数据不足' : '',
+    payload.themes.length === 0 ? rotationCopy(t, 'missing.comparableSamples') : '',
+    tiers.libraryMode ? rotationCopy(t, 'missing.observationWindows') : '',
+    tiers.libraryMode ? rotationCopy(t, 'missing.memberCoverage') : '',
+    tiers.confirmedLeaders.length === 0 ? rotationCopy(t, 'missing.confirmedSignals') : '',
+    rotationScoreEligibleCount(payload) === 0 ? rotationCopy(t, 'missing.scoringEligibility') : '',
+    !hasBreadthEvidence(summaryThemes) || tiers.confirmedLeaders.length === 0 ? rotationCopy(t, 'missing.breadth') : '',
+    payload.isFallback ? rotationCopy(t, 'missing.recentData') : '',
+    payload.isStale ? rotationCopy(t, 'missing.recentData') : '',
     ...summaryThemes.reduce<string[]>((acc, theme) => {
       for (const gap of themeDataGaps(theme).slice(0, 2)) {
-        acc.push(formatGapLabel(gap));
+        acc.push(formatGapLabel(t, gap));
       }
       return acc;
     }, []),
@@ -1219,27 +1204,28 @@ function deriveMissingEvidence(
   return uniqueReadinessItems(
     missing,
     5,
-    tiers.confirmedLeaders.length ? '暂无关键限制，继续复核风险与数据更新' : '确认信号、广度与观察时窗仍待补齐',
+    tiers.confirmedLeaders.length ? rotationCopy(t, 'missing.none') : rotationCopy(t, 'missing.default'),
   );
 }
 
 function deriveRotationConclusion(
+  t: RotationTranslate,
   payload: MarketRotationRadarResponse,
   tiers = deriveRotationTiers(payload),
 ): RotationConclusionView {
   const state = deriveRotationDecisionState(payload, tiers);
   const summaryThemes = deriveConclusionScopeThemes(payload, tiers);
-  const missingEvidence = deriveMissingEvidence(payload, tiers, summaryThemes);
-  const themeScope = tiers.libraryMode ? '当前主题/行业/概念仅可分类浏览' : '当前主题/行业/概念';
+  const missingEvidence = deriveMissingEvidence(t, payload, tiers, summaryThemes);
+  const themeScope = tiers.libraryMode ? rotationCopy(t, 'conclusion.taxonomyScope') : rotationCopy(t, 'conclusion.scope');
 
   if (state === 'ready') {
     return {
       state,
-      title: '板块强弱可读',
-      detail: '当前轮动信号较完整，可作为主题轮动方向观察；仍需持续复核走势分化、风险与数据更新。',
-      whyNotConclusion: '当前板块强弱、广度和持续性较完整，但页面仍只呈现研究观察，不扩展为交易动作。',
+      title: rotationCopy(t, 'status.strengthReadable'),
+      detail: rotationCopy(t, 'conclusion.readyDetail'),
+      whyNotConclusion: rotationCopy(t, 'conclusion.readyWhy'),
       missingEvidence,
-      nextStep: '继续观察退潮主题、风险标签与更新时间；若走势分化扩大，应降级为信号待确认。',
+      nextStep: rotationCopy(t, 'conclusion.readyNextStep'),
       variant: 'success',
     };
   }
@@ -1247,39 +1233,39 @@ function deriveRotationConclusion(
   if (state === 'observe') {
     return {
       state,
-      title: '信号待确认',
-      detail: '已有候选线索，但轮动方向、扩散广度或持续性仍待确认。',
-      whyNotConclusion: `${themeScope}主要依赖相对强弱、观察项或局部样本，扩散与连续性尚未同时成立。`,
+      title: rotationCopy(t, 'gaps.signalPending'),
+      detail: rotationCopy(t, 'conclusion.observeDetail'),
+      whyNotConclusion: rotationCopy(t, 'conclusion.observeWhy', { scope: themeScope }),
       missingEvidence,
       nextStep: tiers.libraryMode
-        ? '查看分类候选或切换市场对比'
-        : '查看候选主题或切换市场对比',
+        ? rotationCopy(t, 'conclusion.taxonomyNextStep')
+        : rotationCopy(t, 'conclusion.observeNextStep'),
       variant: 'info',
     };
   }
 
   return {
     state,
-    title: '轮动方向待确认',
-    detail: '当前缺少足够行情与时间窗口数据，轮动方向待确认。',
+    title: rotationCopy(t, 'status.directionPending'),
+    detail: rotationCopy(t, 'conclusion.unavailableDetail'),
     whyNotConclusion: tiers.libraryMode || payload.themes.length === 0
-      ? `${themeScope}，可比较行情、时间窗口、成员广度或确认信号仍待确认。`
-      : `${themeScope}近期行情、广度扩散和确认信号仍待确认。`,
+      ? rotationCopy(t, 'conclusion.unavailableWhyEmpty', { scope: themeScope })
+      : rotationCopy(t, 'conclusion.unavailableWhy', { scope: themeScope }),
     missingEvidence,
     nextStep: tiers.libraryMode
-      ? '查看分类候选或切换市场对比'
-      : '切换市场对比或等待数据更新',
+      ? rotationCopy(t, 'conclusion.taxonomyNextStep')
+      : rotationCopy(t, 'conclusion.unavailableNextStep'),
     variant: 'danger',
   };
 }
 
-function rotationGuidance(payload: MarketRotationRadarResponse): {
+function rotationGuidance(t: RotationTranslate, payload: MarketRotationRadarResponse): {
   title: string;
   detail: string;
   variant: 'neutral' | 'info' | 'caution' | 'danger' | 'success';
 } {
   const tiers = deriveRotationTiers(payload);
-  const conclusion = deriveRotationConclusion(payload, tiers);
+  const conclusion = deriveRotationConclusion(t, payload, tiers);
 
   if (tiers.libraryMode) {
     return {
@@ -1324,31 +1310,31 @@ function uniqueReadinessItems(items: Array<string | null | undefined>, limit: nu
   return result.length ? result.slice(0, limit) : [fallback];
 }
 
-function buildRotationDecisionReadiness(payload: MarketRotationRadarResponse): DecisionReadinessSummary {
+function buildRotationDecisionReadiness(t: RotationTranslate, payload: MarketRotationRadarResponse): DecisionReadinessSummary {
   const tiers = deriveRotationTiers(payload);
-  const conclusion = deriveRotationConclusion(payload, tiers);
+  const conclusion = deriveRotationConclusion(t, payload, tiers);
   const state = conclusion.state;
 
   return {
     state,
-    stateLabel: consumerStatusLabel(state, payload),
+    stateLabel: consumerStatusLabel(t, state, payload),
     stateVariant: decisionReadinessVariant(state),
-    qualityLabel: consumerConfidenceLabel(state),
-    blockers: [consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale)],
-    nextEvidence: [consumerSufficiencyLabel(state)],
+    qualityLabel: consumerConfidenceLabel(t, state),
+    blockers: [consumerFreshnessLabel(t, payload.freshness, payload.isFallback, payload.isStale)],
+    nextEvidence: [consumerSufficiencyLabel(t, state)],
     conclusion: state === 'ready'
-      ? '当前轮动信号可用于研究观察，仍需结合风险与数据更新复核。'
+      ? rotationCopy(t, 'readiness.readyConclusion')
       : state === 'observe'
-        ? consumerConfidenceLabel(state)
-        : consumerSufficiencyLabel(state),
+        ? consumerConfidenceLabel(t, state)
+        : consumerSufficiencyLabel(t, state),
   };
 }
 
-function themeNamesSummary(themes: MarketRotationTheme[], fallback: string): string {
-  return themes.length ? themes.map((theme) => theme.name).join(' / ') : fallback;
+function themeNamesSummary(language: RotationLanguage, themes: MarketRotationTheme[], fallback: string): string {
+  return themes.length ? themes.map((theme) => themePresentationName(language, theme)).join(' / ') : fallback;
 }
 
-function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): CapitalRotationSummaryView {
+function deriveCapitalRotationSummary(t: RotationTranslate, language: RotationLanguage, payload: MarketRotationRadarResponse): CapitalRotationSummaryView {
   const {
     libraryMode,
     confirmedLeaders,
@@ -1356,7 +1342,7 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
     coolingThemes,
     taxonomyThemes,
   } = deriveRotationTiers(payload);
-  const conclusion = deriveRotationConclusion(payload, {
+  const conclusion = deriveRotationConclusion(t, payload, {
     libraryMode,
     confirmedLeaders,
     candidateThemes,
@@ -1373,23 +1359,23 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
     cards: [
       {
         key: 'confirmed',
-        label: '轮动方向',
-        value: themeNamesSummary(confirmedLeaders, '暂无确认信号'),
-        detail: confirmedLeaders.length ? '当前信号较完整，继续观察走势分化。' : '信号待确认。',
+        label: rotationCopy(t, 'labels.rotationDirection'),
+        value: themeNamesSummary(language, confirmedLeaders, rotationCopy(t, 'summary.noConfirmedThemes')),
+        detail: confirmedLeaders.length ? rotationCopy(t, 'summary.confirmedDetail') : rotationCopy(t, 'sufficiency.unavailable'),
         variant: confirmedLeaders.length ? 'success' : 'caution',
       },
       {
         key: 'candidate',
-        label: taxonomyThemes.length && !candidateThemes.length ? '分类浏览' : '观察信号',
-        value: themeNamesSummary(observationThemes, taxonomyThemes.length ? '暂无分类条目' : '暂无观察信号'),
-        detail: observationThemes.length ? '信号待确认，先看板块强弱与走势分化。' : '部分数据延迟。',
+        label: taxonomyThemes.length && !candidateThemes.length ? rotationCopy(t, 'primary.taxonomy') : rotationCopy(t, 'observation.signal'),
+        value: themeNamesSummary(language, observationThemes, taxonomyThemes.length ? rotationCopy(t, 'summary.noTaxonomyItems') : rotationCopy(t, 'summary.noObservationThemes')),
+        detail: observationThemes.length ? rotationCopy(t, 'confidence.observe') : rotationCopy(t, 'sufficiency.observe'),
         variant: observationThemes.length ? 'info' : 'neutral',
       },
       {
         key: 'cooling',
-        label: '降温 / 分歧',
-        value: themeNamesSummary(coolingThemes, '暂无降温主题'),
-        detail: coolingThemes.length ? '走弱或分歧主题继续作为分化观察。' : '未见明显退潮列表。',
+        label: rotationCopy(t, 'summary.cooling'),
+        value: themeNamesSummary(language, coolingThemes, rotationCopy(t, 'summary.noCoolingThemes')),
+        detail: coolingThemes.length ? rotationCopy(t, 'summary.coolingDetail') : rotationCopy(t, 'summary.noCoolingDetail'),
         variant: coolingThemes.length ? 'caution' : 'neutral',
       },
     ],
@@ -1405,21 +1391,22 @@ const RotationVisualPanel: React.FC<{
   unavailableDetail: string;
   onSelectTheme: (themeId: string) => void;
 }> = ({ themes, selectedThemeId, marketLabelText, displayMode, unavailableReason, unavailableDetail, onSelectTheme }) => {
+  const { language, t } = useI18n();
   const visualThemes = deriveVisualMatrixThemes(themes);
-  const modeLabel = primaryDisplayLabel(displayMode);
-  const modeDetail = primaryDisplayDetail(displayMode);
+  const modeLabel = primaryDisplayLabel(t, displayMode);
+  const modeDetail = primaryDisplayDetail(t, displayMode);
 
   if (!visualThemes.length) {
     return (
       <TerminalPanel data-testid="rotation-radar-visual-unavailable" className="overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>相对强弱矩阵</p>
-            <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>矩阵暂不可用</h3>
+            <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'visual.relativeStrengthMatrix')}</p>
+            <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'visual.matrixUnavailable')}</h3>
             <p className={cn('mt-2 max-w-3xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{unavailableReason}</p>
             <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{unavailableDetail}</p>
           </div>
-          <span className="shrink-0 rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">信号待确认</span>
+          <span className="shrink-0 rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'gaps.signalPending')}</span>
         </div>
       </TerminalPanel>
     );
@@ -1432,8 +1419,8 @@ const RotationVisualPanel: React.FC<{
     <TerminalPanel data-testid="rotation-radar-visual-matrix" className="overflow-hidden">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>相对强弱矩阵</p>
-          <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>主题排行与阶段分布</h3>
+          <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'visual.relativeStrengthMatrix')}</p>
+          <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'visual.rankingAndStages')}</h3>
           <p className={cn('mt-2 max-w-4xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
             {modeDetail}
           </p>
@@ -1448,9 +1435,9 @@ const RotationVisualPanel: React.FC<{
         <div className={cn('min-w-0 p-3', ROTATION_PAPER_PANEL_CLASS)}>
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>矩阵视图</p>
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'visual.matrixView')}</p>
               <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
-                横轴按主题相对基准的强弱变化，纵轴按当前阶段分层。
+                {rotationCopy(t, 'visual.matrixDescription')}
               </p>
             </div>
             <span className={cn('shrink-0 text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
@@ -1463,7 +1450,7 @@ const RotationVisualPanel: React.FC<{
                 const stageThemes = visualThemes.filter((theme) => theme.stage === stageMeta.key);
                 return (
                   <div key={stageMeta.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-2 border-t border-[color:var(--wolfy-divider)] py-2 first:border-t-0 first:pt-0 last:pb-0 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:gap-3">
-                    <div className={cn('flex items-center text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{stageMeta.label}</div>
+                    <div className={cn('flex items-center text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, stageMeta.label)}</div>
                     <div className="relative h-12 rounded-lg border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-rail)_70%,transparent)]">
                       <div className="absolute inset-y-2 left-1/2 w-px bg-[color:var(--wolfy-divider)]" aria-hidden="true" />
                       {stageThemes.map((theme) => {
@@ -1472,7 +1459,7 @@ const RotationVisualPanel: React.FC<{
                           evidenceValue: strength,
                           domain,
                         });
-                        const directionCue = observationDirectionCue(theme);
+                        const directionCue = observationDirectionCue(t, theme);
                         const strengthLabel = formatRelativeStrengthValue(geometry.evidenceValue);
                         const bubbleVariant = selectedThemeId === theme.id
                           ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
@@ -1489,9 +1476,9 @@ const RotationVisualPanel: React.FC<{
                             )}
                             style={{ left: `${geometry.leftPct}%` }}
                             onClick={() => onSelectTheme(theme.id)}
-                            aria-label={`${theme.name} ${observationThemeSummary(theme) || formatThemeStage(theme.stage)} ${directionCue?.changeText || strengthLabel}`}
+                            aria-label={`${themePresentationName(language, theme)} ${observationThemeSummary(t, theme) || formatThemeStage(t, theme.stage)} ${directionCue?.changeText || strengthLabel}`}
                           >
-                            <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{theme.name}</span>
+                            <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{themePresentationName(language, theme)}</span>
                             <span className={ROTATION_PAPER_TEXT_MUTED_CLASS}>
                               {directionCue ? `${directionCue.indicator} ${strengthLabel}` : strengthLabel}
                             </span>
@@ -1503,9 +1490,9 @@ const RotationVisualPanel: React.FC<{
                 );
               })}
               <div className={cn('mt-3 flex items-center justify-between px-[3.75rem] text-[10px] sm:px-[4.5rem]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
-                <span>偏弱</span>
-                <span>基准</span>
-                <span>偏强</span>
+                <span>{rotationCopy(t, 'visual.weaker')}</span>
+                <span>{rotationCopy(t, 'visual.benchmark')}</span>
+                <span>{rotationCopy(t, 'visual.stronger')}</span>
               </div>
             </div>
           </div>
@@ -1514,9 +1501,9 @@ const RotationVisualPanel: React.FC<{
         <div className={cn('min-w-0 p-3', ROTATION_PAPER_PANEL_CLASS)}>
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>主题排行</p>
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'visual.themeRanking')}</p>
               <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
-                沿用现有排序字段，仅把头部主题转换为条带视图。
+                {rotationCopy(t, 'visual.rankingDescription')}
               </p>
             </div>
             <TerminalChip variant="neutral">Top {rankingThemes.length}</TerminalChip>
@@ -1525,7 +1512,7 @@ const RotationVisualPanel: React.FC<{
             {rankingThemes.map((theme, index) => {
               const geometryWidth = scoreBarGeometryWidth(theme.rotationScore);
               const scoreLabel = formatRotationScore(theme.rotationScore);
-              const observationSummary = observationThemeSummary(theme);
+              const observationSummary = observationThemeSummary(t, theme);
               const selected = selectedThemeId === theme.id;
               return (
                 <button
@@ -1543,12 +1530,12 @@ const RotationVisualPanel: React.FC<{
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className={cn('text-[10px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{String(index + 1).padStart(2, '0')}</span>
-                        <span className={cn('truncate text-sm font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{theme.name}</span>
+                        <span className={cn('truncate text-sm font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{themePresentationName(language, theme)}</span>
                       </div>
                       <p className={cn('mt-1 truncate text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
                         {observationSummary
-                          ? `${observationSummary} · ${themeConfidenceSummary(theme)}`
-                          : `${formatThemeStage(theme.stage)} · ${themeConfidenceSummary(theme)}`}
+                          ? `${observationSummary} · ${themeConfidenceSummary(t, theme)}`
+                          : `${formatThemeStage(t, theme.stage)} · ${themeConfidenceSummary(t, theme)}`}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -1591,6 +1578,7 @@ const ConsumerDisclosure: React.FC<{
   className?: string;
   children: React.ReactNode;
 }> = ({ testId, title, summary, defaultOpen = false, className, children }) => {
+  const { t } = useI18n();
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -1610,11 +1598,11 @@ const ConsumerDisclosure: React.FC<{
         <button
           type="button"
           aria-expanded={open}
-          aria-label={`${open ? '收起' : '展开'} ${title}`}
+          aria-label={`${open ? rotationCopy(t, 'controls.collapse') : rotationCopy(t, 'controls.expand')} ${title}`}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
           onClick={() => setOpen((current) => !current)}
         >
-          <span>{open ? '收起' : '展开'}</span>
+          <span>{open ? rotationCopy(t, 'controls.collapse') : rotationCopy(t, 'controls.expand')}</span>
         </button>
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
@@ -1625,44 +1613,49 @@ const ConsumerDisclosure: React.FC<{
 const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
   snapshot?: MarketRotationThemeCorrelationBreadthSnapshot | null;
 }> = ({ snapshot }) => {
+  const { t } = useI18n();
   if (!hasThemeCorrelationBreadthSnapshot(snapshot)) {
     return null;
   }
 
   const participationLabel = formatSnapshotState(
+    t,
     snapshot.participationState,
-    THEME_PARTICIPATION_LABELS,
-    '参与状态待补齐',
+    THEME_PARTICIPATION_LABEL_KEYS,
+    'snapshot.participationMissing',
   );
   const leadershipLabel = formatSnapshotState(
+    t,
     snapshot.leadershipConcentration?.state,
-    THEME_LEADERSHIP_LABELS,
-    '集中度待补齐',
+    THEME_LEADERSHIP_LABEL_KEYS,
+    'leadership.unknown',
   );
   const correlationLabel = formatSnapshotState(
+    t,
     snapshot.correlationEvidence?.state,
-    THEME_CORRELATION_LABELS,
-    '同步证据待补齐',
+    THEME_CORRELATION_LABEL_KEYS,
+    'correlation.missing',
   );
   const breadthLabel = formatSnapshotState(
+    t,
     snapshot.breadthEvidence?.state,
-    THEME_BREADTH_LABELS,
-    '广度待补齐',
+    THEME_BREADTH_LABEL_KEYS,
+    'breadth.missing',
   );
-  const staleLabels = formatSnapshotInputLabels(snapshot.staleInputs, '暂无延迟项');
-  const missingLabels = formatSnapshotInputLabels(snapshot.missingInputs, '暂无缺口项');
-  const boundaryLabels = formatSnapshotBoundaryLabels(snapshot.observationBoundary);
-  const nextSteps = formatSnapshotNextSteps(snapshot.researchNextSteps);
+  const staleLabels = formatSnapshotInputLabels(t, snapshot.staleInputs, 'snapshot.noStale');
+  const missingLabels = formatSnapshotInputLabels(t, snapshot.missingInputs, 'snapshot.noMissing');
+  const boundaryLabels = formatSnapshotBoundaryLabels(t, snapshot.observationBoundary);
+  const nextSteps = formatSnapshotNextSteps(t, snapshot.researchNextSteps);
   const topMembers = (snapshot.leadershipConcentration?.topMembers || [])
-    .map((item) => sanitizeRotationText(item, '成员'))
+    .map((item) => sanitizeRotationText(item, rotationCopy(t, 'labels.member')))
     .filter(Boolean)
     .slice(0, 4);
 
   return (
     <ConsumerDisclosure
       testId="rotation-theme-correlation-breadth-snapshot"
-      title="查看主题扩散快照"
-      summary={snapshotSummary(snapshot)}
+      title={rotationCopy(t, 'snapshot.title')}
+      summary={snapshotSummary(t, snapshot)}
     >
       <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1682,43 +1675,43 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">龙头集中度</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'snapshot.leadershipConcentration')}</p>
             <p className="mt-1">
-              {leadershipLabel} · {formatSnapshotPercent(snapshot.leadershipConcentration?.percent)}
+              {leadershipLabel} · {formatSnapshotPercent(t, snapshot.leadershipConcentration?.percent)}
             </p>
             <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
-              广泛参与 {formatSnapshotPercent(snapshot.leadershipConcentration?.broadParticipationPercent)}
+              {rotationCopy(t, 'snapshot.broadParticipation')} {formatSnapshotPercent(t, snapshot.leadershipConcentration?.broadParticipationPercent)}
             </p>
             {topMembers.length ? (
-              <p className="mt-1 text-[color:var(--wolfy-text-muted)]">代表成员：{topMembers.join('、')}</p>
+              <p className="mt-1 text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'snapshot.representativeMembers', { members: topMembers.join('、') })}</p>
             ) : null}
           </div>
           <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">同步相关</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'snapshot.correlation')}</p>
             <p className="mt-1">
-              成员同步 {formatSnapshotPercent(snapshot.correlationEvidence?.sameDirectionPercent)}
+              {rotationCopy(t, 'snapshot.memberSynchronization')} {formatSnapshotPercent(t, snapshot.correlationEvidence?.sameDirectionPercent)}
             </p>
             <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
-              均线同步 {formatSnapshotPercent(snapshot.correlationEvidence?.aboveVwapPercent)}
+              {rotationCopy(t, 'snapshot.averageSynchronization')} {formatSnapshotPercent(t, snapshot.correlationEvidence?.aboveVwapPercent)}
             </p>
             <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
-              持续性 {formatSnapshotPercent(snapshot.correlationEvidence?.persistencePercent)}
+              {rotationCopy(t, 'snapshot.persistence')} {formatSnapshotPercent(t, snapshot.correlationEvidence?.persistencePercent)}
             </p>
           </div>
           <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">广度证据</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'snapshot.breadthEvidence')}</p>
             <p className="mt-1">
-              {formatSnapshotMemberCount(snapshot.breadthEvidence?.observedMembers, snapshot.breadthEvidence?.configuredMembers)}
+              {formatSnapshotMemberCount(t, snapshot.breadthEvidence?.observedMembers, snapshot.breadthEvidence?.configuredMembers)}
             </p>
             <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
-              上涨广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentUp)}
+              {rotationCopy(t, 'snapshot.upBreadth')} {formatSnapshotPercent(t, snapshot.breadthEvidence?.percentUp)}
             </p>
             <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
-              跑赢广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentOutperformingBenchmark)}
+              {rotationCopy(t, 'snapshot.outperformingBreadth')} {formatSnapshotPercent(t, snapshot.breadthEvidence?.percentOutperformingBenchmark)}
             </p>
           </div>
           <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">观察边界</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'snapshot.observationBoundary')}</p>
             <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
               {boundaryLabels.map((label) => <TerminalChip key={label}>{label}</TerminalChip>)}
             </div>
@@ -1727,15 +1720,15 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
 
         <div className="grid gap-2">
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">数据更新</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'labels.dataFreshness')}</p>
             <p className="mt-1">{staleLabels.join('、')}</p>
           </div>
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">输入缺口</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'snapshot.inputGaps')}</p>
             <p className="mt-1">{missingLabels.join('、')}</p>
           </div>
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">继续观察</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'labels.continueObserving')}</p>
             <div className="mt-1 grid gap-1">
               {nextSteps.map((step, index) => (
                 <p key={`snapshot-next-step-${index}`}>· {step}</p>
@@ -1749,20 +1742,21 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
 };
 
 const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => {
+  const { t } = useI18n();
   const signal = view.item.themeFlowSignal;
-  const stateLabel = formatThemeFlowState(signal?.themeFlowState);
+  const stateLabel = formatThemeFlowState(t, signal?.themeFlowState);
   const summary = [
     stateLabel,
-    `${Math.max(0, view.signalThemeCount)}/${Math.max(view.themeCount, 0)} 个有信号`,
-    view.averageConfidence !== null ? `信号 ${formatThemeFlowConfidence(signal)}` : null,
-    view.averageRotationScore !== null ? `均分 ${Math.round(view.averageRotationScore)}` : null,
+    rotationCopy(t, 'family.signalThemeCount', { count: Math.max(0, view.signalThemeCount), total: Math.max(view.themeCount, 0) }),
+    view.averageConfidence !== null ? rotationCopy(t, 'labels.signalValue', { value: formatThemeFlowConfidence(t, signal) }) : null,
+    view.averageRotationScore !== null ? rotationCopy(t, 'family.averageScore', { score: Math.round(view.averageRotationScore) }) : null,
   ].filter(Boolean).join(' · ');
 
   return (
     <ConsumerDisclosure
       testId={`rotation-family-rollup-row-${view.familyKey}`}
       title={view.familyName}
-      summary={summary || '家族级观察'}
+      summary={summary || rotationCopy(t, 'family.observation')}
       className="bg-[var(--wolfy-surface-input)] px-3 py-2.5"
     >
       <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
@@ -1771,13 +1765,13 @@ const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => 
             {stateLabel}
           </TerminalChip>
           <TerminalChip variant={view.hasUsefulSignal ? 'info' : 'neutral'}>
-            {view.hasUsefulSignal ? '优先观察' : '低信号'}
+            {view.hasUsefulSignal ? rotationCopy(t, 'family.priorityObservation') : rotationCopy(t, 'family.lowSignal')}
           </TerminalChip>
           {view.reasonLabels.map((label) => <TerminalChip key={`${view.familyKey}-${label}`}>{label}</TerminalChip>)}
         </div>
         <p>{view.preview}</p>
         <div className="grid gap-1 text-[10px] leading-5 text-[color:var(--wolfy-text-muted)]">
-          {themeFlowEvidenceLines(signal).map((line, lineIndex) => (
+          {themeFlowEvidenceLines(t, signal).map((line, lineIndex) => (
             <p key={`${view.familyKey}-family-flow-evidence-${lineIndex}`}>{line}</p>
           ))}
         </div>
@@ -1787,7 +1781,8 @@ const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => 
 };
 
 const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
-  const view = buildMarketRotationEvidenceBoundaryView(payload);
+  const { t } = useI18n();
+  const view = buildMarketRotationEvidenceBoundaryView(payload, t);
 
   return (
     <div
@@ -1796,7 +1791,7 @@ const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResp
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">轮动证据边界</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'labels.evidenceBoundary')}</p>
           <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{view.label}</p>
           {view.note ? <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.note}</p> : null}
         </div>
@@ -1813,60 +1808,61 @@ const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResp
 };
 
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
+  const { language, t } = useI18n();
   const tiers = deriveRotationTiers(payload);
-  const guidance = rotationGuidance(payload);
-  const conclusion = deriveRotationConclusion(payload, tiers);
-  const decisionSummary = buildRotationDecisionReadiness(payload);
-  const alpacaReadiness = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness);
-  const capitalSummary = deriveCapitalRotationSummary(payload);
+  const guidance = rotationGuidance(t, payload);
+  const conclusion = deriveRotationConclusion(t, payload, tiers);
+  const decisionSummary = buildRotationDecisionReadiness(t, payload);
+  const alpacaReadiness = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness, t);
+  const capitalSummary = deriveCapitalRotationSummary(t, language, payload);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
   const selectedTheme = primaryThemes[0];
   const topThemeTitle = tiers.libraryMode
-    ? '主题分类参考'
-    : themeNamesSummary(primaryThemes, '观察资料不足');
+    ? rotationCopy(t, 'labels.taxonomyReference')
+    : themeNamesSummary(language, primaryThemes, rotationCopy(t, 'status.insufficientObservation'));
   const surfaceState = decisionSummary.state === 'ready'
-    ? '板块强弱可读'
+    ? rotationCopy(t, 'status.strengthReadable')
     : decisionSummary.state === 'observe'
-      ? '信号待确认'
-      : '轮动方向待确认';
-  const heroTitle = selectedTheme?.name || topThemeTitle;
+      ? rotationCopy(t, 'gaps.signalPending')
+      : rotationCopy(t, 'status.directionPending');
+  const heroTitle = themePresentationName(language, selectedTheme) || topThemeTitle;
   const heroSummary = selectedTheme
     ? sanitizeRotationText(
       selectedTheme.stageExplanation,
       decisionSummary.state === 'ready'
-        ? `${selectedTheme.name} 当前信号较完整，继续观察节奏与回落风险。`
+        ? rotationCopy(t, 'hero.readySummary', { theme: themePresentationName(language, selectedTheme) })
         : decisionSummary.state === 'observe'
-          ? `${selectedTheme.name} 信号待确认`
-          : `${selectedTheme.name} 数据待补`,
+          ? rotationCopy(t, 'hero.pendingSummary', { theme: themePresentationName(language, selectedTheme) })
+          : rotationCopy(t, 'hero.dataMissingSummary', { theme: themePresentationName(language, selectedTheme) }),
     )
     : guidance.detail;
   const heroCards = [
     {
       key: 'market',
-      label: '当前市场',
-      value: marketLabel(payload.market || 'US'),
-      detail: tiers.libraryMode ? '当前以主题分类浏览为主。' : '当前市场下按主题与强弱变化组织内容。',
+      label: rotationCopy(t, 'labels.currentMarket'),
+      value: marketLabel(t, payload.market || 'US'),
+      detail: tiers.libraryMode ? rotationCopy(t, 'hero.taxonomyMarketDetail') : rotationCopy(t, 'hero.marketDetail'),
     },
     {
       key: 'signal',
-      label: '轮动方向',
-      value: selectedTheme ? themeConsumerStateLabel(selectedTheme) : surfaceState,
+      label: rotationCopy(t, 'labels.rotationDirection'),
+      value: selectedTheme ? themeConsumerStateLabel(t, selectedTheme) : surfaceState,
       detail: selectedTheme
-        ? (selectedTheme.riskExplanations?.length ? '保留主要弱点与走势分化。' : '当前以主题强弱和阶段变化为主。')
-        : '当前未发现可进入头部展示的确认主题。',
+        ? (selectedTheme.riskExplanations?.length ? rotationCopy(t, 'hero.riskDetail') : rotationCopy(t, 'hero.signalDetail'))
+        : rotationCopy(t, 'hero.noConfirmedDetail'),
     },
     {
       key: 'confidence',
-      label: '数据状态',
+      label: rotationCopy(t, 'labels.dataStatus'),
       value: selectedTheme
-        ? mapDataStateLabel(selectedTheme)
-        : '观察资料不足',
+        ? mapDataStateLabel(t, selectedTheme)
+        : rotationCopy(t, 'status.insufficientObservation'),
       detail: selectedTheme
-        ? consumerFreshnessLabel(selectedTheme.freshness, selectedTheme.isFallback, isThemeStale(selectedTheme))
-        : consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
+        ? consumerFreshnessLabel(t, selectedTheme.freshness, selectedTheme.isFallback, isThemeStale(selectedTheme))
+        : consumerFreshnessLabel(t, payload.freshness, payload.isFallback, payload.isStale),
     },
   ];
-  const familyViews = buildRotationFamilyViews(payload);
+  const familyViews = buildRotationFamilyViews(t, payload);
   const spotlightFamilies = familyViews.filter((view) => !view.collapsedByDefault);
   const collapsedFamilies = familyViews.filter((view) => view.collapsedByDefault);
 
@@ -1878,17 +1874,17 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className={cn('text-[10px] font-medium tracking-[0.24em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>状态摘要</p>
+          <p className={cn('text-[10px] font-medium tracking-[0.24em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.statusSummary')}</p>
           <h2
             data-testid="rotation-radar-hero-title"
             className={cn('mt-2 break-words text-base font-semibold leading-6 md:text-lg', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}
           >
-            板块强弱：{heroTitle}
+            {rotationCopy(t, 'hero.strengthTitle', { theme: heroTitle })}
           </h2>
           <p className={cn('mt-2 max-w-4xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{heroSummary}</p>
         </div>
         <span className="shrink-0 rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
-          轮动方向：{surfaceState}
+          {rotationCopy(t, 'hero.directionTitle', { state: surfaceState })}
         </span>
       </div>
 
@@ -1910,7 +1906,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       >
         <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>ETF 引用状态</p>
+            <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.etfReferenceStatus')}</p>
             <p className={cn('mt-1 text-sm font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{alpacaReadiness.label}</p>
             <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{alpacaReadiness.detail}</p>
           </div>
@@ -1952,16 +1948,16 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         >
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>家族流向观察</p>
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'family.flowObservation')}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">摘要优先</span>
+              <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'family.summaryFirst')}</span>
               <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
-                {spotlightFamilies.length} 个优先观察
+                {rotationCopy(t, 'family.priorityCount', { count: spotlightFamilies.length })}
               </span>
               {collapsedFamilies.length ? (
                 <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
-                  {collapsedFamilies.length} 个默认折叠
+                  {rotationCopy(t, 'family.collapsedCount', { count: collapsedFamilies.length })}
                 </span>
               ) : null}
             </div>
@@ -1976,14 +1972,14 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
             </div>
           ) : (
             <div className={cn('mt-3 rounded-lg border border-dashed border-[color:var(--wolfy-divider)] px-3 py-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
-              暂无优先展开家族
+              {rotationCopy(t, 'family.noPriority')}
             </div>
           )}
           {collapsedFamilies.length ? (
             <ConsumerDisclosure
               testId="rotation-family-rollup-collapsed"
-              title="查看低信号家族"
-              summary={`${collapsedFamilies.length} 个默认折叠`}
+              title={rotationCopy(t, 'family.viewLowSignal')}
+              summary={rotationCopy(t, 'family.collapsedCount', { count: collapsedFamilies.length })}
               className="mt-3 bg-[var(--wolfy-surface-input)]"
             >
               <div className="grid gap-2">
@@ -1995,8 +1991,8 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <p className="min-w-0 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{view.familyName}</p>
-                      <TerminalChip variant="neutral">{formatThemeFlowState(view.item.themeFlowSignal?.themeFlowState)}</TerminalChip>
-                      <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{Math.max(0, view.signalThemeCount)}/{Math.max(view.themeCount, 0)} 个有信号</span>
+                      <TerminalChip variant="neutral">{formatThemeFlowState(t, view.item.themeFlowSignal?.themeFlowState)}</TerminalChip>
+                      <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'family.signalThemeCount', { count: Math.max(0, view.signalThemeCount), total: Math.max(view.themeCount, 0) })}</span>
                     </div>
                     <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.preview}</p>
                   </div>
@@ -2009,21 +2005,21 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
 
       <ConsumerDisclosure
         testId="rotation-radar-mechanics-details"
-        title="查看轮动说明"
-        summary="默认折叠"
+        title={rotationCopy(t, 'disclosures.rotationExplanation')}
+        summary={rotationCopy(t, 'disclosures.collapsedByDefault')}
         className="mt-4 bg-[var(--wolfy-surface-input)]"
       >
         <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">轮动方向说明</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'disclosures.directionExplanation')}</p>
             <p className="mt-1">{conclusion.whyNotConclusion}</p>
           </div>
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">默认可见范围</p>
-            <p className="mt-1">{capitalSummary.cards.map((card) => `${card.label}：${card.value}`).join(' · ')}</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'disclosures.visibleScope')}</p>
+            <p className="mt-1">{capitalSummary.cards.map((card) => `${card.label}: ${card.value}`).join(' · ')}</p>
           </div>
           <div>
-            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">继续观察</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'labels.continueObserving')}</p>
             <p className="mt-1">{conclusion.missingEvidence.join('、')}</p>
           </div>
         </div>
@@ -2042,14 +2038,37 @@ const CommandBar: React.FC<{
   freshness?: MarketRotationRadarResponse['freshness'];
   onRefresh: () => void;
 }> = ({ selectedMarket, supportedMarkets, searchQuery, onMarketChange, onSearchChange, loading, freshness, onRefresh }) => (
-  <WolfyCommandBar
+  <CommandBarContent
+    selectedMarket={selectedMarket}
+    supportedMarkets={supportedMarkets}
+    searchQuery={searchQuery}
+    onMarketChange={onMarketChange}
+    onSearchChange={onSearchChange}
+    loading={loading}
+    freshness={freshness}
+    onRefresh={onRefresh}
+  />
+);
+
+const CommandBarContent: React.FC<{
+  selectedMarket: string;
+  supportedMarkets: string[];
+  searchQuery: string;
+  onMarketChange: (market: string) => void;
+  onSearchChange: (value: string) => void;
+  loading: boolean;
+  freshness?: MarketRotationRadarResponse['freshness'];
+  onRefresh: () => void;
+}> = ({ selectedMarket, supportedMarkets, searchQuery, onMarketChange, onSearchChange, loading, freshness, onRefresh }) => {
+  const { t } = useI18n();
+  return <WolfyCommandBar
     data-testid="rotation-radar-mode-controls"
     className="min-h-[104px] gap-y-2 sm:min-h-[88px] lg:min-h-11"
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">
           <SlidersHorizontal className="size-3.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
-          市场
+          {rotationCopy(t, 'labels.market')}
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
           {MARKET_OPTIONS.reduce<React.ReactNode[]>((acc, market) => {
@@ -2069,7 +2088,7 @@ const CommandBar: React.FC<{
                   )}
                   onClick={() => onMarketChange(market.id)}
                 >
-                  {market.label}
+                  {rotationCopy(t, market.labelKey)}
                 </TerminalButton>,
               );
             }
@@ -2081,7 +2100,7 @@ const CommandBar: React.FC<{
     trailing={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <TerminalNestedBlock data-testid="rotation-radar-freshness" className="inline-flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">更新时间</span>
+          <span className="text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'labels.lastUpdated')}</span>
           <DataFreshnessBadge freshness={freshness || 'fallback'} />
         </TerminalNestedBlock>
         <TerminalButton
@@ -2089,7 +2108,7 @@ const CommandBar: React.FC<{
           className="size-10 rounded-xl p-0 text-[color:var(--wolfy-text-muted)] disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)]"
           onClick={onRefresh}
           disabled={loading}
-          aria-label="刷新主题轮动雷达"
+          aria-label={rotationCopy(t, 'controls.refreshRadar')}
         >
           <RefreshCcw className={cn('size-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
         </TerminalButton>
@@ -2103,8 +2122,8 @@ const CommandBar: React.FC<{
           className="h-10 w-full rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] py-2 pl-9 pr-3 text-sm text-[color:var(--wolfy-text-secondary)] outline-none transition-all placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--sage)] focus:bg-[var(--wolfy-surface-rail)]"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="搜索主题、英文名或成员"
-          aria-label="搜索主题、英文名或成员"
+          placeholder={rotationCopy(t, 'controls.searchPlaceholder')}
+          aria-label={rotationCopy(t, 'controls.searchPlaceholder')}
         />
       </label>
       <div
@@ -2113,25 +2132,25 @@ const CommandBar: React.FC<{
       >
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">
           <Gauge className="size-3.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
-          分类
+          {rotationCopy(t, 'labels.taxonomy')}
         </div>
-        <span>主题优先，行业/概念随结果展开</span>
+        <span>{rotationCopy(t, 'controls.taxonomyNote')}</span>
       </div>
     </div>
-  </WolfyCommandBar>
-);
+  </WolfyCommandBar>;
+};
 
-function themeConsumerStateLabel(theme: MarketRotationTheme): string {
+function themeConsumerStateLabel(t: RotationTranslate, theme: MarketRotationTheme): string {
   if (isTaxonomyOnlyTheme(theme)) {
-    return '主题分类参考';
+    return rotationCopy(t, 'labels.taxonomyReference');
   }
   if (
     resolveSignalType(theme) === 'insufficient_evidence'
     || resolveEvidenceQuality(theme) === 'insufficient'
   ) {
-    return '观察资料不足';
+    return rotationCopy(t, 'status.insufficientObservation');
   }
-  return formatThemeStage(theme.stage);
+  return formatThemeStage(t, theme.stage);
 }
 
 const LeaderRow: React.FC<{
@@ -2140,7 +2159,8 @@ const LeaderRow: React.FC<{
   selected: boolean;
   onSelect: () => void;
 }> = ({ theme, marketLabelText, selected, onSelect }) => {
-  const listSummary = observationThemeSummary(theme) || consumerThemeSubtitle(theme);
+  const { language, t } = useI18n();
+  const listSummary = observationThemeSummary(t, theme) || consumerThemeSubtitle(t, theme);
   return (
     <button
       type="button"
@@ -2152,13 +2172,13 @@ const LeaderRow: React.FC<{
       )}
     >
       <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{theme.name}</span>
+        <span className="block truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{themePresentationName(language, theme)}</span>
         <span className="mt-1 block truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{listSummary}</span>
       </span>
-      <span className="truncate text-right text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConsumerStateLabel(theme)}</span>
+      <span className="truncate text-right text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConsumerStateLabel(t, theme)}</span>
       <span className="text-right">
-        <span className="block truncate text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(theme)}</span>
-        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+        <span className="block truncate text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(t, theme)}</span>
+        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(t, theme)}</span>
       </span>
     </button>
   );
@@ -2170,7 +2190,8 @@ const CompactThemeRow: React.FC<{
   selected: boolean;
   onSelect: () => void;
 }> = ({ theme, marketLabelText, selected, onSelect }) => {
-  const listSummary = observationThemeSummary(theme) || consumerThemeSubtitle(theme);
+  const { language, t } = useI18n();
+  const listSummary = observationThemeSummary(t, theme) || consumerThemeSubtitle(t, theme);
   return (
     <button
       type="button"
@@ -2182,13 +2203,13 @@ const CompactThemeRow: React.FC<{
       )}
     >
       <span className="min-w-0">
-        <span className="block truncate font-semibold text-[color:var(--wolfy-text-secondary)]">{theme.name}</span>
+        <span className="block truncate font-semibold text-[color:var(--wolfy-text-secondary)]">{themePresentationName(language, theme)}</span>
         <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{listSummary}</span>
       </span>
-      <span className="truncate text-right text-[11px] text-[color:var(--wolfy-text-muted)]">{themeConsumerStateLabel(theme)}</span>
+      <span className="truncate text-right text-[11px] text-[color:var(--wolfy-text-muted)]">{themeConsumerStateLabel(t, theme)}</span>
       <span className="text-right">
-        <span className="block truncate text-[10px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(theme)}</span>
-        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+        <span className="block truncate text-[10px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(t, theme)}</span>
+        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(t, theme)}</span>
       </span>
     </button>
   );
@@ -2199,103 +2220,104 @@ const ThemeDetailPanel: React.FC<{
   marketLabelText: string;
   libraryMode: boolean;
 }> = ({ theme, marketLabelText, libraryMode }) => {
+  const { language, t } = useI18n();
   if (!theme) {
     return null;
   }
 
   const taxonomyOnly = isTaxonomyOnlyTheme(theme) || libraryMode;
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
-  const observationState = observationStateLabel(theme);
-  const directionCue = observationDirectionCue(theme);
+  const observationState = observationStateLabel(t, theme);
+  const directionCue = observationDirectionCue(t, theme);
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
   const weaknessNotes = uniqueReadinessItems(
     [
       ...riskExplanationNotes,
-      ...themeDataGaps(theme).map(formatGapLabel),
-      taxonomyOnly ? '当前仍以分类与观察为主。' : '',
-      dataWarning ? '数据延迟，先看节奏是否继续保持。' : '',
+      ...themeDataGaps(theme).map((gap) => formatGapLabel(t, gap)),
+      taxonomyOnly ? rotationCopy(t, 'detail.taxonomyWeakness') : '',
+      dataWarning ? rotationCopy(t, 'detail.delayedWeakness') : '',
     ],
     3,
-    taxonomyOnly ? '当前仍以分类与观察为主。' : '继续观察广度、量能与持续性是否继续同步。',
+    taxonomyOnly ? rotationCopy(t, 'detail.taxonomyWeakness') : rotationCopy(t, 'detail.defaultWeakness'),
   );
   const supportNotes = uniqueReadinessItems(
     [
       ...evidenceNotes,
       sanitizeRotationText(theme.stageExplanation, ''),
-      theme.persistenceEvidence?.label ? `${theme.persistenceEvidence.label}已纳入观察。` : '',
+      theme.persistenceEvidence?.label ? rotationCopy(t, 'detail.persistenceIncluded', { label: theme.persistenceEvidence.label }) : '',
     ],
     3,
-    taxonomyOnly ? '当前只保留分类与观察范围。' : '当前仅保留对用户有用的支持证据。',
+    taxonomyOnly ? rotationCopy(t, 'detail.taxonomySupport') : rotationCopy(t, 'detail.defaultSupport'),
   );
   const representativeItems = (theme.themeDetail?.representativeLabels || theme.representativeLabels || theme.membersConfigured || []).slice(0, 4);
   const nextWatch = theme.alertCandidates?.[0];
   const shortReason = sanitizeRotationText(
     theme.stageExplanation,
     taxonomyOnly
-      ? `${theme.name} 当前仍是分类观察，等待更多行情覆盖后再确认强弱。`
+      ? rotationCopy(t, 'detail.taxonomyReason', { theme: themePresentationName(language, theme) })
       : observationState && directionCue
-        ? `${observationState} · ${directionCue.label}，${directionCue.changeText}，当前仅作方向观察。`
+        ? rotationCopy(t, 'detail.observationReason', { state: observationState, direction: directionCue.label, detail: directionCue.changeText })
       : dataWarning
-        ? `${theme.name} 当前使用最近一次可用数据，仅供观察。`
-        : `${theme.name} 当前以主题强弱与广度变化为主，适合继续观察。`,
+        ? rotationCopy(t, 'detail.fallbackReason', { theme: themePresentationName(language, theme) })
+        : rotationCopy(t, 'detail.defaultReason', { theme: themePresentationName(language, theme) }),
   );
   const nextStep = nextWatch?.symbol
-    ? `继续观察 ${nextWatch.symbol} 与 ${theme.name} 的延续性，先确认走势分化是否收敛。`
+    ? rotationCopy(t, 'detail.alertNextStep', { symbol: nextWatch.symbol, theme: themePresentationName(language, theme) })
     : taxonomyOnly
-      ? '等待新的多时窗行情后，再确认主题是否形成稳定强弱。'
-      : '继续观察广度、量能与持续性变化，避免过早放大方向。';
+      ? rotationCopy(t, 'detail.taxonomyNextStep')
+      : rotationCopy(t, 'detail.defaultNextStep');
 
   return (
     <ConsoleContextRail data-testid="rotation-theme-detail-panel" className="xl:sticky xl:top-4">
       <div className="min-w-0 px-1 py-3">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>当前主题</p>
-            <h2 className={cn('mt-1 truncate text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{theme.name}</h2>
-            <p className={cn('mt-1 truncate text-[11px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{consumerThemeSubtitle(theme)}</p>
+            <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.currentTheme')}</p>
+            <h2 className={cn('mt-1 truncate text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{themePresentationName(language, theme)}</h2>
+            <p className={cn('mt-1 truncate text-[11px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{consumerThemeSubtitle(t, theme)}</p>
           </div>
         </div>
 
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-          <TerminalChip variant={taxonomyOnly ? 'neutral' : dataWarning ? 'caution' : 'info'}>{themeConsumerStateLabel(theme)}</TerminalChip>
+          <TerminalChip variant={taxonomyOnly ? 'neutral' : dataWarning ? 'caution' : 'info'}>{themeConsumerStateLabel(t, theme)}</TerminalChip>
           {observationState ? <TerminalChip variant="neutral">{observationState}</TerminalChip> : null}
           {directionCue ? <TerminalChip variant="info">{directionCue.label}</TerminalChip> : null}
           <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
-          <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
+          <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(t, theme)}</TerminalChip>
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>轮动方向</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.rotationDirection')}</p>
         <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className={cn('mt-2 text-[12px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
           {shortReason}
         </TerminalNotice>
         {directionCue ? (
           <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
-            方向线索：{directionCue.changeText}
+            {rotationCopy(t, 'detail.directionCue', { detail: directionCue.changeText })}
           </p>
         ) : null}
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>走势分化</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.divergence')}</p>
         <div className={cn('mt-2 grid gap-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
           {weaknessNotes.map((item) => <p key={item}>· {item}</p>)}
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>观察重点</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.observationFocus')}</p>
         <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{nextStep}</p>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>观察标的</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{rotationCopy(t, 'labels.observationInstruments')}</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {representativeItems.length
             ? representativeItems.map((item) => <TerminalChip key={item}>{item}</TerminalChip>)
-            : <TerminalChip>待补齐</TerminalChip>}
+            : <TerminalChip>{rotationCopy(t, 'labels.pending')}</TerminalChip>}
         </div>
       </div>
 
@@ -2303,38 +2325,38 @@ const ThemeDetailPanel: React.FC<{
         <div className="min-w-0 px-1 py-3">
           <ConsumerDisclosure
             testId="rotation-theme-flow-signal"
-            title="查看主题流向观察"
-            summary="家族摘要优先，主题级说明默认折叠"
+            title={rotationCopy(t, 'disclosures.themeFlow')}
+            summary={rotationCopy(t, 'disclosures.themeFlowSummary')}
           >
             <div className={cn('grid gap-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <TerminalChip variant={themeFlowChipVariant(theme.themeFlowSignal.themeFlowState)}>
-                  {formatThemeFlowState(theme.themeFlowSignal.themeFlowState)}
+                  {formatThemeFlowState(t, theme.themeFlowSignal.themeFlowState)}
                 </TerminalChip>
-                <TerminalChip variant="neutral">信号 {formatThemeFlowConfidence(theme.themeFlowSignal)}</TerminalChip>
+                <TerminalChip variant="neutral">{rotationCopy(t, 'labels.signalValue', { value: formatThemeFlowConfidence(t, theme.themeFlowSignal) })}</TerminalChip>
               </div>
               <div>
-                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>解释</p>
+                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'labels.explanation')}</p>
                 <p className="mt-1">
                   {sanitizeRotationText(
                     theme.themeFlowSignal.explanation,
-                    `${theme.name} 当前仅保留主题级观察说明。`,
+                    rotationCopy(t, 'detail.themeFlowFallback', { theme: themePresentationName(language, theme) }),
                   )}
                 </p>
               </div>
               <div>
-                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>支持证据</p>
+                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'labels.supportingEvidence')}</p>
                 <div className="mt-1 grid gap-1">
-                  {themeFlowEvidenceLines(theme.themeFlowSignal).map((line, lineIndex) => (
+                  {themeFlowEvidenceLines(t, theme.themeFlowSignal).map((line, lineIndex) => (
                     <p key={`${theme.id}-theme-flow-evidence-${lineIndex}`}>· {line}</p>
                   ))}
                 </div>
               </div>
-              {themeFlowReasonLabels(theme.themeFlowSignal).length ? (
+              {themeFlowReasonLabels(t, theme.themeFlowSignal).length ? (
                 <div>
-                  <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">观察项</p>
+                  <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">{rotationCopy(t, 'labels.observationItems')}</p>
                   <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
-                    {themeFlowReasonLabels(theme.themeFlowSignal).map((label) => <TerminalChip key={`${theme.id}-${label}`}>{label}</TerminalChip>)}
+                    {themeFlowReasonLabels(t, theme.themeFlowSignal).map((label) => <TerminalChip key={`${theme.id}-${label}`}>{label}</TerminalChip>)}
                   </div>
                 </div>
               ) : null}
@@ -2352,22 +2374,22 @@ const ThemeDetailPanel: React.FC<{
       <div className="min-w-0 px-1 py-3">
         <ConsumerDisclosure
           testId="rotation-theme-data-notes"
-          title="查看数据说明"
-          summary="支持证据与方法默认折叠"
+          title={rotationCopy(t, 'disclosures.dataNotes')}
+          summary={rotationCopy(t, 'disclosures.dataNotesSummary')}
         >
           <div className={cn('grid gap-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
             <div>
-              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>支持证据</p>
+              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'labels.supportingEvidence')}</p>
               <div className="mt-1 grid gap-1">
                 {supportNotes.map((item) => <p key={item}>· {item}</p>)}
               </div>
             </div>
             <div>
-              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>方法口径</p>
+              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{rotationCopy(t, 'labels.methodology')}</p>
               <p className="mt-1">
                 {taxonomyOnly
-                  ? '当前页面先保留分类、观察范围与后续跟踪方向，等待更多行情覆盖后再确认强弱。'
-                  : '默认先展示板块强弱、轮动方向与数据更新，再把更深一层的支持证据与方法说明折叠起来。'}
+                  ? rotationCopy(t, 'detail.taxonomyMethodology')
+                  : rotationCopy(t, 'detail.defaultMethodology')}
               </p>
             </div>
           </div>
@@ -2377,17 +2399,18 @@ const ThemeDetailPanel: React.FC<{
   );
 };
 
-const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> = ({ showFallback, onRefresh }) => (
-  <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
+const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> = ({ showFallback, onRefresh }) => {
+  const { t } = useI18n();
+  return <TerminalPanel as="section" role="status" aria-label={rotationCopy(t, 'loading.ariaLabel')}>
     <div className={cn('flex items-center gap-3', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
       <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
-      <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
+      <span className="text-sm">{rotationCopy(t, 'loading.title')}</span>
     </div>
     <div className={cn('mt-4 grid gap-3 text-sm', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
-      <p className="leading-6">正在整理主题强弱、轮动线索与最近更新时间。</p>
-      <p className="leading-6">准备好后会自动显示当前市场、头部主题和观察重点。</p>
+      <p className="leading-6">{rotationCopy(t, 'loading.preparing')}</p>
+      <p className="leading-6">{rotationCopy(t, 'loading.ready')}</p>
       <TerminalNotice variant="info" className={cn('text-[12px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
-        结果出来前不会补写临时轮动方向。
+        {rotationCopy(t, 'loading.noTemporaryDirection')}
       </TerminalNotice>
     </div>
     {showFallback ? (
@@ -2395,9 +2418,9 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
         data-testid="rotation-radar-loading-fallback"
         className="mt-4 border-amber-300/20 bg-amber-300/[0.04] p-3 text-sm"
       >
-        <div className="font-semibold text-amber-100">轮动数据暂未返回</div>
+        <div className="font-semibold text-amber-100">{rotationCopy(t, 'loading.fallbackTitle')}</div>
         <p className="mt-2 leading-5 text-[color:var(--wolfy-text-secondary)]">
-          可稍后重试；当前不会补写临时轮动方向。
+          {rotationCopy(t, 'loading.fallbackBody')}
         </p>
         <TerminalButton
           variant="compact"
@@ -2405,17 +2428,17 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
           onClick={onRefresh}
         >
           <RefreshCcw className="size-3.5" aria-hidden="true" />
-          重新读取
+          {rotationCopy(t, 'controls.reload')}
         </TerminalButton>
       </TerminalNestedBlock>
     ) : null}
-  </TerminalPanel>
-);
+  </TerminalPanel>;
+};
 
-function createRotationRadarTimeoutError(): ParsedApiError {
+function createRotationRadarTimeoutError(t: RotationTranslate): ParsedApiError {
   return createParsedApiError({
-    title: '主题轮动暂时不可用',
-    message: '页面未在预期时间内完成读取，当前无法判断轮动方向。请稍后刷新重试。',
+    title: rotationCopy(t, 'errors.timeoutTitle'),
+    message: rotationCopy(t, 'errors.timeoutMessage'),
     category: 'upstream_timeout',
   });
 }
@@ -2495,6 +2518,7 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
 }
 
 const MarketRotationRadarPage: React.FC = () => {
+  const { t } = useI18n();
   const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
   const [showLoadingFallback, setShowLoadingFallback] = useState(false);
   const activeRequestIdRef = useRef(0);
@@ -2509,7 +2533,7 @@ const MarketRotationRadarPage: React.FC = () => {
         marketRotationApi.getRotationRadar(market),
         new Promise<never>((_, reject) => {
           timeoutHandle = window.setTimeout(() => {
-            reject(createRotationRadarTimeoutError());
+            reject(createRotationRadarTimeoutError(t));
           }, ROTATION_RADAR_ROUTE_TIMEOUT_MS);
         }),
       ]);
@@ -2524,9 +2548,9 @@ const MarketRotationRadarPage: React.FC = () => {
       const parsed = getParsedApiError(nextError);
       dispatch({
         type: 'loadFailed',
-        error: parsed.title === '主题轮动暂时不可用'
+        error: parsed.title === rotationCopy(t, 'errors.timeoutTitle')
           ? parsed
-          : { ...parsed, title: '读取主题轮动雷达失败' },
+          : { ...parsed, title: rotationCopy(t, 'errors.loadFailedTitle') },
       });
     } finally {
       if (timeoutHandle !== undefined) {
@@ -2542,7 +2566,7 @@ const MarketRotationRadarPage: React.FC = () => {
     return () => {
       activeRequestIdRef.current += 1;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!state.loading || state.payload) {
@@ -2582,13 +2606,13 @@ const MarketRotationRadarPage: React.FC = () => {
     || primaryThemes[0]
     || state.payload?.themes[0];
   const libraryMode = rotationTiers?.libraryMode || false;
-  const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(state.payload, rotationTiers) : null;
-  const primaryTierLabel = primaryDisplayLabel(displayMode);
-  const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
-  const visualUnavailableReason = rotationConclusion?.title || '矩阵暂不可用';
+  const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(t, state.payload, rotationTiers) : null;
+  const primaryTierLabel = primaryDisplayLabel(t, displayMode);
+  const marketLabelText = marketLabel(t, state.payload?.market || state.selectedMarket);
+  const visualUnavailableReason = rotationConclusion?.title || rotationCopy(t, 'visual.matrixUnavailable');
   const visualUnavailableDetail = libraryMode
-    ? '当前仅有分类浏览条目，尚无可用于矩阵定位的相对强弱与阶段组合。'
-    : rotationConclusion?.whyNotConclusion || '当前结构化强弱维度仍待确认，暂不展示矩阵。';
+    ? rotationCopy(t, 'visual.taxonomyUnavailableDetail')
+    : rotationConclusion?.whyNotConclusion || rotationCopy(t, 'primary.unavailableDetail');
 
   return (
     <div
@@ -2601,8 +2625,8 @@ const MarketRotationRadarPage: React.FC = () => {
       <ConsumerWorkspacePageShell className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
           <TerminalPageHeading
-            eyebrow="主题轮动"
-            title="主题轮动雷达"
+            eyebrow={rotationCopy(t, 'header.eyebrow')}
+            title={rotationCopy(t, 'header.title')}
           />
         </TerminalPanel>
 
@@ -2610,7 +2634,7 @@ const MarketRotationRadarPage: React.FC = () => {
           <TerminalPanel as="section">
             <ApiErrorAlert
               error={state.error}
-              actionLabel="重新读取"
+              actionLabel={rotationCopy(t, 'controls.reload')}
               onAction={handleRefresh}
             />
           </TerminalPanel>
@@ -2644,18 +2668,18 @@ const MarketRotationRadarPage: React.FC = () => {
             />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
-              <section className="min-w-0 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
+              <section className="min-w-0 xl:col-span-8" aria-label={libraryMode ? rotationCopy(t, 'labels.taxonomyAndClues') : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="border-b border-[color:var(--wolfy-divider)] p-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
                       title={primaryThemes.length
                         ? (libraryMode
-                          ? `${primaryThemes.length} 个分类焦点`
+                          ? rotationCopy(t, 'list.taxonomyFocusCount', { count: primaryThemes.length })
                           : rotationTiers?.confirmedLeaders.length
-                            ? `前 ${primaryThemes.length} 个确认信号`
-                            : `前 ${primaryThemes.length} 个观察数据`)
-                        : (rotationConclusion?.title || (libraryMode ? '暂无可展示主题' : '暂无头部排名'))}
+                            ? rotationCopy(t, 'list.confirmedCount', { count: primaryThemes.length })
+                            : rotationCopy(t, 'list.observationCount', { count: primaryThemes.length }))
+                        : (rotationConclusion?.title || (libraryMode ? rotationCopy(t, 'list.noVisibleThemes') : rotationCopy(t, 'list.noHeadlineRanking')))}
                     />
                   </div>
                   {primaryThemes.length ? (
@@ -2677,13 +2701,13 @@ const MarketRotationRadarPage: React.FC = () => {
                         className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-[color:var(--wolfy-text-muted)]"
                       >
                         <span className="block font-semibold text-[color:var(--wolfy-text-primary)]">
-                          {rotationConclusion?.title || '轮动方向待确认'}
+                          {rotationConclusion?.title || rotationCopy(t, 'status.directionPending')}
                         </span>
                         <span className="mt-2 block leading-5">
-                          {rotationConclusion?.detail || '轮动数据待确认'}
+                          {rotationConclusion?.detail || rotationCopy(t, 'confidence.unavailable')}
                         </span>
                         <span className="mt-3 block leading-5 text-[color:var(--wolfy-text-secondary)]">
-                          {rotationConclusion?.nextStep || '切换市场对比或等待数据更新'}
+                          {rotationConclusion?.nextStep || rotationCopy(t, 'conclusion.unavailableNextStep')}
                         </span>
                       </TerminalEmptyState>
                     </div>
@@ -2703,8 +2727,10 @@ const MarketRotationRadarPage: React.FC = () => {
             <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
               <div className="border-b border-[color:var(--wolfy-divider)] p-3">
                 <TerminalSectionHeader
-                  eyebrow="主题 / 分类"
-                  title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
+                  eyebrow={rotationCopy(t, 'labels.themeAndTaxonomy')}
+                  title={libraryMode
+                    ? rotationCopy(t, 'list.taxonomyItemsCount', { count: filteredThemes.length, total: state.payload.themes.length })
+                    : rotationCopy(t, 'list.itemsCount', { count: filteredThemes.length, total: state.payload.themes.length })}
                 />
               </div>
               <div className="max-h-80 overflow-y-auto no-scrollbar">
@@ -2722,7 +2748,7 @@ const MarketRotationRadarPage: React.FC = () => {
                   </DenseRows>
                 ) : (
                   <div className="p-3">
-                    <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-[color:var(--wolfy-text-muted)]">没有匹配主题。</TerminalEmptyState>
+                    <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-[color:var(--wolfy-text-muted)]">{rotationCopy(t, 'list.noMatchingThemes')}</TerminalEmptyState>
                   </div>
                 )}
               </div>

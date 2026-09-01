@@ -6,8 +6,8 @@ import { zhCatalog } from '../catalogs/zh';
 type CatalogEntry = readonly [key: string, value: string];
 
 const CATALOG_FINGERPRINT = {
-  en: { entryCount: 2729, sha256: 'df599e0f4e343904fb8d5dc7695cf7ebf25ddcf9ad51899fc3a076c0cf0987ab' },
-  zh: { entryCount: 2729, sha256: '356b18ce02363b6fd3ffeed5fd448d9b8590d48237852895aa33070e83296745' },
+      en: { entryCount: 3030, sha256: '8f7d44ee3447719cacbf76b02db2fd46f9d2b477f8f9389c2b45d06c62905f10' },
+      zh: { entryCount: 3030, sha256: '89aede2bbff9e129932de13604d6a43ff5c43953227702002a79388e29e63e6b' },
 } as const;
 
 function collectCatalogEntries(value: unknown, prefix = ''): CatalogEntry[] {

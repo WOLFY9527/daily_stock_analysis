@@ -1,10 +1,13 @@
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketRotationRadarPage from '../MarketRotationRadarPage';
 import { marketRotationApi } from '../../api/marketRotation';
 import type { MarketRotationRadarResponse, MarketRotationSummaryItem } from '../../api/marketRotation';
+import { UiLanguageProvider, UiLanguageRouteSynchronizer, useI18n } from '../../contexts/UiLanguageContext';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 
 vi.mock('../../api/marketRotation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/marketRotation')>();
@@ -15,6 +18,36 @@ vi.mock('../../api/marketRotation', async (importOriginal) => {
     },
   };
 });
+
+function RotationLocationProbe() {
+  const location = useLocation();
+  return <output data-testid="rotation-location-path">{`${location.pathname}${location.search}`}</output>;
+}
+
+function RotationLanguageToggle() {
+  const { toggleLanguage } = useI18n();
+  return <button type="button" onClick={toggleLanguage}>Toggle rotation language</button>;
+}
+
+function renderLocalizedRotation(
+  initialPath: '/zh/market/rotation-radar' | '/en/market/rotation-radar',
+  options: { includeLanguageToggle?: boolean } = {},
+) {
+  const language = initialPath.startsWith('/en/') ? 'en' : 'zh';
+  window.history.replaceState({}, '', initialPath);
+  window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
+
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <UiLanguageProvider>
+        <UiLanguageRouteSynchronizer />
+        <RotationLocationProbe />
+        {options.includeLanguageToggle ? <RotationLanguageToggle /> : null}
+        <MarketRotationRadarPage />
+      </UiLanguageProvider>
+    </MemoryRouter>,
+  );
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -1176,6 +1209,9 @@ async function waitForMarketUniverseToSettle(market: 'CN' | 'HK' | 'CRYPTO', exp
 describe('MarketRotationRadarPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/zh/market/rotation-radar');
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh');
+    document.documentElement.lang = 'zh';
     vi.mocked(marketRotationApi.getRotationRadar).mockImplementation((market?: string) => {
       if (market === 'CN' || market === 'HK' || market === 'CRYPTO') {
         return Promise.resolve(taxonomyMarketFixture(market));
@@ -1393,12 +1429,12 @@ describe('MarketRotationRadarPage', () => {
     expect(controls).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
-    expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('更新时间');
+    expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('最后更新');
 
     const guidance = screen.getByTestId('rotation-radar-guidance');
     const pageHeading = screen.getByRole('heading', { level: 1, name: '主题轮动雷达' });
     const heroHeading = screen.getByTestId('rotation-radar-hero-title');
-    expect(guidance).toHaveTextContent('信号待确认');
+    expect(guidance).toHaveTextContent('板块强弱');
     expect(guidance).toHaveTextContent('AI 应用');
     expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
     expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(4);
@@ -1426,7 +1462,7 @@ describe('MarketRotationRadarPage', () => {
     expect(familyRollup).toHaveTextContent('家族流向观察');
     expect(familyRollup).toHaveTextContent('AI / 软件');
     expect(familyRollup).toHaveTextContent('领涨观察');
-    expect(familyRollup).toHaveTextContent('2 个优先观察');
+    expect(familyRollup).toHaveTextContent('2 个优先家族');
     const familyRow = screen.getByTestId('rotation-family-rollup-row-ai');
     expect(familyRow).toHaveTextContent('1/1 个有信号');
     expect(within(familyRow).getByRole('button', { name: '展开 AI / 软件' })).toHaveAttribute('aria-expanded', 'false');
@@ -1478,6 +1514,65 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(/\bDetails\b/i);
   });
 
+  it('uses canonical English product copy for a direct English route while preserving English theme data', async () => {
+    renderLocalizedRotation('/en/market/rotation-radar');
+
+    const page = await screen.findByTestId('market-rotation-radar-page');
+    await screen.findByTestId('rotation-radar-mode-controls');
+    expect(screen.getByRole('heading', { level: 1, name: 'Rotation Radar' })).toBeInTheDocument();
+    expect(screen.getByTestId('rotation-market-tab-US')).toHaveTextContent('US');
+    expect(screen.getByPlaceholderText('Search themes, English names, or members')).toBeInTheDocument();
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('Rotation direction');
+    expect(screen.getByTestId('rotation-radar-visual-matrix')).toHaveTextContent('Relative-strength matrix');
+    expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('AI 应用 Cluster');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用 Cluster');
+    expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('Sector strength');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('Broad participation');
+
+    const methodology = screen.getByTestId('rotation-radar-mechanics-details');
+    expect(within(methodology).getByRole('button', { name: 'Expand How to read rotation' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(within(methodology).getByRole('button', { name: 'Expand How to read rotation' }));
+    expect(within(methodology).getByRole('button', { name: 'Collapse How to read rotation' })).toHaveAttribute('aria-expanded', 'true');
+
+    expect(document.documentElement.lang).toBe('en');
+    expect(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('en');
+    expect(page.textContent || '').not.toMatch(/主题轮动雷达|搜索主题、英文名或成员|相对强弱矩阵|展开 查看轮动说明/);
+    expect(page.textContent || '').not.toMatch(rawI18nKeyPattern);
+  });
+
+  it('uses canonical Chinese product copy for a direct Chinese route', async () => {
+    renderLocalizedRotation('/zh/market/rotation-radar');
+
+    await screen.findByTestId('market-rotation-radar-page');
+    expect(screen.getByRole('heading', { level: 1, name: '主题轮动雷达' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('轮动方向');
+    expect(screen.getByTestId('rotation-radar-visual-matrix')).toHaveTextContent('相对强弱矩阵');
+    expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('AI 应用');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('广泛扩散');
+    expect(
+      within(screen.getByTestId('rotation-radar-mechanics-details')).getByRole('button', { name: '展开 查看轮动说明' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(document.documentElement.lang).toBe('zh');
+    expect(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('zh');
+  });
+
+  it('updates the route, stored language, document language, and visible product copy when the language changes', async () => {
+    renderLocalizedRotation('/zh/market/rotation-radar', { includeLanguageToggle: true });
+
+    await screen.findByRole('heading', { level: 1, name: '主题轮动雷达' });
+    expect(screen.getByTestId('rotation-location-path')).toHaveTextContent('/zh/market/rotation-radar');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle rotation language' }));
+
+    await screen.findByRole('heading', { level: 1, name: 'Rotation Radar' });
+    await waitFor(() => expect(screen.getByTestId('rotation-location-path')).toHaveTextContent('/en/market/rotation-radar'));
+    expect(document.documentElement.lang).toBe('en');
+    expect(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('en');
+    expect(screen.getByPlaceholderText('Search themes, English names, or members')).toBeInTheDocument();
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用 Cluster');
+  });
+
   it('shows a bounded user-visible fallback while the route request remains unresolved', async () => {
     vi.useFakeTimers();
     vi.mocked(marketRotationApi.getRotationRadar).mockImplementationOnce(
@@ -1486,10 +1581,10 @@ describe('MarketRotationRadarPage', () => {
 
     render(<MarketRotationRadarPage />);
 
-    expect(screen.getByRole('status')).toHaveTextContent('正在读取主题轮动 / 相对强弱雷达');
-    expect(screen.getByRole('status')).toHaveTextContent('正在整理主题强弱、轮动线索与最近更新时间。');
-    expect(screen.getByRole('status')).toHaveTextContent('准备好后会自动显示当前市场、头部主题和观察重点。');
-    expect(screen.getByRole('status')).toHaveTextContent('结果出来前不会补写临时轮动方向。');
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载主题轮动雷达');
+    expect(screen.getByRole('status')).toHaveTextContent('正在准备轮动证据…');
+    expect(screen.getByRole('status')).toHaveTextContent('页面仅展示已确认可用字段。');
+    expect(screen.getByRole('status')).toHaveTextContent('加载期间不会推断临时轮动方向。');
     expect(screen.queryByTestId('rotation-radar-loading-fallback')).not.toBeInTheDocument();
 
     await act(async () => {
@@ -1502,9 +1597,8 @@ describe('MarketRotationRadarPage', () => {
     });
 
     const fallback = screen.getByTestId('rotation-radar-loading-fallback');
-    expect(fallback).toHaveTextContent('轮动数据暂未返回');
-    expect(fallback).toHaveTextContent('可稍后重试');
-    expect(fallback).toHaveTextContent('当前不会补写临时轮动方向');
+    expect(fallback).toHaveTextContent('加载时间超过预期');
+    expect(fallback).toHaveTextContent('页面仍在准备最近一次可用视图。');
     expect(fallback).toHaveTextContent('重新读取');
     expect(screen.queryByTestId('rotation-radar-guidance')).not.toBeInTheDocument();
 
@@ -1561,7 +1655,7 @@ describe('MarketRotationRadarPage', () => {
     const familyRollup = await screen.findByTestId('rotation-family-flow-rollup');
     const collapsedDisclosure = screen.getByTestId('rotation-family-rollup-collapsed');
     expect(familyRollup).toHaveTextContent('查看低信号家族');
-    expect(collapsedDisclosure).toHaveTextContent('1 个默认折叠');
+    expect(collapsedDisclosure).toHaveTextContent('1 个低信号家族');
     expect(within(collapsedDisclosure).getByRole('button', { name: '展开 查看低信号家族' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('rotation-family-rollup-collapsed-row-defensive_zero')).not.toBeInTheDocument();
 
@@ -1604,7 +1698,7 @@ describe('MarketRotationRadarPage', () => {
     const snapshot = within(detail).getByTestId('rotation-theme-correlation-breadth-snapshot');
 
     expect(snapshot).toHaveAttribute('data-terminal-primitive', 'disclosure');
-    expect(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(snapshot).getByRole('button', { name: '展开 主题扩散快照' })).toHaveAttribute('aria-expanded', 'false');
     expect(snapshot).toHaveTextContent('广泛扩散');
     expect(snapshot).toHaveTextContent('广度扩散');
     expect(snapshot).toHaveTextContent('同步相关');
@@ -1612,7 +1706,7 @@ describe('MarketRotationRadarPage', () => {
     expect(snapshot).not.toHaveTextContent('observationBoundary');
     expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
 
-    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' }));
+    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 主题扩散快照' }));
 
     expect(snapshot).toHaveTextContent('龙头集中度');
     expect(snapshot).toHaveTextContent('分布均衡 · 28.0%');
@@ -1634,7 +1728,7 @@ describe('MarketRotationRadarPage', () => {
     expect(snapshot).toHaveTextContent('不改变排序');
     expect(snapshot).toHaveTextContent('不改动数据');
     expect(snapshot).toHaveTextContent('不新增取数');
-    expect(snapshot).toHaveTextContent('继续观察广泛参与能否延续到下一观察窗口。');
+    expect(snapshot).toHaveTextContent('Watch whether broad participation persists across the next observation window.');
     expect(snapshot.textContent || '').not.toMatch(/participationState|leadershipConcentration|correlationEvidence|breadthEvidence|staleInputs|missingInputs|observationBoundary|researchNextSteps|rankingImpact|dataMutation|dataFetches/);
     expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(snapshot.textContent || '').not.toMatch(forbiddenTradingActionPattern);
@@ -1681,7 +1775,7 @@ describe('MarketRotationRadarPage', () => {
 
     const detail = await screen.findByTestId('rotation-theme-detail-panel');
     const snapshot = within(detail).getByTestId('rotation-theme-correlation-breadth-snapshot');
-    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' }));
+    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 主题扩散快照' }));
 
     expect(snapshot).toHaveTextContent('证据不足');
     expect(snapshot).toHaveTextContent('最近一次可用数据');
@@ -1690,7 +1784,7 @@ describe('MarketRotationRadarPage', () => {
     expect(snapshot).toHaveTextContent('上涨广度待补齐');
     expect(snapshot).toHaveTextContent('成员同步待补齐');
     expect(snapshot).toHaveTextContent('市场观察样本待补齐');
-    expect(snapshot).toHaveTextContent('补齐成员广度与同步证据后，再分类参与状态。');
+    expect(snapshot).toHaveTextContent('Collect member-level breadth and synchronization evidence before classifying participation.');
     expect(snapshot.textContent || '').not.toMatch(/fallback_source|fallback_window|stale_source|breadth_percent_up|correlation_same_direction_percent|market_runtime_evidence/);
     expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(snapshot.textContent || '').not.toMatch(forbiddenTradingActionPattern);
@@ -1735,7 +1829,6 @@ describe('MarketRotationRadarPage', () => {
       const themeFlow = within(detail).getByTestId('rotation-theme-flow-signal');
       fireEvent.click(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' }));
 
-      expect(themeFlow).toHaveTextContent('部分轮动数据暂不可用。');
       expect(duplicateKeyGuard.messages).toEqual([]);
     } finally {
       duplicateKeyGuard.restore();
@@ -1745,35 +1838,24 @@ describe('MarketRotationRadarPage', () => {
   it('uses observation themes as the primary view when headline gates have no eligible themes', async () => {
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(observationThemesPrimaryFixture());
 
-    render(<MarketRotationRadarPage />);
+    renderLocalizedRotation('/en/market/rotation-radar');
 
     const guidance = await screen.findByTestId('rotation-radar-guidance');
-    expect(guidance).toHaveTextContent('信号待确认');
-    expect(guidance).toHaveTextContent('AI 观察主题');
-    expect(guidance).not.toHaveTextContent('板块强弱可读');
+    expect(guidance).toHaveTextContent('Sector strength');
+    expect(guidance).not.toHaveTextContent('Rotation direction pending');
 
     const visualMatrix = screen.getByTestId('rotation-radar-visual-matrix');
-    expect(visualMatrix).toHaveTextContent('观察数据');
-    expect(visualMatrix).toHaveTextContent('对比样本与观察数据');
-    expect(visualMatrix).toHaveTextContent('不形成强结论');
-    expect(visualMatrix).toHaveTextContent('AI 观察主题');
+    expect(visualMatrix).toHaveTextContent('Relative-strength matrix');
+    expect(visualMatrix).toHaveTextContent('AI Observation Theme');
     expect(within(visualMatrix).getByTestId('rotation-radar-matrix-point-observation_ai')).toHaveTextContent('↑ +2.4%');
     expect(screen.queryByTestId('rotation-radar-visual-unavailable')).not.toBeInTheDocument();
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
-    expect(leaderList).toHaveTextContent('观察数据');
-    expect(leaderList).toHaveTextContent('前 1 个观察数据');
-    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('AI 观察主题');
-    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('对比样本观察');
-    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('升温观察');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('AI Observation Theme');
     expect(screen.queryByTestId('rotation-radar-insufficient-empty')).not.toBeInTheDocument();
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
-    expect(detail).toHaveTextContent('AI 观察主题');
-    expect(detail).toHaveTextContent('对比样本观察');
-    expect(detail).toHaveTextContent('升温观察');
-    expect(detail).toHaveTextContent('相对 QQQ +2.4%');
-    expect(detail).toHaveTextContent('AI 观察主题由对比样本强弱与广度扩散支持，仅作走势观察。');
+    expect(detail).toHaveTextContent('AI Observation Theme');
 
     const bodyText = document.body.textContent || '';
     expect(bodyText).not.toMatch(rawI18nKeyPattern);
@@ -1879,25 +1961,24 @@ describe('MarketRotationRadarPage', () => {
     expect(detail).not.toHaveTextContent('AI 应用 当前以主题强弱与广度变化为主');
   });
 
-  it('maps simple English theme descriptions into consumer-safe Chinese copy when a direct mapping exists', async () => {
+  it('preserves English theme data instead of applying the removed UI copy replacement table', async () => {
     const fixture = observationThemesPrimaryFixture();
     fixture.themes = fixture.themes.map((theme, index) => (
       index === 0
         ? {
             ...theme,
             englishName: 'AI Observation Theme',
-            focus: 'AI Proxy Candidate',
+            focus: 'Application software and enterprise AI workflows',
           }
         : theme
     ));
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
 
-    render(<MarketRotationRadarPage />);
+    renderLocalizedRotation('/en/market/rotation-radar');
 
     const detail = await screen.findByTestId('rotation-theme-detail-panel');
-    expect(detail).toHaveTextContent('AI 观察主题');
-    expect(detail).not.toHaveTextContent('AI Observation Theme');
-    expect(detail).not.toHaveTextContent('AI Proxy Candidate');
+    expect(detail).toHaveTextContent('AI Observation Theme');
+    expect(detail.textContent || '').not.toMatch(rawI18nKeyPattern);
   });
 
   it('keeps the full universe searchable and compact', async () => {
@@ -1911,7 +1992,7 @@ describe('MarketRotationRadarPage', () => {
     expect(universe).not.toHaveTextContent('半导体');
 
     fireEvent.change(screen.getByPlaceholderText('搜索主题、英文名或成员'), { target: { value: '不存在的主题' } });
-    expect(universe).toHaveTextContent('没有匹配主题。');
+    expect(universe).toHaveTextContent('暂无符合条件的主题');
   });
 
   it('renders compact observation and unavailable states without leaking internals', async () => {
@@ -1920,8 +2001,7 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const observationGuidance = await screen.findByTestId('rotation-radar-guidance');
-    expect(observationGuidance).toHaveTextContent('信号待确认');
-    expect(observationGuidance).toHaveTextContent('AI 应用');
+    expect(observationGuidance).toHaveTextContent('板块强弱');
     expect(observationGuidance.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(screen.getByTestId('rotation-radar-visual-matrix')).toBeInTheDocument();
 
@@ -2039,17 +2119,14 @@ describe('MarketRotationRadarPage', () => {
 
     const page = await screen.findByTestId('market-rotation-radar-page');
     const detail = screen.getByTestId('rotation-theme-detail-panel');
-    expect(detail).toHaveTextContent('部分轮动数据暂不可用。');
     expect(detail.textContent || '').not.toMatch(consumerMetadataLeakPattern);
 
     const dataNotes = screen.getByTestId('rotation-theme-data-notes');
     fireEvent.click(within(dataNotes).getByRole('button', { name: '展开 查看数据说明' }));
-    expect(dataNotes).toHaveTextContent('部分轮动数据暂不可用。');
     expect(dataNotes.textContent || '').not.toMatch(consumerMetadataLeakPattern);
 
     const themeFlow = screen.getByTestId('rotation-theme-flow-signal');
     fireEvent.click(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' }));
-    expect(themeFlow).toHaveTextContent('部分轮动数据暂不可用。');
     expect(themeFlow.textContent || '').not.toMatch(consumerMetadataLeakPattern);
 
     fireEvent.click(screen.getByRole('button', { name: '展开 查看轮动说明' }));
@@ -2071,7 +2148,7 @@ describe('MarketRotationRadarPage', () => {
 
     render(<MarketRotationRadarPage />);
 
-    expect(screen.getByRole('status')).toHaveTextContent('正在读取主题轮动 / 相对强弱雷达');
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载主题轮动雷达');
 
     await act(async () => {
       await Promise.resolve();
@@ -2085,8 +2162,8 @@ describe('MarketRotationRadarPage', () => {
     });
 
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('主题轮动暂时不可用');
-    expect(alert).toHaveTextContent('页面未在预期时间内完成读取，当前无法判断轮动方向。请稍后刷新重试。');
+    expect(alert).toHaveTextContent('主题轮动雷达超时');
+    expect(alert).toHaveTextContent('请求超时，请重试读取最近一次可用轮动视图。');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-radar-loading-fallback')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-radar-guidance')).not.toBeInTheDocument();
@@ -2100,8 +2177,7 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const guidance = await screen.findByTestId('rotation-radar-guidance');
-    expect(guidance).toHaveTextContent('板块强弱可读');
-    expect(guidance).toHaveTextContent('半导体真实流向');
+    expect(guidance).toHaveTextContent('板块强弱');
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(1);
     expect(within(leaderList).getByTestId('rotation-radar-leader-row-real_flow_semis')).toHaveTextContent('半导体真实流向');

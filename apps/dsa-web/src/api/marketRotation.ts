@@ -272,6 +272,8 @@ export type MarketRotationAlpacaQuoteAuthorityReadiness = {
 
 type MarketRotationQuoteReadinessVariant = 'success' | 'info' | 'caution' | 'neutral';
 
+export type MarketRotationCopy = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
 export type MarketRotationQuoteCoverageFamilyView = {
   key: string;
   label: string;
@@ -745,6 +747,15 @@ function countSymbols(values?: string[]): number {
   return Array.isArray(values) ? values.filter(Boolean).length : 0;
 }
 
+function rotationCopy(
+  t: MarketRotationCopy | undefined,
+  key: string,
+  fallback: string,
+  vars?: Record<string, string | number | undefined>,
+): string {
+  return t ? t(`rotationRadar.${key}`, vars) : fallback;
+}
+
 function summarizeQuoteCoverage(readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null): Required<MarketRotationQuoteCoverageSummary> {
   const families = Array.isArray(readiness?.quoteCoverageByFamily) ? readiness.quoteCoverageByFamily : [];
   const summary = readiness?.coverageSummary || {};
@@ -787,20 +798,21 @@ function summarizeQuoteCoverage(readiness?: MarketRotationAlpacaQuoteAuthorityRe
   };
 }
 
-function quoteCoverageFamilyLabel(family?: MarketRotationQuoteCoverageFamily | null): string {
+function quoteCoverageFamilyLabel(t: MarketRotationCopy | undefined, family?: MarketRotationQuoteCoverageFamily | null): string {
   switch (family?.familyId) {
     case 'broad_us_market':
-      return '大盘代理覆盖';
+      return rotationCopy(t, 'api.family.broadMarket', '大盘代理覆盖');
     case 'sector_etfs':
-      return '行业ETF覆盖';
+      return rotationCopy(t, 'api.family.sectorEtfs', '行业ETF覆盖');
     case 'volatility_risk':
-      return '风险代理覆盖';
+      return rotationCopy(t, 'api.family.riskProxy', '风险代理覆盖');
     default:
-      return '代理覆盖';
+      return rotationCopy(t, 'api.family.proxyCoverage', '代理覆盖');
   }
 }
 
 function quoteCoverageFamilyStatus(
+  t: MarketRotationCopy | undefined,
   family: MarketRotationQuoteCoverageFamily,
 ): { label: string; variant: MarketRotationQuoteReadinessVariant } {
   const countsAvailable = [family.configuredCount, family.availableCount, family.missingCount]
@@ -820,18 +832,21 @@ function quoteCoverageFamilyStatus(
     || truth.scoreContribution !== 'eligible'
     || truth.observationOnly === true;
   if (truth.availability === 'unavailable') {
-    return { label: '报价待补', variant: 'caution' };
+    return { label: rotationCopy(t, 'api.quoteMissing', '报价待补'), variant: 'caution' };
   }
   if (family.familyId === 'sector_etfs') {
-    return limited ? { label: 'ETF引用部分可用', variant: 'info' } : { label: 'ETF引用可用', variant: 'success' };
+    return limited
+      ? { label: rotationCopy(t, 'api.etfPartial', 'ETF引用部分可用'), variant: 'info' }
+      : { label: rotationCopy(t, 'api.etfAvailable', 'ETF引用可用'), variant: 'success' };
   }
   if (limited) {
-    return { label: '代理覆盖有限', variant: 'caution' };
+    return { label: rotationCopy(t, 'api.proxyLimited', '代理覆盖有限'), variant: 'caution' };
   }
-  return { label: '代理覆盖可用', variant: 'success' };
+  return { label: rotationCopy(t, 'api.proxyAvailable', '代理覆盖可用'), variant: 'success' };
 }
 
 function buildQuoteCoverageFamilyRows(
+  t: MarketRotationCopy | undefined,
   readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
 ): MarketRotationQuoteCoverageFamilyView[] {
   const families = Array.isArray(readiness?.quoteCoverageByFamily) ? readiness.quoteCoverageByFamily : [];
@@ -842,17 +857,19 @@ function buildQuoteCoverageFamilyRows(
     const staleCount = safeCount(family.staleCount, countSymbols(family.staleSymbols));
     const scoreCount = safeCount(family.scoreAuthorityAllowedCount, countSymbols(family.scoreAuthorityAllowedSymbols));
     const observationCount = safeCount(family.observationOnlyCount, countSymbols(family.observationOnlySymbols));
-    const status = quoteCoverageFamilyStatus(family);
-    const availableLabel = family.familyId === 'sector_etfs' ? 'ETF引用可用' : '代理覆盖可用';
+    const status = quoteCoverageFamilyStatus(t, family);
+    const availableLabel = family.familyId === 'sector_etfs'
+      ? rotationCopy(t, 'api.etfAvailable', 'ETF引用可用')
+      : rotationCopy(t, 'api.proxyAvailable', '代理覆盖可用');
     return {
-      key: family.familyId || quoteCoverageFamilyLabel(family),
-      label: quoteCoverageFamilyLabel(family),
+      key: family.familyId || quoteCoverageFamilyLabel(t, family),
+      label: quoteCoverageFamilyLabel(t, family),
       statusLabel: status.label,
       variant: status.variant,
-      countsLabel: `${availableLabel} ${availableCount}/${configuredCount} · 报价待补 ${missingCount} · 报价可能延迟 ${staleCount}`,
+      countsLabel: rotationCopy(t, 'api.countsLabel', `${availableLabel} ${availableCount}/${configuredCount} · 报价待补 ${missingCount} · 报价可能延迟 ${staleCount}`, { availableLabel, available: availableCount, configured: configuredCount, missing: missingCount, stale: staleCount }),
       scoringLabel: scoreCount > 0
-        ? `评分可用 ${scoreCount} · 仅观察 ${observationCount}`
-        : `评分待确认 · 仅观察 ${observationCount}`,
+        ? rotationCopy(t, 'api.scoringAvailable', `评分可用 ${scoreCount} · 仅观察 ${observationCount}`, { score: scoreCount, observation: observationCount })
+        : rotationCopy(t, 'api.scoringPending', `评分待确认 · 仅观察 ${observationCount}`, { observation: observationCount }),
     };
   });
 }
@@ -872,26 +889,27 @@ function uniqueReadinessChips(
 
 export function buildAlpacaQuoteAuthorityReadinessView(
   readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
+  t?: MarketRotationCopy,
 ): MarketRotationAlpacaQuoteAuthorityReadinessView {
   const coverage = summarizeQuoteCoverage(readiness);
   const summaryItems = [
-    `报价待补 ${coverage.missingCount}`,
-    `报价可能延迟 ${coverage.staleCount}`,
-    `评分可用 ${coverage.scoreAuthorityAllowedCount}`,
-    `仅观察 ${coverage.observationOnlyCount}`,
+    rotationCopy(t, 'api.summaryMissing', `报价待补 ${coverage.missingCount}`, { count: coverage.missingCount }),
+    rotationCopy(t, 'api.summaryStale', `报价可能延迟 ${coverage.staleCount}`, { count: coverage.staleCount }),
+    rotationCopy(t, 'api.summaryScoring', `评分可用 ${coverage.scoreAuthorityAllowedCount}`, { count: coverage.scoreAuthorityAllowedCount }),
+    rotationCopy(t, 'api.summaryObserve', `仅观察 ${coverage.observationOnlyCount}`, { count: coverage.observationOnlyCount }),
   ];
-  const familyRows = buildQuoteCoverageFamilyRows(readiness);
+  const familyRows = buildQuoteCoverageFamilyRows(t, readiness);
 
   if (!readiness) {
     return {
-      label: 'ETF引用待补',
+      label: rotationCopy(t, 'api.etfMissing', 'ETF引用待补'),
       variant: 'caution',
       chips: [
-        { key: 'readiness', label: 'ETF引用待补', variant: 'caution' },
-        { key: 'missing', label: '报价待补', variant: 'caution' },
-        { key: 'score', label: '评分待确认', variant: 'neutral' },
+        { key: 'readiness', label: rotationCopy(t, 'api.etfMissing', 'ETF引用待补'), variant: 'caution' },
+        { key: 'missing', label: rotationCopy(t, 'api.quoteMissing', '报价待补'), variant: 'caution' },
+        { key: 'score', label: rotationCopy(t, 'api.scoringPendingNoCount', '评分待确认'), variant: 'neutral' },
       ],
-      detail: 'ETF 引用状态待补，当前先保持观察。',
+      detail: rotationCopy(t, 'api.etfMissingDetail', 'ETF 引用状态待补，当前先保持观察。'),
       summaryItems,
       familyRows,
     };
@@ -907,12 +925,12 @@ export function buildAlpacaQuoteAuthorityReadinessView(
   const primary = state === 'authorized'
     && truth.source.authority === 'allowed'
     && readiness.providerConfigured !== false
-    ? { label: 'ETF引用可用', variant: 'success' as const }
+    ? { label: rotationCopy(t, 'api.etfAvailable', 'ETF引用可用'), variant: 'success' as const }
     : state === 'partial'
-      ? { label: 'ETF引用部分可用', variant: 'info' as const }
+      ? { label: rotationCopy(t, 'api.etfPartial', 'ETF引用部分可用'), variant: 'info' as const }
       : state === 'unavailable' || readiness.providerConfigured === false
-        ? { label: 'ETF引用待补', variant: 'caution' as const }
-        : { label: 'ETF引用待补', variant: 'neutral' as const };
+        ? { label: rotationCopy(t, 'api.etfMissing', 'ETF引用待补'), variant: 'caution' as const }
+        : { label: rotationCopy(t, 'api.etfMissing', 'ETF引用待补'), variant: 'neutral' as const };
 
   const limited = truth.source.authority !== 'allowed'
     || truth.scoreContribution === 'ineligible'
@@ -921,14 +939,14 @@ export function buildAlpacaQuoteAuthorityReadinessView(
     || coverage.staleCount > 0;
   const chips = uniqueReadinessChips([
     { key: 'readiness', label: primary.label, variant: primary.variant },
-    ...(limited ? [{ key: 'limitedCoverage', label: '代理覆盖有限', variant: 'caution' as const }] : []),
-    ...(coverage.staleCount > 0 ? [{ key: 'stale', label: '报价可能延迟', variant: 'caution' as const }] : []),
-    ...(limited ? [{ key: 'limited', label: '仅观察', variant: 'neutral' as const }] : []),
+    ...(limited ? [{ key: 'limitedCoverage', label: rotationCopy(t, 'api.proxyLimited', '代理覆盖有限'), variant: 'caution' as const }] : []),
+    ...(coverage.staleCount > 0 ? [{ key: 'stale', label: rotationCopy(t, 'api.quoteStale', '报价可能延迟'), variant: 'caution' as const }] : []),
+    ...(limited ? [{ key: 'limited', label: rotationCopy(t, 'api.observeOnly', '仅观察'), variant: 'neutral' as const }] : []),
     {
       key: 'score',
       label: coverage.scoreAuthorityAllowedCount > 0 && truth.scoreContribution === 'eligible'
-        ? '评分可用'
-        : '评分待确认',
+        ? rotationCopy(t, 'api.scoringAvailableNoCount', '评分可用')
+        : rotationCopy(t, 'api.scoringPendingNoCount', '评分待确认'),
       variant: coverage.scoreAuthorityAllowedCount > 0 && truth.scoreContribution === 'eligible' ? 'success' as const : 'neutral' as const,
     },
   ]);
@@ -937,7 +955,9 @@ export function buildAlpacaQuoteAuthorityReadinessView(
     label: primary.label,
     variant: primary.variant,
     chips,
-    detail: limited ? '当前仅作观察，不纳入评分。' : 'ETF 引用状态可用于主题强弱观察。',
+    detail: limited
+      ? rotationCopy(t, 'api.observeOnlyDetail', '当前仅作观察，不纳入评分。')
+      : rotationCopy(t, 'api.etfAvailableDetail', 'ETF 引用状态可用于主题强弱观察。'),
     summaryItems,
     familyRows,
   };
@@ -958,20 +978,21 @@ export type MarketRotationEvidenceBoundaryView = {
 };
 
 function rotationBoundaryLabel(
+  t: MarketRotationCopy | undefined,
   readiness: MarketRotationAlpacaQuoteAuthorityReadinessView,
   payload?: MarketRotationRadarResponse | null,
 ): MarketRotationEvidenceBoundaryView {
   if (!payload) {
     return {
-      label: '证据边界待确认',
+      label: rotationCopy(t, 'api.boundaryPending', '证据边界待确认'),
       variant: 'neutral',
       chips: [
-        { key: 'boundary', label: '证据边界待确认', variant: 'neutral' },
-        { key: 'broad', label: '广度待补', variant: 'neutral' },
-        { key: 'sector', label: '板块轮动待补', variant: 'neutral' },
-        { key: 'risk', label: '风险状态待补', variant: 'neutral' },
+        { key: 'boundary', label: rotationCopy(t, 'api.boundaryPending', '证据边界待确认'), variant: 'neutral' },
+        { key: 'broad', label: rotationCopy(t, 'api.breadthMissing', '广度待补'), variant: 'neutral' },
+        { key: 'sector', label: rotationCopy(t, 'api.sectorMissing', '板块轮动待补'), variant: 'neutral' },
+        { key: 'risk', label: rotationCopy(t, 'api.riskMissing', '风险状态待补'), variant: 'neutral' },
       ],
-      nextEvidence: '继续观察现有证据。',
+      nextEvidence: rotationCopy(t, 'api.observeExistingEvidence', '继续观察现有证据。'),
       note: readiness.detail,
     };
   }
@@ -1019,42 +1040,44 @@ function rotationBoundaryLabel(
   const broadRow = readiness.familyRows.find((row) => row.key === 'broad_us_market');
   const sectorRow = readiness.familyRows.find((row) => row.key === 'sector_etfs');
   const riskRow = readiness.familyRows.find((row) => row.key === 'volatility_risk');
-  const broadChipLabel = `${broadRow?.label || '广度覆盖'} · ${broadRow?.statusLabel || '待补'}`;
-  const sectorChipLabel = `${sectorRow?.label || '板块轮动'} · ${sectorRow?.statusLabel || '待补'}`;
-  const riskChipLabel = `${riskRow?.label || '风险状态'} · ${riskRow?.statusLabel || '待补'}`;
+  const broadChipLabel = `${broadRow?.label || rotationCopy(t, 'api.breadthCoverage', '广度覆盖')} · ${broadRow?.statusLabel || rotationCopy(t, 'api.pending', '待补')}`;
+  const sectorChipLabel = `${sectorRow?.label || rotationCopy(t, 'api.sectorRotation', '板块轮动')} · ${sectorRow?.statusLabel || rotationCopy(t, 'api.pending', '待补')}`;
+  const riskChipLabel = `${riskRow?.label || rotationCopy(t, 'api.riskStatus', '风险状态')} · ${riskRow?.statusLabel || rotationCopy(t, 'api.pending', '待补')}`;
 
   if (sampleLike) {
     return {
-      label: '演示样本，仅观察',
+      label: rotationCopy(t, 'api.demoObservation', '演示样本，仅观察'),
       variant: 'neutral',
       chips: [
-        { key: 'boundary', label: '演示样本，仅观察', variant: 'neutral' },
+        { key: 'boundary', label: rotationCopy(t, 'api.demoObservation', '演示样本，仅观察'), variant: 'neutral' },
         { key: 'broad', label: broadChipLabel, variant: 'neutral' },
         { key: 'sector', label: sectorChipLabel, variant: 'neutral' },
         { key: 'risk', label: riskChipLabel, variant: 'neutral' },
       ],
-      nextEvidence: '仅保留观察，不升格结论。',
+      nextEvidence: rotationCopy(t, 'api.demoNextEvidence', '仅保留观察，不升格结论。'),
       note: readiness.detail,
     };
   }
 
   if (stale) {
     return {
-      label: '待更新',
+      label: rotationCopy(t, 'api.refreshPending', '待更新'),
       variant: 'caution',
       chips: [
-        { key: 'boundary', label: '待更新', variant: 'caution' },
+        { key: 'boundary', label: rotationCopy(t, 'api.refreshPending', '待更新'), variant: 'caution' },
         { key: 'broad', label: broadChipLabel, variant: 'caution' },
         { key: 'sector', label: sectorChipLabel, variant: 'caution' },
         { key: 'risk', label: riskChipLabel, variant: 'caution' },
       ],
-      nextEvidence: '下一步：更新广度、轮动和风险代理覆盖。',
-      note: truth.freshness === 'stale' ? '当前数据已过时，继续观察新快照。' : readiness.detail,
+      nextEvidence: rotationCopy(t, 'api.refreshNextEvidence', '下一步：更新广度、轮动和风险代理覆盖。'),
+      note: truth.freshness === 'stale' ? rotationCopy(t, 'api.staleNote', '当前数据已过时，继续观察新快照。') : readiness.detail,
     };
   }
 
   if (fallback || missing || partial || limited) {
-    const boundaryLabel = missing ? '待补' : partial ? '部分可用' : '仅观察';
+    const boundaryLabel = missing
+      ? rotationCopy(t, 'api.pending', '待补')
+      : partial ? rotationCopy(t, 'api.partial', '部分可用') : rotationCopy(t, 'api.observeOnly', '仅观察');
     const boundaryVariant = missing ? 'caution' as const : partial ? 'info' as const : 'neutral' as const;
     const chips: MarketRotationEvidenceBoundaryChip[] = [
       { key: 'boundary', label: boundaryLabel, variant: boundaryVariant },
@@ -1063,45 +1086,46 @@ function rotationBoundaryLabel(
       { key: 'risk', label: riskChipLabel, variant: 'neutral' },
     ];
     if (fallback) {
-      chips.push({ key: 'freshness', label: '最近一次可用', variant: 'info' });
+      chips.push({ key: 'freshness', label: rotationCopy(t, 'api.latestAvailable', '最近一次可用'), variant: 'info' });
     }
     if (
       truth.observationOnly === true
       || truth.source.authority !== 'allowed'
       || truth.scoreContribution !== 'eligible'
     ) {
-      chips.push({ key: 'observe', label: '仅观察', variant: 'neutral' });
+      chips.push({ key: 'observe', label: rotationCopy(t, 'api.observeOnly', '仅观察'), variant: 'neutral' });
     }
     return {
       label: boundaryLabel,
       variant: boundaryVariant,
       chips,
       nextEvidence: missing
-        ? '下一步：补齐报价覆盖与风险代理。'
-        : '继续观察现有证据。',
+        ? rotationCopy(t, 'api.fillCoverageNextEvidence', '下一步：补齐报价覆盖与风险代理。')
+        : rotationCopy(t, 'api.observeExistingEvidence', '继续观察现有证据。'),
       note: readiness.detail,
     };
   }
 
   return {
-    label: '证据可用',
+    label: rotationCopy(t, 'api.evidenceAvailable', '证据可用'),
     variant: 'success',
     chips: [
-      { key: 'boundary', label: '证据可用', variant: 'success' },
+      { key: 'boundary', label: rotationCopy(t, 'api.evidenceAvailable', '证据可用'), variant: 'success' },
       { key: 'broad', label: broadChipLabel, variant: 'success' },
       { key: 'sector', label: sectorChipLabel, variant: 'success' },
       { key: 'risk', label: riskChipLabel, variant: 'success' },
     ],
-    nextEvidence: '继续观察广度、轮动和风险代理变化。',
+    nextEvidence: rotationCopy(t, 'api.availableNextEvidence', '继续观察广度、轮动和风险代理变化。'),
     note: readiness.detail,
   };
 }
 
 export function buildMarketRotationEvidenceBoundaryView(
   payload?: MarketRotationRadarResponse | null,
+  t?: MarketRotationCopy,
 ): MarketRotationEvidenceBoundaryView {
-  const readiness = buildAlpacaQuoteAuthorityReadinessView(payload?.alpacaQuoteAuthorityReadiness);
-  return rotationBoundaryLabel(readiness, payload);
+  const readiness = buildAlpacaQuoteAuthorityReadinessView(payload?.alpacaQuoteAuthorityReadiness, t);
+  return rotationBoundaryLabel(t, readiness, payload);
 }
 
 function normalizeTimeWindows(windows?: Record<string, MarketRotationTimeWindow> | null): Record<string, MarketRotationTimeWindow> {
