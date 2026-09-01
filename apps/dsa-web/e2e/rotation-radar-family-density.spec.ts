@@ -10,6 +10,14 @@ const viewports = [
 const forbiddenRotationInternalPattern =
   /provider|runtime|cache|debug|trace|raw_payload|provider_payload|schema|reasonCodes?|sourceAuthorityAllowed|scoreContributionAllowed|decision[-\s]?grade|决策级/i;
 
+async function switchRotationLanguage(page: Parameters<typeof openSignedInRoute>[0]) {
+  const toggle = page.getByRole('button', { name: /切换语言|Switch language/ });
+  if (!await toggle.isVisible()) {
+    await page.getByRole('button', { name: /打开导航菜单|Open navigation/ }).click();
+  }
+  await toggle.click();
+}
+
 function familyDensityPayload() {
   const timestamp = '2026-05-07T09:50:00Z';
 
@@ -271,7 +279,7 @@ appTest.describe('rotation radar family density', () => {
 
       await appExpect(familyRollup).toBeVisible({ timeout: 15_000 });
       await appExpect(familyRollup).toContainText('家族流向观察');
-      await appExpect(familyRollup).toContainText('首屏优先保留有信号家族');
+      await appExpect(familyRollup).toContainText('先看家族汇总。');
       await appExpect(spotlightRow).toContainText('AI / 软件');
       await appExpect(spotlightRow).toContainText('领涨观察');
       await appExpect(collapsedDisclosure.getByRole('button', { name: '展开 查看低信号家族' })).toHaveAttribute('aria-expanded', 'false');
@@ -290,6 +298,16 @@ appTest.describe('rotation radar family density', () => {
       baseExpect(consoleErrors).toEqual([]);
       baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
+
+      await switchRotationLanguage(page);
+      await appExpect(page).toHaveURL(/\/en\/market\/rotation-radar$/);
+      await appExpect(page.getByRole('heading', { name: 'Rotation Radar' })).toBeVisible();
+      await appExpect(page.getByTestId('rotation-market-tab-US')).toContainText('US');
+      await appExpect(page.getByPlaceholder('Search themes, English names, or members')).toBeVisible();
+      await appExpect(page.getByTestId('rotation-radar-mechanics-details').getByRole('button', { name: 'Expand How to read rotation' })).toHaveAttribute('aria-expanded', 'false');
+      await appExpect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await expectNoHorizontalOverflow(page);
+
       await page.unroute('**/api/v1/market/rotation-radar**');
     }
   });
