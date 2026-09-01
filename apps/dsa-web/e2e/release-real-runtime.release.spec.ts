@@ -258,6 +258,98 @@ test.describe.serial('qualified release real runtime', () => {
     }
   });
 
+  test('professional backtest parsing preserves explicit identity and rejects unqualified indicator prose', async ({ page }) => {
+    const pageErrors: Error[] = [];
+    let ruleRunRequests = 0;
+    let mainFrameNavigations = 0;
+    page.on('pageerror', (error) => pageErrors.push(error));
+    page.on('request', (request) => {
+      if (request.url().endsWith('/api/v1/backtest/rule/run') && request.method() === 'POST') {
+        ruleRunRequests += 1;
+      }
+    });
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) mainFrameNavigations += 1;
+    });
+
+    await login(page, memberUsername, memberPassword, '/en/backtest');
+    await page.getByRole('tab', { name: 'Research diagnostics' }).click();
+    await expect(page.getByTestId('pro-backtest-workspace')).toBeVisible();
+    await page.getByTestId('pro-workflow-step-strategy').click();
+    const strategyStep = page.getByTestId('pro-step-strategy');
+    await expect(strategyStep).toBeVisible();
+
+    const ticker = page.getByLabel('Ticker');
+    const strategyText = page.getByLabel('Strategy text');
+    const confirmation = page.getByLabel('Confirm strategy parse result');
+    const execute = page.getByRole('button', { name: 'Execute backtest task' });
+    const indicatorStrategy = 'RSI below 30 buy and RSI above 70 sell';
+    await expect(ticker).toHaveValue('');
+    await strategyText.fill(indicatorStrategy);
+
+    const beforeMissingParseNavigations = mainFrameNavigations;
+    const missingParsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/backtest/rule/parse') && response.request().method() === 'POST',
+    );
+    await strategyStep.getByRole('button', { name: 'Parse strategy' }).click();
+    const missingParse = await missingParsePromise;
+    const missingRequest = missingParse.request().postDataJSON() as Record<string, unknown>;
+    const missingPayload = await missingParse.json() as Record<string, unknown>;
+    const missingParsed = missingPayload.parsed_strategy as Record<string, unknown>;
+    const missingSpec = missingParsed.strategy_spec as Record<string, unknown>;
+    const missingDetails = missingPayload.unsupported_details as Array<Record<string, unknown>>;
+
+    expect(missingParse.status()).toBe(200);
+    expect(missingRequest).toMatchObject({ strategy_text: indicatorStrategy });
+    expect(missingRequest).not.toHaveProperty('code');
+    expect(missingPayload.code).toBeNull();
+    expect(missingPayload.executable).toBe(false);
+    expect(missingPayload.normalization_state).toBe('unsupported');
+    expect(missingSpec).not.toHaveProperty('symbol');
+    expect(missingDetails.map((item) => item.code)).toContain('unsupported_missing_symbol');
+    expect(missingDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
+    await expect(ticker).toHaveValue('');
+    await expect(page.getByTestId('pro-unsupported-guidance')).toBeVisible();
+    await expect(confirmation).toBeDisabled();
+    await expect(execute).toBeDisabled();
+    expect(mainFrameNavigations).toBe(beforeMissingParseNavigations);
+
+    await page.getByTestId('backtest-control-section-run').getByRole('button', { name: 'Reset' }).click();
+    await ticker.fill('AAPL');
+    await page.getByTestId('pro-workflow-step-strategy').click();
+    await expect(strategyStep).toBeVisible();
+    await strategyText.fill(indicatorStrategy);
+
+    const beforeExplicitParseNavigations = mainFrameNavigations;
+    const explicitParsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/backtest/rule/parse') && response.request().method() === 'POST',
+    );
+    await strategyStep.getByRole('button', { name: 'Parse strategy' }).click();
+    const explicitParse = await explicitParsePromise;
+    const explicitRequest = explicitParse.request().postDataJSON() as Record<string, unknown>;
+    const explicitPayload = await explicitParse.json() as Record<string, unknown>;
+    const explicitParsed = explicitPayload.parsed_strategy as Record<string, unknown>;
+    const explicitSpec = explicitParsed.strategy_spec as Record<string, unknown>;
+    const explicitDetails = explicitPayload.unsupported_details as Array<Record<string, unknown>>;
+
+    expect(explicitParse.status()).toBe(200);
+    expect(explicitRequest).toMatchObject({ code: 'AAPL', strategy_text: indicatorStrategy });
+    expect(explicitPayload.code).toBe('AAPL');
+    expect(explicitPayload.executable).toBe(true);
+    expect(explicitSpec.symbol).toBe('AAPL');
+    expect(explicitDetails.map((item) => item.code)).not.toContain('unsupported_multi_symbol');
+    await expect(ticker).toHaveValue('AAPL');
+    await expect(page.getByTestId('pro-unsupported-guidance')).toHaveCount(0);
+    await expect(confirmation).toBeEnabled();
+    await confirmation.check();
+    await expect(execute).toBeEnabled();
+    expect(mainFrameNavigations).toBe(beforeExplicitParseNavigations);
+    expect(ruleRunRequests).toBe(0);
+    expect(pageErrors).toEqual([]);
+    await expect(page).toHaveURL(/\/en\/backtest$/);
+    expect((await page.context().cookies(baseUrl)).some((cookie) => cookie.name === 'dsa_session')).toBe(true);
+  });
+
   test('rollback error preserves portfolio state and exposes unavailable data', async ({ page }) => {
     await login(page, memberUsername, memberPassword, '/zh/portfolio');
     const before = await page.evaluate(async () => (await fetch('/api/v1/portfolio/accounts')).json());
