@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8319,
-      "sha256": "332a67796be0867b64c2d85388dc79dcec1200e4d0827c457199413dd16344f6"
+      "count": 8320,
+      "sha256": "fc94b47514bac8734e11313274554cb2efc176f049572f650a3163734688a371"
     },
     "tests": [
       {
@@ -12642,6 +12642,11 @@
         "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_parse_response_uses_supported_family_strategy_spec_contract",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_parse_rule_strategy_does_not_echo_rejected_request_code",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_parse_rule_strategy_returns_normalization_metadata",

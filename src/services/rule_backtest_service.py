@@ -10027,17 +10027,22 @@ class RuleBacktestService:
             )
         else:
             normalized_spec = dict(parsed.strategy_spec or {})
+            symbol = self._canonical_requested_strategy_symbol(code)
             normalized_spec["version"] = str(normalized_spec.get("version") or "v1")
             normalized_spec["strategy_type"] = str(normalized_spec.get("strategy_type") or parsed.strategy_kind or "rule_conditions")
             normalized_spec["timeframe"] = str(normalized_spec.get("timeframe") or parsed.timeframe)
             normalized_spec["entry_rule"] = parsed.entry
             normalized_spec["exit_rule"] = parsed.exit
             normalized_spec["max_lookback"] = int(normalized_spec.get("max_lookback") or parsed.max_lookback or 1)
-            parsed.executable = self._has_meaningful_node(parsed.entry) and self._has_meaningful_node(parsed.exit)
+            if symbol:
+                normalized_spec["symbol"] = symbol
+            else:
+                normalized_spec.pop("symbol", None)
+            parsed.executable = bool(symbol) and self._has_meaningful_node(parsed.entry) and self._has_meaningful_node(parsed.exit)
             parsed.normalization_state = "assumed" if parsed.executable and (parsed.needs_confirmation or bool(parsed.ambiguities)) else ("ready" if parsed.executable else "unsupported")
             parsed.assumptions = list(parsed.assumptions or [])
             if not parsed.executable:
-                parsed.unsupported_reason = "missing executable entry/exit rules"
+                parsed.unsupported_reason = "missing_symbol" if not symbol else "missing executable entry/exit rules"
             else:
                 parsed.unsupported_reason = None
         self._enrich_confirmation_diagnostics(parsed)

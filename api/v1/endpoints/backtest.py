@@ -733,7 +733,7 @@ def parse_rule_strategy(
         )
         strategy_spec = parsed.get("strategy_spec") if isinstance(parsed.get("strategy_spec"), dict) else {}
         return RuleBacktestParseResponse(
-            code=(strategy_spec.get("symbol") or request.code),
+            code=strategy_spec.get("symbol"),
             strategy_text=request.strategy_text,
             parsed_strategy=dict(parsed),
             normalized_strategy_family=str(strategy_spec.get("strategy_type") or parsed.get("strategy_kind") or ""),

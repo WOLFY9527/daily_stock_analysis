@@ -1410,6 +1410,41 @@ class RuleBacktestTestCase(unittest.TestCase):
             [item.get("code") for item in malformed["unsupported_details"]],
         )
 
+        ambiguous = service.parse_strategy(
+            "MACD golden cross; MACD crosses below signal",
+            code="000300",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+        )
+        self.assertFalse(ambiguous["executable"])
+        self.assertNotIn("symbol", ambiguous["strategy_spec"])
+        self.assertIn(
+            "unsupported_missing_symbol",
+            [item.get("code") for item in ambiguous["unsupported_details"]],
+        )
+
+        generic = service.parse_strategy(
+            "Buy when Close > 10. Sell when Close < 5.",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+        )
+        self.assertFalse(generic["executable"])
+        self.assertEqual(generic["normalization_state"], "unsupported")
+        self.assertNotIn("symbol", generic["strategy_spec"])
+        self.assertIn(
+            "unsupported_missing_symbol",
+            [item.get("code") for item in generic["unsupported_details"]],
+        )
+
+        generic_explicit = service.parse_strategy(
+            "Buy when Close > 10. Sell when Close < 5.",
+            code="AAPL",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+        )
+        self.assertTrue(generic_explicit["executable"])
+        self.assertEqual(generic_explicit["strategy_spec"]["symbol"], "AAPL")
+
     def test_parse_strategy_request_code_precedes_periodic_text_symbol(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service.parse_strategy(

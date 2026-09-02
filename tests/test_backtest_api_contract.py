@@ -4150,9 +4150,43 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.core_intent_summary, "已识别为 MACD 金叉 / 死叉主规则。")
         self.assertEqual(response.interpretation_confidence, 0.96)
         self.assertEqual(response.supported_portion_summary, "已识别为 MACD 金叉 / 死叉主规则。")
+        self.assertEqual(response.code, "AAPL")
         service.parse_strategy.assert_called_once()
         self.assertEqual(service.parse_strategy.call_args.kwargs["start_date"], "2025-01-01")
         self.assertEqual(service.parse_strategy.call_args.kwargs["end_date"], "2025-12-31")
+
+    def test_parse_rule_strategy_does_not_echo_rejected_request_code(self) -> None:
+        service = MagicMock()
+        service.parse_strategy.return_value = {
+            "strategy_kind": "rule_conditions",
+            "strategy_spec": {"strategy_type": "rule_conditions"},
+            "executable": False,
+            "normalization_state": "unsupported",
+            "assumptions": [],
+            "assumption_groups": [],
+            "unsupported_reason": "missing_symbol",
+            "unsupported_details": [{"code": "unsupported_missing_symbol"}],
+            "unsupported_extensions": [],
+        }
+
+        for invalid_code in ("AAPL?", "000300"):
+            with self.subTest(code=invalid_code), patch(
+                "api.v1.endpoints.backtest._build_rule_backtest_service",
+                return_value=service,
+            ):
+                response = parse_rule_strategy(
+                    RuleBacktestParseRequest(
+                        code=invalid_code,
+                        strategy_text="Buy when Close > 10. Sell when Close < 5.",
+                        start_date="2024-01-01",
+                        end_date="2024-12-31",
+                    ),
+                    db_manager=MagicMock(),
+                )
+
+            self.assertIsNone(response.code)
+            self.assertFalse(response.executable)
+            self.assertEqual(response.normalization_state, "unsupported")
 
     def test_parse_response_uses_supported_family_strategy_spec_contract(self) -> None:
         response = RuleBacktestParseResponse(
