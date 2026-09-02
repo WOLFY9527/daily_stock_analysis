@@ -135,7 +135,7 @@ def build_scanner_universe_readiness_contract(
     *,
     market: str,
     status: str,
-    universe_size: int = 0,
+    universe_size: int | None = None,
     last_updated_at: str | None = None,
     freshness_state: str = "unknown",
     required_data_classes: list[str] | None = None,
@@ -179,7 +179,12 @@ def build_scanner_universe_readiness_contract(
     next_action = operator_next_action or _operator_next_action(normalized_status)
     reason = _reason_code(normalized_status)
     lifecycle = dict(lifecycle_readiness or {})
-    symbol_count = int(lifecycle.get("symbolCount") or universe_size or 0)
+    raw_lifecycle_symbol_count = lifecycle.get("symbolCount")
+    symbol_count = (
+        int(raw_lifecycle_symbol_count)
+        if raw_lifecycle_symbol_count is not None
+        else universe_size
+    )
     minimum_coverage_threshold = int(
         lifecycle.get("minimumCoverageThreshold")
         or SCANNER_UNIVERSE_DEFAULT_MINIMUM_COVERAGE.get(_safe_market(market), 1)
@@ -201,7 +206,11 @@ def build_scanner_universe_readiness_contract(
             blocking_reasons.append("below_minimum_coverage")
     coverage_state = str(
         lifecycle.get("coverageState")
-        or ("sufficient" if symbol_count >= minimum_coverage_threshold and symbol_count > 0 else "insufficient")
+        or (
+            "sufficient"
+            if symbol_count is not None and symbol_count >= minimum_coverage_threshold and symbol_count > 0
+            else "insufficient"
+        )
     )
     usable = bool(lifecycle.get("usable")) if "usable" in lifecycle else bool(effectively_available and not blocking_reasons)
     downstream_impact = (
@@ -225,7 +234,7 @@ def build_scanner_universe_readiness_contract(
         "market": _safe_market(market),
         "universeVersion": lifecycle.get("universeVersion"),
         "generatedAt": lifecycle.get("generatedAt") or last_updated_at,
-        "universeSize": max(0, int(universe_size or 0)),
+        "universeSize": max(0, int(universe_size)) if universe_size is not None else None,
         "symbolCount": symbol_count,
         "lastUpdatedAt": last_updated_at,
         "asOf": lifecycle.get("asOf") or last_updated_at,
@@ -343,7 +352,7 @@ def build_scanner_universe_readiness_from_coverage(
     *,
     market: str,
     universe_status: str,
-    universe_size: int,
+    universe_size: int | None,
     last_updated_at: str | None,
     freshness_state: str,
     quote_coverage: str,

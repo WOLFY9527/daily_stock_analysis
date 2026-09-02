@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.r06_nonlive_scanner_fixture import R06_NONLIVE_QUALIFICATION_SOURCE
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 
 
@@ -34,6 +35,21 @@ def test_unknown_source_is_degraded_fill_only_unknown_authority() -> None:
     assert result.rejected is False
     assert result.source_type == "missing"
     assert result.reason_codes == ("source_authority_unknown",)
+
+
+def test_r06_nonlive_qualification_fixture_cannot_acquire_backtest_authority() -> None:
+    result = assess_backtest_data_source_eligibility(
+        code="AAPL",
+        source=R06_NONLIVE_QUALIFICATION_SOURCE,
+    )
+
+    assert result.source == R06_NONLIVE_QUALIFICATION_SOURCE
+    assert result.source_type == "synthetic_fixture"
+    assert result.authority_status == "degraded_fill_only"
+    assert result.authority_allowed is False
+    assert result.degraded_fill_only is True
+    assert result.rejected is False
+    assert result.reason_codes == ("qualification_fixture_not_authoritative",)
 
 
 @pytest.mark.parametrize(

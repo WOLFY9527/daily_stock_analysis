@@ -2350,6 +2350,15 @@ class MarketScannerService:
             return default
 
     @staticmethod
+    def _optional_readiness_int(value: Any) -> int | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
     def _quote_snapshot_readiness_symbols(
         *,
         market: str,
@@ -2456,7 +2465,7 @@ class MarketScannerService:
             symbols = []
         return {
             "status": "local_universe_available" if symbols else "missing",
-            "universeSize": len(symbols),
+            "universeSize": len(symbols) if symbols else None,
             "lastUpdatedAt": None,
             "freshnessState": "local_universe_available" if symbols else "missing_universe",
             "sourceMetadata": {
@@ -6331,7 +6340,7 @@ class MarketScannerService:
                 market=market,
                 profile=profile,
                 status="not_run",
-                universe_size=0,
+                universe_size=None,
                 preselected_size=0,
                 evaluated_size=0,
                 shortlist_size=0,
@@ -6346,7 +6355,7 @@ class MarketScannerService:
             market=market,
             profile=profile,
             status=status,
-            universe_size=0,
+            universe_size=None,
             preselected_size=0,
             evaluated_size=0,
             shortlist_size=selected_count,
@@ -6377,7 +6386,7 @@ class MarketScannerService:
             return build_scanner_universe_readiness_from_coverage(
                 market="US",
                 universe_status=str(readiness.get("status") or "missing"),
-                universe_size=int(readiness.get("universeSize") or 0),
+                universe_size=self._optional_readiness_int(readiness.get("universeSize")),
                 last_updated_at=readiness.get("lastUpdatedAt"),
                 freshness_state=str(readiness.get("freshnessState") or "missing_universe"),
                 quote_coverage="unknown",
@@ -6392,7 +6401,7 @@ class MarketScannerService:
         return build_scanner_universe_readiness_from_coverage(
             market=normalized_market,
             universe_status="missing",
-            universe_size=0,
+            universe_size=None,
             last_updated_at=None,
             freshness_state="missing_universe",
             quote_coverage="unknown",

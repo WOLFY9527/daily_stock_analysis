@@ -5012,7 +5012,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         readiness = status["dataReadiness"]
         self.assertEqual(readiness["universeAvailability"], "missing")
+        self.assertIsNone(readiness["universeSize"])
+        self.assertIsNone(readiness["universeReadiness"]["universeSize"])
         self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "missing")
+        self.assertIsNone(readiness["scannerUniverseReadiness"]["universeSize"])
         self.assertEqual(readiness["candidateGenerationState"], "blocked")
         self.assertIn("universe_missing", readiness["candidateGenerationBlockers"])
         self.assertEqual(readiness["selectedCount"], 0)

@@ -273,6 +273,10 @@ class SymbolResearchHistoryState(BaseModel):
     bars: Optional[int] = Field(None, description="可观察 K 线数量")
     period: str = Field("daily", description="历史行情周期")
     as_of: Optional[str] = Field(None, alias="asOf", description="最新 K 线日期")
+    evidence: Optional[dict[str, Any]] = Field(
+        None,
+        description="合成资格化历史的安全来源、新鲜度和可用性摘要",
+    )
 
 
 class SymbolResearchStructureState(BaseModel):

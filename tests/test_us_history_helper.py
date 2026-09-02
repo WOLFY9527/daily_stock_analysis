@@ -185,6 +185,27 @@ class UsHistoryHelperTestCase(unittest.TestCase):
             {"2026-01-02": "101.2300"},
         )
 
+    def test_filtered_local_us_history_retains_exact_close_provenance(self) -> None:
+        raw = pd.DataFrame(
+            [
+                {"date": "2026-01-02", "open": "100.0", "high": "102.0", "low": "99.0", "close": "101.2300"},
+                {"date": "2026-01-05", "open": "101.0", "high": "103.0", "low": "100.0", "close": "102.2300"},
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            parquet_dir = Path(directory)
+            persisted = persist_local_us_daily_history("AAPL", raw, parquet_dir=parquet_dir)
+            loaded = load_local_us_daily_history("AAPL", start_date="2026-01-05", parquet_dir=parquet_dir)
+
+        self.assertEqual(persisted.status, "saved")
+        self.assertEqual(loaded.status, "hit")
+        self.assertIsNotNone(loaded.dataframe)
+        self.assertEqual(
+            loaded.dataframe.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR],
+            {"2026-01-02": "101.2300", "2026-01-05": "102.2300"},
+        )
+
     def test_persist_local_us_daily_history_rejects_non_us_symbol_without_write(self) -> None:
         raw = pd.DataFrame(
             [{"date": "2026-01-02", "open": 1, "high": 1, "low": 1, "close": 1}]

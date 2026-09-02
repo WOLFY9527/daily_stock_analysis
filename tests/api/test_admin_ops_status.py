@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.services.admin_ops_status_service import AdminOpsStatusService
 from src.storage import DatabaseManager, DurableTaskState, ExecutionLogEvent, ExecutionLogSession
 
 
@@ -116,6 +117,15 @@ class _TaskQueueFixture:
             "accepting_new_tasks": True,
             "warning": "raw-session-id access-token traceback must not leak",
         }
+
+
+class _RuntimeContainerFixture:
+    def __init__(self, task_queue: _TaskQueueFixture | None = None):
+        self.task_queue = task_queue or _TaskQueueFixture()
+
+
+def _set_runtime_task_queue(app: FastAPI) -> None:
+    app.state.runtime_container = _RuntimeContainerFixture()
 
 
 class _ScannerUniverseOperatorFixture:
@@ -234,6 +244,21 @@ def _assert_bounded_section(payload: dict, key: str, *, expected_service: str) -
     assert section["dataSources"] == []
 
 
+def test_admin_ops_status_reads_initialized_task_queue_from_runtime_container(app: FastAPI) -> None:
+    _set_runtime_task_queue(app)
+
+    status = AdminOpsStatusService().build_status(
+        app_state=app.state,
+        include_section_summaries=True,
+    )["taskQueueStatusSummary"]
+
+    assert status["available"] is True
+    assert status["configured"] is True
+    assert status["status"] == "ok"
+    assert status["reasonCode"] == "process_local_sse_topology_warning"
+    assert status["summary"]["topologyOk"] is True
+
+
 def test_admin_ops_status_requires_admin_with_ops_logs_read(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
@@ -260,7 +285,7 @@ def test_admin_ops_status_requires_admin_with_ops_logs_read(
     assert "ops:logs:read" not in missing_capability.text
     _assert_no_sensitive_markers(missing_capability.json())
 
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
     with _client(app, _ops_admin) as client:
         allowed = client.get("/api/v1/admin/ops/status")
     assert allowed.status_code == 200
@@ -302,7 +327,7 @@ def test_admin_scanner_universe_endpoints_require_admin_ops_capability(app: Fast
 
 
 def test_known_stale_admin_ops_paths_alias_to_canonical_admin_protected_endpoints(app: FastAPI) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
     app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
 
     with _client(app, _regular_user) as client:
@@ -373,7 +398,7 @@ def test_admin_scanner_universe_readiness_preserves_local_source_metadata(app: F
 
 
 def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
 
     monkeypatch.setattr(
         "src.services.quota_policy_service.QuotaPolicyService.reserve_quota",
@@ -510,7 +535,7 @@ def test_admin_ops_status_projects_exact_build_provenance_freshness(
 
 
 def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
 
     with _client(app, _ops_admin) as client:
         response = client.get("/api/v1/admin/ops/status")
@@ -559,7 +584,7 @@ def test_admin_ops_status_reports_runtime_log_sink_without_sensitive_paths(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
     log_dir = tmp_path / "logs"
     target = log_dir / "api_server_20260617.log"
     log_dir.mkdir()
@@ -700,7 +725,7 @@ def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_
 
 
 def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: FastAPI) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
 
     with _client(app, _ops_admin) as client:
         response = client.get("/api/v1/admin/ops/status")
@@ -813,7 +838,7 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
 
 
 def test_admin_ops_status_does_not_call_provider_status_surfaces(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    app.state.task_queue = _TaskQueueFixture()
+    _set_runtime_task_queue(app)
     monkeypatch.setattr(
         "requests.sessions.Session.request",
         lambda *_, **__: pytest.fail("external HTTP calls must not run for ops status"),

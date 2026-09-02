@@ -37,6 +37,10 @@ R06_FIXTURE_ENV_KEYS = (
 R06_DESCRIPTOR_SCHEMA = "wolfystock.r06.nonlive-us-scanner-fixture.v1"
 R06_RUNTIME_MANIFEST_SCHEMA = "wolfystock.r06.nonlive-us-scanner-runtime-manifest.v1"
 R06_CACHE_DIRECTORY = "cache"
+# This label is deliberately distinct from a normal local cache.  Every
+# consumer that receives an R06 bar must preserve its qualification-only
+# provenance instead of recovering ordinary cache authority from its path.
+R06_NONLIVE_QUALIFICATION_SOURCE = "r06_nonlive_qualification_fixture"
 
 
 class R06NonliveScannerFixtureContextError(ValueError):

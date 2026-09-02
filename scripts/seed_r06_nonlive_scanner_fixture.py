@@ -168,6 +168,7 @@ def _deterministic_ohlcv_frame(
     records = []
     for index, session_date in enumerate(session_dates):
         close = price_start + price_offset + index * price_step
+        close_token = f"{close:.2f}"
         volume = volume_start + index * volume_step
         records.append(
             {
@@ -175,11 +176,11 @@ def _deterministic_ohlcv_frame(
                 "open": close - 0.25,
                 "high": close + 0.5,
                 "low": close - 0.5,
-                "close": close,
+                "close": close_token,
                 "volume": volume,
                 "amount": close * volume,
                 "pct_chg": price_step,
-                "adjusted_close": close,
+                "adjusted_close": close_token,
             }
         )
     return pd.DataFrame(records)

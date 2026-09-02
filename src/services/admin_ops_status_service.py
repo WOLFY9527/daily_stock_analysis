@@ -152,7 +152,8 @@ class AdminOpsStatusService:
         provider_status = self._safe_source(self._build_provider_status_summary)
         quota_status = self._safe_source(lambda: self._build_quota_cost_advisory_status_summary(generated_at))
         storage_status = self._safe_source(self._build_storage_readiness_summary)
-        task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(app_state))
+        task_queue = self._runtime_task_queue(app_state)
+        task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(task_queue))
         admin_log_status = self._safe_source(self._build_admin_log_evidence_summary)
         runtime_log_sink_status = self._safe_source(self._build_runtime_log_sink_summary)
         retention_policy_status = self._safe_source(self._build_retention_policy_status)
@@ -206,7 +207,7 @@ class AdminOpsStatusService:
             "taskQueueStatusSummary": self._project_section(
                 service="task_queue",
                 snapshot=task_queue_status,
-                configured=getattr(app_state, "task_queue", None) is not None,
+                configured=task_queue is not None,
                 last_checked_at=generated_at_iso if task_queue_status.get("available") else None,
                 message=self._task_queue_status_message(task_queue_status),
                 include_summary=include_section_summaries,
@@ -1213,15 +1214,24 @@ class AdminOpsStatusService:
             limitations=["storage_session_check_only"],
         )
 
-    def _build_task_queue_status_summary(self, app_state: object | None) -> Dict[str, Any]:
-        queue = getattr(app_state, "task_queue", None) if app_state is not None else None
+    @staticmethod
+    def _runtime_task_queue(app_state: object | None) -> object | None:
+        runtime_container = getattr(app_state, "runtime_container", None) if app_state is not None else None
+        if runtime_container is None:
+            return None
+        try:
+            return runtime_container.task_queue
+        except RuntimeError:
+            return None
+
+    def _build_task_queue_status_summary(self, queue: object | None) -> Dict[str, Any]:
         if queue is None:
             return self._section(
                 available=False,
                 status="unavailable",
                 reasonCode="task_queue_runtime_unavailable",
                 dataSources=["task_queue_runtime_status"],
-                limitations=["task_queue_not_initialized_on_app_state"],
+                limitations=["task_queue_not_initialized_in_runtime_container"],
             )
 
         runtime = queue.get_runtime_status()

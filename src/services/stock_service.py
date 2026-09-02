@@ -40,6 +40,7 @@ from src.services.akshare_cn_ohlcv_cache import (
     is_cn_a_share_symbol,
 )
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
+from src.services.r06_nonlive_scanner_fixture import R06_NONLIVE_QUALIFICATION_SOURCE
 from src.services.uat_provider_isolation import (
     UatProviderIsolationError,
     check_uat_provider_transport,
@@ -1119,6 +1120,7 @@ class StockService:
         coverage = min(1.0, max(0.0, float(rows or 0) / float(requested)))
         label_map = {
             LOCAL_US_PARQUET_SOURCE: "Local US parquet history",
+            R06_NONLIVE_QUALIFICATION_SOURCE: "R06 non-live qualification history",
             "local_db": "Persisted local daily history",
             "AlpacaFetcher": "Alpaca daily history",
             "YfinanceFetcher": "Yahoo Finance daily history",
@@ -1126,6 +1128,9 @@ class StockService:
         }
         if normalized_source == "unavailable" or status == "unavailable":
             freshness = SourceFreshness.UNAVAILABLE
+            confidence_weight = 0.0
+        elif normalized_source == R06_NONLIVE_QUALIFICATION_SOURCE:
+            freshness = SourceFreshness.SYNTHETIC
             confidence_weight = 0.0
         elif normalized_source in {LOCAL_US_PARQUET_SOURCE, "local_db"}:
             freshness = SourceFreshness.CACHED
@@ -1144,7 +1149,11 @@ class StockService:
             source=normalized_source,
             source_label=label_map.get(normalized_source, normalized_source or "Unknown"),
             freshness=freshness,
-            is_fallback=status == "degraded" or normalized_source in {LOCAL_US_PARQUET_SOURCE, "local_db"},
+            is_fallback=(
+                status == "degraded"
+                or normalized_source in {LOCAL_US_PARQUET_SOURCE, "local_db", R06_NONLIVE_QUALIFICATION_SOURCE}
+            ),
+            is_synthetic=normalized_source == R06_NONLIVE_QUALIFICATION_SOURCE,
             is_unavailable=normalized_source == "unavailable" or status == "unavailable",
             confidence_weight=confidence_weight,
             coverage=round(coverage, 4),

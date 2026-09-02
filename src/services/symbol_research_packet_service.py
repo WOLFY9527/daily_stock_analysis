@@ -349,12 +349,23 @@ def _history_packet(history: Mapping[str, Any] | None) -> dict[str, Any]:
         )
         state = "missing" if unavailable else ("stale" if degraded else "available")
 
-    return {
+    result = {
         "state": state,
         "bars": len(rows),
         "period": period,
         "asOf": _safe_text(latest_row.get("date")) if rows else None,
     }
+    if _is_true(source_confidence, "isSynthetic", "is_synthetic"):
+        # Do not leak a fixture path or provider trace to the research surface,
+        # but retain the fact that this evidence is qualification-only.  A
+        # synthetic bar must never be silently reduced to an ordinary cache.
+        result["evidence"] = {
+            "sourceClass": "qualification_fixture",
+            "freshness": "synthetic",
+            "availability": state,
+            "observationOnly": True,
+        }
+    return result
 
 
 def _structure_packet(structure: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -645,6 +656,11 @@ def _research_packet_product_read_model(
             "asOf": quote_as_of or history_as_of,
             "freshness": _research_packet_freshness_state(packet_parts),
             "quality": model["state"],
+            **(
+                {"historyEvidence": dict(packet_parts["history"]["evidence"])}
+                if isinstance(packet_parts["history"].get("evidence"), Mapping)
+                else {}
+            ),
         },
     }
 

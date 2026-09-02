@@ -206,11 +206,16 @@ def load_local_us_daily_history(
             error="no rows matched the requested date window",
         )
 
+    result_frame = filtered.reset_index(drop=True)
+    close_tokens = normalized.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+    if isinstance(close_tokens, dict):
+        result_frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = close_tokens
+
     return LocalUsHistoryLoadResult(
         stock_code=normalized_code,
         path=path,
         status="hit",
-        dataframe=filtered.reset_index(drop=True),
+        dataframe=result_frame,
     )
 
 
@@ -315,7 +320,10 @@ def fetch_daily_history_with_local_us_fallback(
     )
     if local_history.status == "hit" and local_history.dataframe is not None:
         logger.info("%s local parquet hit for %s: %s", log_context, normalized_code, local_history.path)
-        return local_history.dataframe, local_history.source_name
+        return local_history.dataframe, _local_history_source_name(
+            stock_code=normalized_code,
+            local_history=local_history,
+        )
 
     if local_history.status == "missing":
         logger.info("%s local parquet missing for %s: %s", log_context, normalized_code, local_history.path)
@@ -342,6 +350,34 @@ def fetch_daily_history_with_local_us_fallback(
         end_date=end_date_str,
         days=days,
     )
+
+
+def _local_history_source_name(
+    *,
+    stock_code: str,
+    local_history: LocalUsHistoryLoadResult,
+) -> str:
+    """Preserve a validated R06 cache as non-live qualification evidence.
+
+    The import is intentionally local: the strict R06 context validates the
+    configured local-history root and imports this module to do so.  Normal
+    local cache reads remain independent of R06 and retain their source label.
+    """
+
+    from src.services.r06_nonlive_scanner_fixture import (
+        R06_NONLIVE_QUALIFICATION_SOURCE,
+        resolve_optional_r06_nonlive_scanner_fixture_context,
+    )
+
+    context = resolve_optional_r06_nonlive_scanner_fixture_context()
+    if context is None:
+        return local_history.source_name
+    if (
+        context.matches_symbol(stock_code)
+        and local_history.path.parent.resolve() == context.cache_root
+    ):
+        return R06_NONLIVE_QUALIFICATION_SOURCE
+    return local_history.source_name
 
 
 def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:

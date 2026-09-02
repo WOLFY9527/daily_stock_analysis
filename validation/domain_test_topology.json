@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8320,
-      "sha256": "fc94b47514bac8734e11313274554cb2efc176f049572f650a3163734688a371"
+      "count": 8324,
+      "sha256": "94017c683d6ace0126f9816766c98030c098e8a534f8f3a37fb752811c08e4b1"
     },
     "tests": [
       {
@@ -492,6 +492,11 @@
         "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_projects_exact_build_provenance_freshness[unknown-None-None-backend_commit_timestamp_unavailable]",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_reads_initialized_task_queue_from_runtime_container",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_ops_status.py::test_admin_ops_status_reports_runtime_log_sink_without_sensitive_paths",
@@ -5822,6 +5827,11 @@
         "id": "tests/api/test_stock_structure_decision_endpoint.py::test_research_packet_endpoint_uses_us_fundamentals_service_for_company_context",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_stock_structure_decision_endpoint.py::test_research_packet_retains_synthetic_history_as_observation_only_evidence",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/api/test_stock_structure_decision_endpoint.py::test_structure_decision_batch_endpoint_rejects_empty_stock_codes",
@@ -12927,6 +12937,11 @@
         "id": "tests/test_backtest_data_source_routing.py::test_local_stored_ohlcv_route_is_allowed_for_backtest_authority",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_data_source_routing.py::test_r06_nonlive_qualification_fixture_cannot_acquire_backtest_authority",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_data_source_routing.py::test_sec_edgar_is_rejected_for_ohlcv_backtest_authority",
@@ -40529,6 +40544,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_filtered_local_us_history_retains_exact_close_provenance",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_get_configured_us_stock_parquet_dir_distinguishes_missing_env_from_default",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -43087,14 +43107,14 @@
       "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 69,
-      "specSha256": "12630948660c8faca72da85fe398dda8318796786134cd16663d1101786707b3",
-      "projectCaseCount": 744,
-      "projectCaseSha256": "7f3963ff14a7f8c48cb4d7cff2fb621f196004ffb960588e077bf48d4ee67a9f",
+      "specCount": 71,
+      "specSha256": "90a5b535109925090a3905f57cdcfbad48886e7116f91f4f2c4f46e7169eae5f",
+      "projectCaseCount": 774,
+      "projectCaseSha256": "a874e8f9d77b0db3439b06cc53eeffdf7e8741ebf2fba86ad05e5d3cd0bcdce6",
       "projectCaseCounts": {
-        "chromium": 370,
-        "chromium-mobile": 370,
-        "release-real-runtime": 4
+        "chromium": 384,
+        "chromium-mobile": 384,
+        "release-real-runtime": 6
       }
     },
     "specs": [
@@ -43111,6 +43131,11 @@
       {
         "path": "apps/dsa-web/e2e/admin-evidence-workflow.spec.ts",
         "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "owner": "bounded_integration",
         "mandatory": false
       },
       {
@@ -43414,6 +43439,11 @@
         "mandatory": false
       },
       {
+        "path": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
         "path": "apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts",
         "owner": "protected_critical",
         "mandatory": true
@@ -43565,6 +43595,62 @@
         "mandatory": false
       },
       {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › Chinese mobile drawer keeps admin navigation, identity, and search usable",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: Chinese at 1280px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1024px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1280px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1440px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin shell transitions continuously at the 1024px desktop breakpoint",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1024x900",
+        "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1280x900",
+        "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1440x1000",
         "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
         "project": "chromium-mobile",
@@ -43601,6 +43687,13 @@
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts::admin-rail-contract.smoke.spec.ts › admin system-control rail contract › /zh/settings/system keeps the 1600px admin rail",
+        "spec": "apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts::admin-rail-contract.smoke.spec.ts › admin system-control rail contract › projects Admin Logs product chrome and L0 owners in both route locales without overflow",
         "spec": "apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
@@ -44237,7 +44330,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search navigation is not blocked when preview stalls",
+        "id": "chromium-mobile::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search keeps the preview host while rendering a valid public preview",
         "spec": "apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
@@ -44531,7 +44624,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps no-account permission limits truthful on mobile",
+        "id": "chromium-mobile::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps confirmed no-account first-use guidance truthful on mobile",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium-mobile",
         "owner": "protected_critical",
@@ -45126,7 +45219,14 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "id": "chromium-mobile::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › authenticated Home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › guest canonical stock destination remains owned by AuthGuard",
         "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
@@ -45658,6 +45758,34 @@
         "mandatory": false
       },
       {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 mobile drawer preserves readable search and identity: dark",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 mobile drawer preserves readable search and identity: light",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 shell search and utility readability: dark desktop",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 shell search and utility readability: light desktop",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
         "id": "chromium-mobile::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",
         "spec": "apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts",
         "project": "chromium-mobile",
@@ -46155,6 +46283,62 @@
         "mandatory": false
       },
       {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › Chinese mobile drawer keeps admin navigation, identity, and search usable",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: Chinese at 1280px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1024px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1280px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1440px",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin shell transitions continuously at the 1024px desktop breakpoint",
+        "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1024x900",
+        "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1280x900",
+        "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
+      },
+      {
         "id": "chromium::apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts::admin-ops-launch-surfaces.spec.ts › admin ops launch surfaces › operator-first hierarchy stays clean at 1440x1000",
         "spec": "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
         "project": "chromium",
@@ -46191,6 +46375,13 @@
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts::admin-rail-contract.smoke.spec.ts › admin system-control rail contract › /zh/settings/system keeps the 1600px admin rail",
+        "spec": "apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts::admin-rail-contract.smoke.spec.ts › admin system-control rail contract › projects Admin Logs product chrome and L0 owners in both route locales without overflow",
         "spec": "apps/dsa-web/e2e/admin-rail-contract.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
@@ -46827,7 +47018,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search navigation is not blocked when preview stalls",
+        "id": "chromium::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search keeps the preview host while rendering a valid public preview",
         "spec": "apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
@@ -47121,7 +47312,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps no-account permission limits truthful on mobile",
+        "id": "chromium::apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts::portfolio-empty-state-cta.spec.ts › portfolio empty-state CTA › keeps confirmed no-account first-use guidance truthful on mobile",
         "spec": "apps/dsa-web/e2e/portfolio-empty-state-cta.spec.ts",
         "project": "chromium",
         "owner": "protected_critical",
@@ -47716,7 +47907,14 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "id": "chromium::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › authenticated Home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › guest canonical stock destination remains owned by AuthGuard",
         "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
@@ -48248,6 +48446,34 @@
         "mandatory": false
       },
       {
+        "id": "chromium::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 mobile drawer preserves readable search and identity: dark",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 mobile drawer preserves readable search and identity: light",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 shell search and utility readability: dark desktop",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts::t738-shell-accessibility-contrast.spec.ts › T738 shell search and utility readability: light desktop",
+        "spec": "apps/dsa-web/e2e/t738-shell-accessibility-contrast.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
         "id": "chromium::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",
         "spec": "apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts",
         "project": "chromium",
@@ -48640,7 +48866,21 @@
         "mandatory": false
       },
       {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › member core research loop persists qualification-only truth across scanner research watchlist backtest portfolio and admin",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
         "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › production startup readiness and static assets",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
         "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
         "project": "release-real-runtime",
         "owner": "bounded_integration",

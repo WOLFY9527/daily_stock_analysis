@@ -42,6 +42,8 @@ BROWSER_CASES = (
     "production startup readiness and static assets",
     "login logout and revoked session",
     "member admin boundary and portfolio read",
+    "member core research loop persists qualification-only truth across scanner research watchlist backtest portfolio and admin",
+    "professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
     "rollback error preserves portfolio state and exposes unavailable data",
 )
 

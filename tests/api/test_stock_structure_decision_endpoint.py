@@ -490,6 +490,7 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
         "bars": 2,
         "period": "daily",
         "asOf": "2026-05-28",
+        "evidence": None,
     }
     assert payload["structure"]["state"] == "available"
     assert payload["structure"]["label"] == "breakout"
@@ -522,6 +523,44 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
         assert forbidden not in serialized
     for raw_key in ("sourceType", "sourceConfidence", "providerName", "providerClass", "providerAttempted", "cacheKey", "traceId", "requestId"):
         assert raw_key not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_research_packet_retains_synthetic_history_as_observation_only_evidence(monkeypatch) -> None:
+    history = _history_payload()
+    history["source"] = "r06_nonlive_qualification_fixture"
+    history["sourceConfidence"] = {
+        "source": "r06_nonlive_qualification_fixture",
+        "freshness": "synthetic",
+        "isSynthetic": True,
+    }
+    fake_stock = _FakeStockService(
+        quote={
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "current_price": 214.55,
+            "change_percent": 1.11,
+            "market_timestamp": "2026-05-28T09:30:00Z",
+            "freshness": "live",
+        },
+        history=history,
+    )
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: _FakeStructureDecisionService(_payload()), raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: _FakeStockEvidenceService(_evidence_payload()), raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["history"]["state"] == "missing"
+    assert payload["history"]["evidence"] == {
+        "sourceClass": "qualification_fixture",
+        "freshness": "synthetic",
+        "availability": "missing",
+        "observationOnly": True,
+    }
+    assert payload["productReadModel"]["provenance"]["historyEvidence"] == payload["history"]["evidence"]
 
 
 def test_research_packet_endpoint_exposes_fundamentals_readiness_contract(monkeypatch) -> None:
@@ -897,7 +936,13 @@ def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(
     assert response.status_code == 200
     payload = response.json()
     assert payload["quote"] == {"state": "missing", "price": None, "changePercent": None, "asOf": None}
-    assert payload["history"] == {"state": "missing", "bars": 0, "period": "daily", "asOf": None}
+    assert payload["history"] == {
+        "state": "missing",
+        "bars": 0,
+        "period": "daily",
+        "asOf": None,
+        "evidence": None,
+    }
     assert payload["structure"]["state"] == "missing"
     assert payload["fundamentals"]["state"] == "not_configured"
     assert payload["fundamentals"]["readinessState"] == "not_configured"

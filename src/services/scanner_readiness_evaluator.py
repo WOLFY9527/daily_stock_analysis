@@ -730,7 +730,11 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
     scanner_universe = build_scanner_universe_readiness_from_coverage(
         market=evidence.market,
         universe_status=universe_status,
-        universe_size=resolved_size or _projected_int(cache.get("universeSize")),
+        universe_size=(
+            universe_size
+            if universe_size is not None
+            else _optional_int(cache.get("universeSize"))
+        ),
         last_updated_at=cache.get("lastUpdatedAt"),
         freshness_state=str(cache.get("freshnessState") or freshness),
         quote_coverage=quote,
@@ -782,9 +786,9 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
     payload = {
         "state": state, "availabilityState": availability_state, "executionState": execution_state,
         "market": market, "profile": profile,
-        "universeAvailability": universe, "universeSize": _projected_int(universe_size),
+        "universeAvailability": universe, "universeSize": universe_size,
         "quoteCoverage": quote, "historyCoverage": history,
-        "universeReadiness": {"state": universe, "reason": universe_reason, "universeSize": _projected_int(universe_size), "consumerSafe": True},
+        "universeReadiness": {"state": universe, "reason": universe_reason, "universeSize": universe_size, "consumerSafe": True},
         "scannerUniverseReadiness": _thaw(scanner_universe),
         "quoteReadiness": {"state": quote, "reason": quote_reason, "availableSymbols": quote_available, "missingSymbols": quote_missing, "staleSymbols": quote_stale, "sourceFamilies": quote_sources, "consumerSafe": True},
         "historyReadiness": {"state": history, "reason": history_reason, "requiredBars": _projected_int(required_bars), "usableBars": _projected_int(usable_bars), "missingBars": _projected_int(missing_bars), "missingRequirements": requirements, "consumerSafe": True},

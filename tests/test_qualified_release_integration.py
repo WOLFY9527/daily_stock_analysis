@@ -583,6 +583,9 @@ def test_release_runtime_evidence_requires_source_cwd_environment_and_asset_iden
 
     assert "WOLFYSTOCK_RELEASE_CANDIDATE_SHA" in browser
     assert "WOLFYSTOCK_ENV_FINGERPRINT" in browser
+    assert "member core research loop persists qualification-only truth" in browser
+    assert "seed_r06_nonlive_scanner_fixture.py" in browser
+    assert ".route(" not in browser
     assert "runtimeCwd" in browser
     assert "assetFingerprint" in browser
     assert "environmentFingerprint" in harness

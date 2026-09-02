@@ -72,10 +72,10 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 8_265
+    assert result["backendTests"] == 8_324
     assert result["vitestFiles"] == 178
-    assert result["playwrightSpecs"] == 68
-    assert result["playwrightProjectCases"] == 738
+    assert result["playwrightSpecs"] == 71
+    assert result["playwrightProjectCases"] == 774
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -208,12 +208,12 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 68
-    assert len(cases) == 738
+    assert len(specs) == 71
+    assert len(cases) == 774
     assert playwright["inventory"]["projectCaseCounts"] == {
-        "chromium": 367,
-        "chromium-mobile": 367,
-        "release-real-runtime": 4,
+        "chromium": 384,
+        "chromium-mobile": 384,
+        "release-real-runtime": 6,
     }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
     protected_auth_specs = [spec for spec in specs if any(word in spec["path"] for word in ("auth", "session", "rbac"))]
@@ -224,13 +224,16 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     protected_behavior_cases = [case for case in cases if topology.playwright_case_requires_protection(case["id"])]
     assert protected_behavior_cases
     assert all(case["owner"] == "protected_critical" and case["mandatory"] for case in protected_behavior_cases)
+    assert topology.playwright_case_requires_protection(
+        "portfolio empty-state CTA keeps confirmed no-account first-use guidance truthful on mobile",
+    )
     release_path = "apps/dsa-web/e2e/release-real-runtime.release.spec.ts"
     release_spec = next(spec for spec in specs if spec["path"] == release_path)
     release_cases = [case for case in cases if case["spec"] == release_path]
     assert release_spec == {"path": release_path, "owner": "bounded_integration", "mandatory": False}
-    assert len(release_cases) == 4
+    assert len(release_cases) == 6
     assert sum(case["owner"] == "protected_critical" and case["mandatory"] for case in release_cases) == 1
-    assert sum(case["owner"] == "bounded_integration" and not case["mandatory"] for case in release_cases) == 3
+    assert sum(case["owner"] == "bounded_integration" and not case["mandatory"] for case in release_cases) == 5
 
 
 def test_first_attempts_and_retries_are_never_coalesced(
@@ -577,8 +580,8 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert canonical["schemaVersion"] == full["schemaVersion"]
     assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
     assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
-    assert canonical["selection"]["count"] == 8_247
-    assert release["selection"]["count"] == 8_265
+    assert canonical["selection"]["count"] == 8_306
+    assert release["selection"]["count"] == 8_324
     assert release["selection"] == full["selection"]
     assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
         node_id for item in canonical["shards"] for node_id in item["nodeIds"]

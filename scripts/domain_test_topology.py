@@ -90,7 +90,7 @@ PLAYWRIGHT_CLASSES = (
 )
 
 PLAYWRIGHT_PROTECTED_CASE_PATTERN = re.compile(
-    r"\b(?:auth|authenticated|unauthenticated|rbac|session|login|permission|capability|non-admin|protected)\b"
+    r"\b(?:auth|authenticated|unauthenticated|rbac|session|login|permission|capability|non-admin|no-account|protected)\b"
     r"|\bblocks? the route\b|\bdenies?\b.*\baccess\b|\badmin gating\b"
     r"|\bguest\b.*\badmin\b|\badmin\b.*\bguest\b",
     re.IGNORECASE,

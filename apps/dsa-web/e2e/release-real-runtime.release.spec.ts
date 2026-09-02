@@ -33,6 +33,43 @@ let adminUsername = '';
 let adminPassword = '';
 let memberUsername = '';
 let memberPassword = '';
+let r06FixtureEnvironment: Record<string, string> = {};
+
+function seedR06NonliveScannerFixture(runRoot: string): Record<string, string> {
+  const descriptor = path.join(repoRoot, 'tests', 'fixtures', 'scanner', 'r06_nonlive_us_data_ready_v1.json');
+  const output = execFileSync(
+    python,
+    [
+      path.join(repoRoot, 'scripts', 'seed_r06_nonlive_scanner_fixture.py'),
+      '--run-root', runRoot,
+      '--descriptor', descriptor,
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        APP_ENV: 'test',
+        WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS: 'true',
+        WOLFYSTOCK_UAT_LIVE_PROVIDER_ALLOWLIST: '',
+        WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED: 'false',
+        WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED: 'false',
+      },
+    },
+  );
+  const payload = JSON.parse(output) as { environment?: Record<string, unknown> };
+  const environment = payload.environment;
+  if (!environment || typeof environment !== 'object') {
+    throw new Error('R06 fixture seed emitted no environment contract');
+  }
+  const values = Object.fromEntries(
+    Object.entries(environment).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+  if (!values.WOLFYSTOCK_R06_NONLIVE_SCANNER_FIXTURE_MANIFEST_SHA256) {
+    throw new Error('R06 fixture seed emitted an incomplete environment contract');
+  }
+  return values;
+}
 
 async function reservePort(): Promise<number> {
   const server = net.createServer();
@@ -141,6 +178,7 @@ test.describe.serial('qualified release real runtime', () => {
     expect(environmentFingerprint).toMatch(/^[0-9a-f]{64}$/);
     expect(assetFingerprint).toMatch(/^[0-9a-f]{64}$/);
     runtimeDir = mkdtempSync(path.join(os.tmpdir(), 'wolfystock-release-browser-'));
+    r06FixtureEnvironment = seedR06NonliveScannerFixture(path.join(runtimeDir, 'r06-nonlive-scanner-fixture'));
     const port = await reservePort();
     baseUrl = `http://127.0.0.1:${port}`;
     const suffix = randomBytes(6).toString('hex');
@@ -157,6 +195,7 @@ test.describe.serial('qualified release real runtime', () => {
       'WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false',
       'WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false',
       'STOCK_LIST=AAPL',
+      ...Object.entries(r06FixtureEnvironment).map(([key, value]) => `${key}=${value}`),
     ].join('\n'), 'utf8');
     const runtimeEnv = {
       ...process.env,
@@ -174,6 +213,7 @@ test.describe.serial('qualified release real runtime', () => {
       WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS: 'true',
       WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED: 'false',
       WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED: 'false',
+      ...r06FixtureEnvironment,
     };
     execFileSync(python, [path.join(repoRoot, 'scripts/release_runtime_fixture.py')], {
       cwd: repoRoot,
@@ -420,6 +460,313 @@ test.describe.serial('qualified release real runtime', () => {
     expect(consoleErrors).toEqual([]);
     await expect(page).toHaveURL(/\/en\/backtest$/);
     expect((await page.context().cookies(baseUrl)).some((cookie) => cookie.name === 'dsa_session')).toBe(true);
+  });
+
+  test('member core research loop persists qualification-only truth across scanner research watchlist backtest portfolio and admin', async ({ browser }) => {
+    test.setTimeout(60_000);
+    const memberContext = await browser.newContext();
+    const memberPage = await memberContext.newPage();
+    const adminContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    const pageErrors: Error[] = [];
+    const consoleErrors: string[] = [];
+    const adminPageErrors: Error[] = [];
+    const adminConsoleErrors: string[] = [];
+    memberPage.on('pageerror', (error) => pageErrors.push(error));
+    memberPage.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+    adminPage.on('pageerror', (error) => adminPageErrors.push(error));
+    adminPage.on('console', (message) => {
+      if (message.type() === 'error') adminConsoleErrors.push(message.text());
+    });
+    try {
+      await login(memberPage, memberUsername, memberPassword, '/zh/scanner');
+      await memberPage.getByTestId('scanner-market-toggle').getByRole('button', { name: '美股', exact: true }).click();
+      const scannerRunButton = memberPage.getByTestId('scanner-run-button');
+      await expect(scannerRunButton).toBeVisible();
+      const scannerRunResponsePromise = memberPage.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/scanner/run') && response.request().method() === 'POST',
+      );
+      await scannerRunButton.click();
+      const scannerRunResponse = await scannerRunResponsePromise;
+      const scannerRun = await scannerRunResponse.json() as Record<string, unknown>;
+      expect(scannerRunResponse.status()).toBe(200);
+      expect(scannerRun).toMatchObject({
+        market: 'us',
+        profile: 'us_preopen_v1',
+        status: 'completed',
+        diagnostics: {
+          dataReadiness: {
+            state: 'partial',
+            candidateGenerationState: 'degraded',
+            candidateGenerationLimitations: expect.arrayContaining(['fixture_evidence']),
+          },
+        },
+      });
+      expect(r06FixtureEnvironment.WOLFYSTOCK_R06_NONLIVE_SCANNER_FIXTURE_MANIFEST_SHA256).toMatch(/^[0-9a-f]{64}$/);
+      const scannerRunId = Number(scannerRun.id);
+      expect(scannerRunId).toBeGreaterThan(0);
+      const scannerDetail = await memberPage.evaluate(async (runId) => {
+        const response = await fetch(`/api/v1/scanner/runs/${runId}`);
+        return { status: response.status, payload: await response.json() };
+      }, scannerRunId);
+      expect(scannerDetail.status).toBe(200);
+      const candidates = (scannerDetail.payload as Record<string, unknown>).candidates;
+      expect(candidates).toEqual(expect.arrayContaining([expect.objectContaining({ symbol: 'AAPL' })]));
+      const aaplCandidate = (candidates as unknown[]).find(
+        (candidate) => candidate !== null
+          && typeof candidate === 'object'
+          && (candidate as Record<string, unknown>).symbol === 'AAPL',
+      ) as Record<string, unknown> | undefined;
+      expect(aaplCandidate).toMatchObject({
+        symbol: 'AAPL',
+        rank: expect.any(Number),
+        score: null,
+      });
+      const historicalReadiness = aaplCandidate?.historicalOhlcvReadiness as Record<string, unknown> | undefined;
+      const backtestEndDate = typeof historicalReadiness?.asOf === 'string' ? historicalReadiness.asOf : '';
+      expect(backtestEndDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const backtestStart = new Date(`${backtestEndDate}T00:00:00Z`);
+      backtestStart.setUTCDate(backtestStart.getUTCDate() - 28);
+      const backtestStartDate = backtestStart.toISOString().slice(0, 10);
+
+      const scannerCandidate = memberPage.getByTestId('scanner-ranked-row-AAPL');
+      await memberPage.getByTestId('scanner-candidate-filters').getByRole('button', { name: '候选池', exact: true }).click();
+      await expect(scannerCandidate).toBeVisible();
+      await scannerCandidate.click();
+      const candidateDetail = memberPage.getByTestId('scanner-candidate-detail-AAPL');
+      await expect(candidateDetail).toBeVisible();
+      const saveWatchlistResponsePromise = memberPage.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/watchlist/items') && response.request().method() === 'POST',
+      );
+      await candidateDetail.getByRole('button', { name: '追踪', exact: true }).click();
+      const savedWatchlistResponse = await saveWatchlistResponsePromise;
+      const savedWatchlistRequest = savedWatchlistResponse.request().postDataJSON() as Record<string, unknown>;
+      const savedWatchlistItem = await savedWatchlistResponse.json() as Record<string, unknown>;
+      expect(savedWatchlistResponse.status()).toBe(200);
+      expect(savedWatchlistRequest).toMatchObject({
+        symbol: 'AAPL',
+        market: 'us',
+        source: 'scanner',
+        scanner_run_id: scannerRunId,
+      });
+      expect(savedWatchlistRequest).not.toHaveProperty('scanner_score');
+      expect(savedWatchlistRequest).not.toHaveProperty('scanner_rank');
+      expect(savedWatchlistItem).toMatchObject({
+        symbol: 'AAPL',
+        source: 'scanner',
+        scanner_run_id: scannerRunId,
+        scanner_score: null,
+      });
+      await expect(candidateDetail.getByRole('button', { name: '已追踪', exact: true })).toBeDisabled();
+
+      const researchPacketResponsePromise = memberPage.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/stocks/AAPL/research-packet')
+          && response.request().method() === 'GET',
+      );
+      const researchNavigationPromise = memberPage.waitForURL(/\/zh\/stocks\/AAPL\/structure-decision/);
+      await candidateDetail.getByRole('button', { name: '分析', exact: true }).click();
+      await researchNavigationPromise;
+      await expect(memberPage.getByTestId('stock-structure-decision-page')).toBeVisible();
+      const researchPacketResponse = await researchPacketResponsePromise;
+      const researchPacket = await researchPacketResponse.json() as Record<string, unknown>;
+      expect(researchPacketResponse.status()).toBe(200);
+      expect(researchPacket).toMatchObject({
+        observationOnly: true,
+        decisionGrade: false,
+        productReadModel: expect.objectContaining({
+          researchStatus: expect.any(String),
+          freshness: expect.objectContaining({ state: expect.any(String) }),
+          provenance: expect.objectContaining({
+            historyEvidence: {
+              sourceClass: 'qualification_fixture',
+              freshness: 'synthetic',
+              availability: 'missing',
+              observationOnly: true,
+            },
+          }),
+        }),
+      });
+      await expect(memberPage.getByTestId('stock-observation-boundary-strips')).toBeVisible();
+      await memberPage.goto(`${baseUrl}/zh/watchlist`);
+      await expect(memberPage.getByTestId('watchlist-page')).toBeVisible();
+      await memberPage.reload();
+      const reloadedWatchlist = await memberPage.evaluate(async () => {
+        const response = await fetch('/api/v1/watchlist/items');
+        return { status: response.status, payload: await response.json() };
+      });
+      expect(reloadedWatchlist.status).toBe(200);
+      expect((reloadedWatchlist.payload as Record<string, unknown>).items).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          symbol: 'AAPL',
+          source: 'scanner',
+          scanner_run_id: scannerRunId,
+          scanner_score: null,
+        }),
+      ]));
+
+      const strategyText = 'RSI below 30 buy and RSI above 70 sell';
+      const parsed = await memberPage.evaluate(async (request) => {
+        const response = await fetch('/api/v1/backtest/rule/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        });
+        return { status: response.status, payload: await response.json() };
+      }, {
+        code: 'AAPL',
+        strategy_text: strategyText,
+        start_date: backtestStartDate,
+        end_date: backtestEndDate,
+      });
+      expect(parsed.status).toBe(200);
+      const parsedPayload = parsed.payload as Record<string, unknown>;
+      expect(parsedPayload).toMatchObject({ code: 'AAPL', executable: true });
+      const backtestRun = await memberPage.evaluate(async (request) => {
+        const response = await fetch('/api/v1/backtest/rule/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        });
+        return { status: response.status, payload: await response.json() };
+      }, {
+        code: 'AAPL',
+        strategy_text: strategyText,
+        parsed_strategy: parsedPayload.parsed_strategy,
+        start_date: backtestStartDate,
+        end_date: backtestEndDate,
+        lookback_bars: 60,
+        benchmark_mode: 'none',
+        confirmed: true,
+        wait_for_completion: true,
+      });
+      expect(backtestRun.status).toBe(200);
+      const backtestRunPayload = backtestRun.payload as Record<string, unknown>;
+      const backtestRunId = Number(backtestRunPayload.id);
+      expect(backtestRunId).toBeGreaterThan(0);
+      expect(backtestRunPayload.status).toBe('completed');
+      expect(backtestRunPayload.data_quality).toMatchObject({
+        source: 'r06_nonlive_qualification_fixture',
+        authority_status: 'degraded_fill_only',
+        authority_source_type: 'synthetic_fixture',
+        authority_reason_codes: ['qualification_fixture_not_authoritative'],
+      });
+      const reopenedBacktest = await memberPage.evaluate(async (runId) => {
+        const [status, result] = await Promise.all([
+          fetch(`/api/v1/backtest/rule/runs/${runId}/status`),
+          fetch(`/api/v1/backtest/rule/runs/${runId}`),
+        ]);
+        return {
+          statusCode: status.status,
+          status: await status.json(),
+          resultCode: result.status,
+          result: await result.json(),
+        };
+      }, backtestRunId);
+      expect(reopenedBacktest.statusCode).toBe(200);
+      expect(reopenedBacktest.resultCode).toBe(200);
+      expect(reopenedBacktest.status).toMatchObject({ id: backtestRunId, status: 'completed' });
+      expect(reopenedBacktest.result).toMatchObject({ id: backtestRunId, status: 'completed' });
+      await memberPage.goto(`${baseUrl}/en/backtest/results/${backtestRunId}`);
+      await expect(memberPage.getByTestId('deterministic-backtest-result-page')).toBeVisible();
+      await memberPage.reload();
+      await expect(memberPage.getByTestId('deterministic-backtest-result-page')).toBeVisible();
+
+      const account = await memberPage.evaluate(async () => {
+        const response = await fetch('/api/v1/portfolio/accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'R06 mixed FX qualification account', market: 'us', base_currency: 'CNY' }),
+        });
+        return { status: response.status, payload: await response.json() };
+      });
+      expect(account.status).toBe(200);
+      const accountId = Number((account.payload as Record<string, unknown>).id);
+      expect(accountId).toBeGreaterThan(0);
+      const portfolioEventDate = new Date().toISOString().slice(0, 10);
+      const cashLedger = await memberPage.evaluate(async ({ id, eventDate }) => {
+        const response = await fetch('/api/v1/portfolio/cash-ledger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account_id: id,
+            event_date: eventDate,
+            direction: 'in',
+            amount: '100',
+            currency: 'CNY',
+            note: 'R06 qualification covered subtotal',
+          }),
+        });
+        return { status: response.status, payload: await response.json() };
+      }, { id: accountId, eventDate: portfolioEventDate });
+      expect(cashLedger.status).toBe(200);
+      expect(Number((cashLedger.payload as Record<string, unknown>).id)).toBeGreaterThan(0);
+      const trade = await memberPage.evaluate(async ({ id, tradeDate }) => {
+        const response = await fetch('/api/v1/portfolio/trades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account_id: id,
+            symbol: 'AAPL',
+            trade_date: tradeDate,
+            side: 'buy',
+            quantity: '1',
+            price: '100',
+            fee: '0',
+            tax: '0',
+            market: 'us',
+            currency: 'USD',
+          }),
+        });
+        return { status: response.status, payload: await response.json() };
+      }, { id: accountId, tradeDate: portfolioEventDate });
+      expect(trade.status).toBe(200);
+      const portfolio = await memberPage.evaluate(async () => {
+        const response = await fetch('/api/v1/portfolio/snapshot');
+        return { status: response.status, payload: await response.json() };
+      });
+      expect(portfolio.status).toBe(200);
+      expect(portfolio.payload).toMatchObject({
+        portfolio_truth: expect.objectContaining({
+          state: 'valuation_partial',
+          value_semantics: 'covered_subtotal',
+          authoritative_total: null,
+          covered_subtotal: expect.anything(),
+        }),
+        total_equity: null,
+        availability: expect.objectContaining({
+          valuation: expect.objectContaining({
+            state: 'partial',
+            value_semantics: 'covered_subtotal',
+            missing_fx_pairs: expect.arrayContaining(['USD/CNY']),
+          }),
+        }),
+      });
+      await memberPage.goto(`${baseUrl}/zh/portfolio`);
+      await expect(memberPage.getByTestId('portfolio-bento-page')).toBeVisible();
+      await expect(memberPage.getByTestId('portfolio-total-assets-covered-subtotal')).toBeVisible();
+
+      await login(adminPage, adminUsername, adminPassword, '/zh/admin/logs');
+      const ops = await adminPage.evaluate(async () => {
+        const response = await fetch('/api/v1/admin/ops/status');
+        return { status: response.status, payload: await response.json() };
+      });
+      expect(ops.status).toBe(200);
+      expect(ops.payload).toMatchObject({
+        buildProvenance: { backendGitSha: expectedCandidateSha },
+        taskQueueStatusSummary: { available: true, status: 'ok', configured: true },
+      });
+      expect(pageErrors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
+      expect(adminPageErrors).toEqual([]);
+      expect(adminConsoleErrors).toEqual([]);
+    } finally {
+      await Promise.all([
+        memberPage.close({ runBeforeUnload: false }),
+        adminPage.close({ runBeforeUnload: false }),
+      ]);
+    }
   });
 
   test('rollback error preserves portfolio state and exposes unavailable data', async ({ page }) => {

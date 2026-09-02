@@ -272,6 +272,10 @@ function normalizeScannerMarket(market?: string | null): string | null {
   return normalized === 'CN' || normalized === 'US' || normalized === 'HK' ? normalized : null;
 }
 
+function optionalScannerRank(rank: unknown): number | undefined {
+  return typeof rank === 'number' && Number.isInteger(rank) && rank > 0 ? rank : undefined;
+}
+
 function sanitizeScannerProfileLabel(label: string | null | undefined, language: 'zh' | 'en' = 'zh'): string {
   const raw = String(label || '').trim();
   if (!raw) return '';
@@ -2064,7 +2068,7 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
     name: candidate.name || candidate.symbol,
     companyName: candidate.name || candidate.symbol,
     rank: candidate.rank || 0,
-    score: Number(candidate.score || 0),
+    score: candidate.score ?? null,
     qualityHint: null,
     reasonSummary: candidate.reason || candidate.failedRules?.[0] || '',
     reasons: [candidate.reason, ...(candidate.failedRules || [])].filter((item): item is string => Boolean(item)),
@@ -2503,7 +2507,7 @@ type ScannerExportRow = {
   rank: number;
   symbol: string;
   name: string;
-  scannerScore: number;
+  scannerScore: number | null;
   observationZone: string;
   referenceRange: string;
   riskBoundary: string;
@@ -3030,7 +3034,7 @@ const UserScannerPage: React.FC = () => {
         const rightRisk = getRiskScore(right);
         compare = (leftRisk ?? Number.NEGATIVE_INFINITY) - (rightRisk ?? Number.NEGATIVE_INFINITY);
       } else {
-        compare = left.score - right.score;
+        compare = (left.score ?? Number.NEGATIVE_INFINITY) - (right.score ?? Number.NEGATIVE_INFINITY);
       }
       if (compare === 0) return left.rank - right.rank;
       return compare * directionMultiplier;
@@ -3435,8 +3439,8 @@ const UserScannerPage: React.FC = () => {
         name: candidate.companyName || candidate.name,
         source: 'scanner',
         scannerRunId: runDetail?.id,
-        scannerRank: candidate.rank,
-        scannerScore: candidate.score,
+        scannerRank: optionalScannerRank(candidate.rank),
+        scannerScore: candidate.score ?? undefined,
         themeId: runDetail?.themeId || undefined,
         universeType: runDetail?.universeType || undefined,
         notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
@@ -3501,8 +3505,8 @@ const UserScannerPage: React.FC = () => {
           name: candidate.companyName || candidate.name,
           source: 'scanner',
           scannerRunId: runDetail?.id,
-          scannerRank: candidate.rank,
-          scannerScore: candidate.score,
+          scannerRank: optionalScannerRank(candidate.rank),
+          scannerScore: candidate.score ?? undefined,
           themeId: runDetail?.themeId || undefined,
           universeType: runDetail?.universeType || undefined,
           notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,

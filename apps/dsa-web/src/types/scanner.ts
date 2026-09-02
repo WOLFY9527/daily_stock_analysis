@@ -442,7 +442,7 @@ export interface ScannerCandidate {
   name: string;
   companyName?: string | null;
   rank: number;
-  score: number;
+  score: number | null;
   rawScore?: number | null;
   finalScore?: number | null;
   qualityHint?: string | null;

@@ -33,6 +33,8 @@ REQUIRED_BROWSER_CASES = (
     "production startup readiness and static assets",
     "login logout and revoked session",
     "member admin boundary and portfolio read",
+    "member core research loop persists qualification-only truth across scanner research watchlist backtest portfolio and admin",
+    "professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
     "rollback error preserves portfolio state and exposes unavailable data",
 )
 LOCK_HASH = "7a3c9f1c582c0efb5ae48ae4871cb4cae77db9c257558cbf9af2c454013a46f4"

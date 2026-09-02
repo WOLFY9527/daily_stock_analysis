@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from src.services.data_source_router import DataSourceRoutePlan, DataSourceRouteRequest, DataSourceRouter
 from src.services.market_data_source_registry import resolve_source_type
+from src.services.r06_nonlive_scanner_fixture import R06_NONLIVE_QUALIFICATION_SOURCE
 from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 from src.utils.symbol_normalization import normalize_stock_code
 
@@ -33,6 +34,7 @@ _LOCAL_AUTHORITY_SOURCE_ALIASES = {
 }
 _UNKNOWN_AUTHORITY_SOURCES = frozenset({"unknown", "missing"})
 _UNKNOWN_AUTHORITY_REASON_CODE = "source_authority_unknown"
+_QUALIFICATION_FIXTURE_REASON_CODE = "qualification_fixture_not_authoritative"
 _PROXY_FILL_ONLY_PROVIDERS = frozenset(
     {
         "yahoo_yfinance",
@@ -104,6 +106,20 @@ def assess_backtest_data_source_eligibility(
             degraded_fill_only=True,
             rejected=False,
             reason_codes=(_UNKNOWN_AUTHORITY_REASON_CODE,),
+        )
+
+    if authority_source == R06_NONLIVE_QUALIFICATION_SOURCE:
+        return BacktestDataSourceEligibility(
+            request=request,
+            plan=plan,
+            source=normalized_source,
+            provider_id=None,
+            source_type="synthetic_fixture",
+            authority_status="degraded_fill_only",
+            authority_allowed=False,
+            degraded_fill_only=True,
+            rejected=False,
+            reason_codes=(_QUALIFICATION_FIXTURE_REASON_CODE,),
         )
 
     if authority_source in _LOCAL_AUTHORITY_SOURCES or source_type == "cache_snapshot":
