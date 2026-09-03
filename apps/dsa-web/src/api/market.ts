@@ -64,6 +64,44 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   'FRESHNESS UNAVAILABLE': '数据新鲜度暂不可用',
 };
 
+const ENGLISH_CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
+  'PROVIDER ALTERNATIVE_ME': 'Available',
+  ALTERNATIVE_ME: 'Available',
+  'ALTERNATIVE.ME': 'Available',
+  YFINANCE: 'Available',
+  'YAHOO FINANCE': 'Available',
+  CBOE: 'Available',
+  BINANCE: 'Available',
+  'BINANCE FUTURES': 'Available',
+  'ETF FLOW PROXY': 'ETF-flow proxy',
+  'INSTITUTIONAL PRESSURE PROXY': 'Institutional-pressure proxy',
+  'INDUSTRY BREADTH PROXY': 'Industry-breadth proxy',
+  'SECTOR ETF PROXY': 'Partially available',
+  REAL: 'Available',
+  MIXED: 'Partially available',
+  'ROTATION NON SCORING OR TAXONOMY ONLY': 'Rotation classification only',
+  'YAHOO PROXY': 'Partially available',
+  SINA: 'Available',
+  'BINANCE WS': 'Available',
+  'BINANCE + CACHE': 'Delayed data available',
+  'BINANCE PARTIAL SNAPSHOT': 'Delayed data available',
+  'RECENT CACHE': 'Delayed data available',
+  'LOCAL CACHE': 'Delayed data available',
+  FALLBACK: 'Example data',
+  MOCK: 'Example data',
+  'SYNTHETIC FIXTURE': 'Example data',
+  '备用数据': 'Example data',
+  '最近可用数据': 'Delayed data available',
+  'OFFICIAL MACRO MIX': 'Available',
+  'NYSE OFFICIAL BREADTH CACHE': 'Available',
+  'POLYGON GROUPED DAILY': 'Available',
+  'SINA + YAHOO FINANCE': 'Partially available',
+  'SINA + 备用数据': 'Partially available',
+  'NOT RETURNED': 'Evidence pending',
+  'FRESHNESS=UNAVAILABLE': 'Freshness unavailable',
+  'FRESHNESS UNAVAILABLE': 'Freshness unavailable',
+};
+
 const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/FRED\s+[A-Z0-9_]+/gi, '可用'],
   [/Yahoo Finance|YFinance|YFINANCE|CBOE|Binance Futures|Binance|Alternative\.?me/gi, '可用'],
@@ -75,6 +113,19 @@ const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/fallback|mock|synthetic/gi, '示例数据'],
   [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
   [/freshness\s*=\s*unavailable|freshness unavailable/gi, '数据新鲜度暂不可用'],
+];
+
+const ENGLISH_CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
+  [/FRED\s+[A-Z0-9_]+/gi, 'Available'],
+  [/Yahoo Finance|YFinance|YFINANCE|CBOE|Binance Futures|Binance|Alternative\.?me/gi, 'Available'],
+  [/ETF flow proxy/gi, 'ETF-flow proxy'],
+  [/Institutional pressure proxy/gi, 'Institutional-pressure proxy'],
+  [/Industry breadth proxy/gi, 'Industry-breadth proxy'],
+  [/Sector ETF proxy|proxy/gi, 'Partially available'],
+  [/local cache|recent cache|cache/gi, 'Delayed data available'],
+  [/fallback|mock|synthetic/gi, 'Example data'],
+  [/Rotation Non Scoring Or Taxonomy Only/gi, 'Rotation classification only'],
+  [/freshness\s*=\s*unavailable|freshness unavailable/gi, 'Freshness unavailable'],
 ];
 
 const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
@@ -92,70 +143,99 @@ const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
   [/界面演示/g, '临时状态展示'],
 ];
 
+const ENGLISH_CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
+  [/当前关键数据不足[，,]\s*暂不生成强市场判断。?/g, 'Key market data is currently insufficient; no strong market conclusion is produced.'],
+  [/当前真实数据不足，市场温度仅供界面演示。?/g, 'Key market data is currently insufficient; no market-temperature conclusion is produced.'],
+  [/当前关键数据不足[，,]\s*暂不形成方向判断。?/g, 'Key market data is currently insufficient; no directional conclusion is produced.'],
+  [/当前真实数据不足/g, 'Key market data is currently insufficient'],
+  [/市场温度仅供界面演示/g, 'No market-temperature conclusion is produced'],
+  [/评分已暂停/g, 'Scoring is paused'],
+  [/最近可用数据仅保留市场结构观察，不参与市场温度评分。?/g, 'The latest available data preserves market-structure observations only and does not contribute to market-temperature scoring.'],
+  [/备用示例数据仅用于保持界面结构/g, 'Sample data is shown only to explain the page structure'],
+  [/备用示例数据，不代表当前行情/g, 'Sample data is not a current market observation'],
+  [/等待真实行情源/g, 'Waiting for market data to recover'],
+  [/数据源异常/g, 'Market data is updating'],
+  [/数据源暂不可用/g, 'Some market data is temporarily unavailable'],
+  [/数据源刷新失败/g, 'Market data refresh failed'],
+  [/数据源请求超时/g, 'Market data request timed out'],
+  [/保持界面结构/g, 'keep the page readable'],
+  [/界面演示/g, 'temporary presentation state'],
+];
+
 function normalizeConsumerSourceKey(value?: string | null): string {
   return String(value || '').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-export function normalizeMarketConsumerText(value?: string | null): string | undefined {
+export function normalizeMarketConsumerText(value?: string | null, locale: 'zh' | 'en' = 'zh'): string | undefined {
   const trimmed = String(value || '').replace(/\s+/g, ' ').trim();
   if (!trimmed) {
     return undefined;
   }
 
-  const exactMatch = CONSUMER_SOURCE_LABEL_MAP[normalizeConsumerSourceKey(trimmed)];
+  const exactMatch = (locale === 'en' ? ENGLISH_CONSUMER_SOURCE_LABEL_MAP : CONSUMER_SOURCE_LABEL_MAP)[normalizeConsumerSourceKey(trimmed)];
   if (exactMatch) {
     return exactMatch;
   }
 
   let normalized = trimmed;
-  CONSUMER_SOURCE_LABEL_RULES.forEach(([pattern, replacement]) => {
+  (locale === 'en' ? ENGLISH_CONSUMER_SOURCE_LABEL_RULES : CONSUMER_SOURCE_LABEL_RULES).forEach(([pattern, replacement]) => {
     normalized = normalized.replace(pattern, replacement);
   });
-  CONSUMER_TEXT_RULES.forEach(([pattern, replacement]) => {
+  (locale === 'en' ? ENGLISH_CONSUMER_TEXT_RULES : CONSUMER_TEXT_RULES).forEach(([pattern, replacement]) => {
     normalized = normalized.replace(pattern, replacement);
   });
 
   return normalized;
 }
 
-function normalizeMarketConsumerSourceLabel(sourceLabel?: string | null, source?: string | null): string | undefined {
-  return normalizeMarketConsumerText(sourceLabel)
-    || normalizeMarketConsumerText(source);
+function normalizeMarketConsumerSourceLabel(
+  sourceLabel?: string | null,
+  source?: string | null,
+  locale: 'zh' | 'en' = 'zh',
+): string | undefined {
+  return normalizeMarketConsumerText(sourceLabel, locale)
+    || normalizeMarketConsumerText(source, locale);
 }
 
-function normalizeMarketProviderHealth(providerHealth?: MarketProviderHealth | null): MarketProviderHealth | undefined {
+function normalizeMarketProviderHealth(
+  providerHealth?: MarketProviderHealth | null,
+  locale: 'zh' | 'en' = 'zh',
+): MarketProviderHealth | undefined {
   if (!providerHealth) {
     return undefined;
   }
   return {
     ...providerHealth,
-    sourceLabel: normalizeMarketConsumerSourceLabel(providerHealth.sourceLabel, providerHealth.provider) || providerHealth.sourceLabel,
+    sourceLabel: normalizeMarketConsumerSourceLabel(providerHealth.sourceLabel, providerHealth.provider, locale) || providerHealth.sourceLabel,
   };
 }
 
-function normalizeMarketOverviewItemConsumerCopy(item: MarketOverviewItem): MarketOverviewItem {
+function normalizeMarketOverviewItemConsumerCopy(item: MarketOverviewItem, locale: 'zh' | 'en' = 'zh'): MarketOverviewItem {
   return {
     ...item,
-    label: normalizeMarketConsumerText(item.label) || item.label,
-    sourceLabel: normalizeMarketConsumerSourceLabel(item.sourceLabel, item.source) || item.sourceLabel,
-    providerHealth: normalizeMarketProviderHealth(item.providerHealth) || item.providerHealth,
-    warning: normalizeMarketConsumerText(item.warning) || item.warning,
+    label: normalizeMarketConsumerText(item.label, locale) || item.label,
+    sourceLabel: normalizeMarketConsumerSourceLabel(item.sourceLabel, item.source, locale) || item.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(item.providerHealth, locale) || item.providerHealth,
+    warning: normalizeMarketConsumerText(item.warning, locale) || item.warning,
     hoverDetails: Array.isArray(item.hoverDetails)
-      ? item.hoverDetails.map((detail) => normalizeMarketConsumerText(detail) || detail)
+      ? item.hoverDetails.map((detail) => normalizeMarketConsumerText(detail, locale) || detail)
       : item.hoverDetails,
   };
 }
 
-export function normalizeMarketOverviewPanelConsumerCopy<T extends MarketOverviewPanel | null | undefined>(panel: T): T {
+export function normalizeMarketOverviewPanelConsumerCopy<T extends MarketOverviewPanel | null | undefined>(
+  panel: T,
+  locale: 'zh' | 'en' = 'zh',
+): T {
   if (!panel) {
     return panel;
   }
   return {
     ...panel,
-    sourceLabel: normalizeMarketConsumerSourceLabel(panel.sourceLabel, panel.source) || panel.sourceLabel,
-    providerHealth: normalizeMarketProviderHealth(panel.providerHealth) || panel.providerHealth,
-    warning: normalizeMarketConsumerText(panel.warning) || panel.warning,
-    items: Array.isArray(panel.items) ? panel.items.map(normalizeMarketOverviewItemConsumerCopy) : [],
+    sourceLabel: normalizeMarketConsumerSourceLabel(panel.sourceLabel, panel.source, locale) || panel.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(panel.providerHealth, locale) || panel.providerHealth,
+    warning: normalizeMarketConsumerText(panel.warning, locale) || panel.warning,
+    items: Array.isArray(panel.items) ? panel.items.map((item) => normalizeMarketOverviewItemConsumerCopy(item, locale)) : [],
   } as T;
 }
 
@@ -206,20 +286,23 @@ export function shouldRevalidateMarketObservation(input: unknown): boolean {
     || ['fallback', 'stale', 'aging', 'not_checked'].includes(truth.freshness);
 }
 
-export function normalizeMarketBriefingConsumerCopy<T extends MarketBriefingResponse | null | undefined>(response: T): T {
+export function normalizeMarketBriefingConsumerCopy<T extends MarketBriefingResponse | null | undefined>(
+  response: T,
+  locale: 'zh' | 'en' = 'zh',
+): T {
   if (!response) {
     return response;
   }
   return {
     ...response,
-    sourceLabel: normalizeMarketConsumerSourceLabel(response.sourceLabel, response.source) || response.sourceLabel,
-    providerHealth: normalizeMarketProviderHealth(response.providerHealth) || response.providerHealth,
-    warning: normalizeMarketConsumerText(response.warning) || response.warning,
+    sourceLabel: normalizeMarketConsumerSourceLabel(response.sourceLabel, response.source, locale) || response.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(response.providerHealth, locale) || response.providerHealth,
+    warning: normalizeMarketConsumerText(response.warning, locale) || response.warning,
     items: Array.isArray(response.items)
       ? response.items.map((item) => ({
           ...item,
-          title: normalizeMarketConsumerText(item.title) || item.title,
-          message: normalizeMarketConsumerText(item.message) || item.message,
+          title: normalizeMarketConsumerText(item.title, locale) || item.title,
+          message: normalizeMarketConsumerText(item.message, locale) || item.message,
         }))
       : [],
   } as T;

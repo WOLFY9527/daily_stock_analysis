@@ -4184,6 +4184,28 @@ describe('MarketOverviewPage', () => {
     expect(dataStateSummary).toHaveTextContent('延迟 0');
   });
 
+  it('labels a wholly unavailable aggregate as unavailable instead of partially available', async () => {
+    window.history.replaceState(window.history.state, '', '/en/market-overview');
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+    const unavailablePanels = {
+      temperature: marketOverviewPanelFactoriesForTests.createUnavailableTemperature(),
+      briefing: marketOverviewPanelFactoriesForTests.createUnavailableBriefing(),
+      futures: marketOverviewPanelFactoriesForTests.createUnavailableFutures(),
+      cnShortSentiment: marketOverviewPanelFactoriesForTests.createUnavailableCnShortSentiment(),
+      indices: unavailableStaticIndexPanel(),
+    };
+
+    renderMarketOverviewWorkbenchWithProps({
+      panels: unavailablePanels as never,
+      localSnapshotSavedAt: undefined,
+    });
+
+    const quality = await screen.findByTestId('market-overview-data-quality-composition');
+    expect(quality).toHaveTextContent('Unavailable');
+    expect(quality).not.toHaveTextContent('Partially available');
+    window.history.replaceState(window.history.state, '', '/market-overview');
+  });
+
   it('preserves explicit backend unavailability as unavailable rather than authoritative empty', async () => {
     vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce({
       panelName: 'IndexTrendsCard',
@@ -4828,6 +4850,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('NDX', 'Nasdaq 100', 18220.42, 0.68),
     ]));
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
     renderMarketOverviewWithLanguage('en');
 
@@ -4838,8 +4861,27 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'US' }));
     expect(screen.getAllByText('Nasdaq 100').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Bitcoin').length).toBeGreaterThan(0);
+    const usBreadth = await screen.findByTestId('market-overview-module-usBreadth');
+    expect(usBreadth.textContent || '').toContain('US Market Breadth');
+    expect(usBreadth.textContent || '').not.toContain('上涨家数');
+    expect((await screen.findByTestId('market-overview-module-usSectorRotation')).textContent || '').toContain('Sector Health');
     expect(screen.queryByText('标普500')).not.toBeInTheDocument();
     expect(screen.queryByText('比特币')).not.toBeInTheDocument();
+    expect(screen.queryByText('美股宽度')).not.toBeInTheDocument();
+    expect(screen.queryByText('行业健康度')).not.toBeInTheDocument();
+    expect(screen.queryByText('当前关键数据不足，暂不生成强市场判断。')).not.toBeInTheDocument();
+    expect(screen.queryByText('评分已暂停')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crypto' }));
+    const cryptoLiquidity = await screen.findByTestId('market-overview-module-cryptoLiquidity');
+    expect(cryptoLiquidity).toHaveTextContent('BTC funding rate');
+    expect(cryptoLiquidity).toHaveTextContent('Stablecoin liquidity');
+    expect(cryptoLiquidity).toHaveTextContent('Unavailable');
+    expect(cryptoLiquidity).toHaveTextContent('Not connected');
+    expect(cryptoLiquidity).not.toHaveTextContent('BTC 资金费率');
+    expect(cryptoLiquidity).not.toHaveTextContent('稳定币流动性');
+    expect(cryptoLiquidity).not.toHaveTextContent('暂不可用');
+    expect(cryptoLiquidity).not.toHaveTextContent('未接入');
   });
 
   it('renders a top directional summary for mixed low-confidence evidence', async () => {
@@ -5743,10 +5785,10 @@ describe('MarketOverviewPage', () => {
     expect(breadthCard).toHaveTextContent(/上涨家数|ADVANCERS/);
     expect(breadthCard).toHaveTextContent(/下跌家数|DECLINERS/);
     expect(breadthCard).toHaveTextContent(/平盘家数|UNCHANGED/);
-    expect(breadthCard).toHaveTextContent(/上涨\/下跌比|ADVANCE_DECLINE_RATIO/);
-    expect(breadthCard).toHaveTextContent(/NEW_HIGHS/);
-    expect(breadthCard).toHaveTextContent(/NEW_LOWS/);
-    expect(breadthCard).toHaveTextContent(/HIGH_LOW_RATIO/);
+    expect(breadthCard).toHaveTextContent(/涨跌家数比|A\/D|ADVANCE_DECLINE_RATIO/);
+    expect(breadthCard).toHaveTextContent(/新高家数|NEW HIGHS|NEW_HIGHS/);
+    expect(breadthCard).toHaveTextContent(/新低家数|NEW LOWS|NEW_LOWS/);
+    expect(breadthCard).toHaveTextContent(/新高\/新低比|H\/L|HIGH_LOW_RATIO/);
     expect(breadthCard).not.toHaveTextContent(/行业 ETF 代理|RSP vs SPY|IWM vs SPY/);
     expect(truthStrip).toHaveTextContent('宽度仅观察');
     expect(truthStrip).toHaveTextContent('统计待补');

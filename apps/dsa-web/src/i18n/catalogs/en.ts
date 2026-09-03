@@ -997,6 +997,7 @@ export const enCatalog = {
         databaseCache: 'Database cache',
         yfinanceFetcher: 'Yfinance fallback',
         mixedFallback: 'Mixed fallback path',
+        ruleRunAggregate: 'Rule-run fallback aggregate',
         unknown: 'Unknown source',
         fallbackUsed: 'Fallback used',
         fallbackNotUsed: 'No fallback',

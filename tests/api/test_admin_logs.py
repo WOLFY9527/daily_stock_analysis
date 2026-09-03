@@ -2270,6 +2270,19 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 403)
         self.assertEqual(detail_response.json()["detail"]["error"], "admin_required")
 
+    def test_root_openapi_does_not_advertise_task_filters(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+
+        openapi = app.openapi()
+        root_parameters = openapi["paths"]["/api/v1/admin/logs"]["get"]["parameters"]
+        session_parameters = openapi["paths"]["/api/v1/admin/logs/sessions"]["get"]["parameters"]
+
+        self.assertNotIn("task_id", {parameter["name"] for parameter in root_parameters})
+        self.assertNotIn("taskId", {parameter["name"] for parameter in root_parameters})
+        self.assertIn("task_id", {parameter["name"] for parameter in session_parameters})
+        self.assertIn("taskId", {parameter["name"] for parameter in session_parameters})
+
     def test_business_event_list_requires_auth_and_admin_can_read_classification_fields(self) -> None:
         no_auth_app = FastAPI()
         no_auth_app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")

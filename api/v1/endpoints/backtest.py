@@ -390,7 +390,7 @@ def _build_rule_run_performance_fallback(
         "evaluation_mode": "rule_deterministic_fallback",
         "requested_mode": _requested_mode_for_code(code),
         "resolved_source": "stored_rule_backtest_runs",
-        "fallback_used": False,
+        "fallback_used": True,
         "execution_assumptions": {
             "source": "rule_backtest_runs",
             "mode": "stored_result_aggregate",

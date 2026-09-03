@@ -208,8 +208,6 @@ def cleanup_admin_logs(
     summary="List admin business events",
 )
 def list_execution_logs_root(
-    task_id: Optional[str] = Query(default=None, description="Filter by task ID"),
-    task_id_alias: Optional[str] = Query(default=None, alias="taskId", description="Camel-case alias for task_id"),
     stock: Optional[str] = Query(default=None, description="Filter by stock code"),
     status: Optional[str] = Query(default=None, description="Filter by overall status"),
     min_level: Optional[str] = Query(default=None, description="Minimum log level"),
@@ -242,7 +240,6 @@ def list_execution_logs_root(
     cursor: Optional[str] = Query(default=None),
     _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
-    del task_id, task_id_alias
     service = ExecutionLogService()
     effective_limit = _query_int(limit, 50)
     effective_offset = _effective_offset(offset=offset, page=page, cursor=cursor, limit=effective_limit)

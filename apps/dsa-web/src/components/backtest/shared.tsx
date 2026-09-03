@@ -339,6 +339,7 @@ export function getHistoricalResolvedSourceLabel(source?: string | null, languag
   if (normalized === 'DatabaseCache') return bt(language, 'historicalSource.databaseCache');
   if (normalized === 'YfinanceFetcher') return bt(language, 'historicalSource.yfinanceFetcher');
   if (normalized === 'MixedFallback') return bt(language, 'historicalSource.mixedFallback');
+  if (normalized === 'stored_rule_backtest_runs') return bt(language, 'historicalSource.ruleRunAggregate');
   if (normalized === 'Unknown') return bt(language, 'historicalSource.unknown');
   return normalized || '--';
 }

@@ -986,6 +986,7 @@ export const zhCatalog = {
         databaseCache: '数据库缓存',
         yfinanceFetcher: 'Yfinance 在线回退',
         mixedFallback: '混合回退路径',
+        ruleRunAggregate: '规则运行回退汇总',
         unknown: '未知来源',
         fallbackUsed: '已回退',
         fallbackNotUsed: '未回退',

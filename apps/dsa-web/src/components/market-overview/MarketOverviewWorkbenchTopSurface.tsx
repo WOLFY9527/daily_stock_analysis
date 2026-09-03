@@ -1129,7 +1129,7 @@ function dataStatusLabel(
     return locale === 'en' ? 'Updating' : '正在更新';
   }
   if (summary.state === 'unavailable') {
-    return locale === 'en' ? 'Partially available' : '部分可用';
+    return locale === 'en' ? 'Unavailable' : '暂不可用';
   }
   if (dataState.hasUnavailable) {
     return locale === 'en' ? 'Partially available' : '部分可用';

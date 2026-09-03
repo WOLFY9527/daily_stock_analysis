@@ -224,7 +224,7 @@ function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   }
 }
 
-function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'local' | 'empty'; savedAt?: string } {
+function buildInitialPanelsFromLocalSnapshot(language: 'zh' | 'en' = 'zh'): { panels: PanelState; source: 'local' | 'empty'; savedAt?: string } {
   const localSnapshot = readLocalMarketOverviewSnapshot();
   if (!localSnapshot) {
     return {
@@ -247,7 +247,7 @@ function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'l
   AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
     const value = localSnapshot.payload[panelKey];
     if (isPanelValueContract(panelKey, value)) {
-      assignPanelValue(panels, panelKey, value);
+      assignPanelValue(panels, panelKey, value, language);
       validEntryCount += 1;
     }
   });
@@ -289,7 +289,12 @@ function writeLocalMarketOverviewSnapshot(panels: PanelState): string | null {
   }
 }
 
-function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: PanelState[PanelKey]): void {
+function assignPanelValue(
+  nextPanels: PanelState,
+  panelKey: PanelKey,
+  value: PanelState[PanelKey],
+  language: 'zh' | 'en' = 'zh',
+): void {
   switch (panelKey) {
     case 'indices':
     case 'volatility':
@@ -304,13 +309,13 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
     case 'usBreadth':
     case 'rates':
     case 'fxCommodities':
-      nextPanels[panelKey] = normalizeMarketOverviewPanelConsumerCopy(value as MarketOverviewPanel);
+      nextPanels[panelKey] = normalizeMarketOverviewPanelConsumerCopy(value as MarketOverviewPanel, language);
       break;
     case 'temperature':
       nextPanels.temperature = normalizeMarketTemperatureResponse(value as MarketTemperatureResponse);
       break;
     case 'briefing':
-      nextPanels.briefing = normalizeMarketBriefingConsumerCopy(value as MarketBriefingResponse);
+      nextPanels.briefing = normalizeMarketBriefingConsumerCopy(value as MarketBriefingResponse, language);
       break;
     case 'futures':
       nextPanels.futures = normalizeMarketFuturesConsumerCopy(value as MarketFuturesResponse);
@@ -972,10 +977,10 @@ const MarketRegimeReadModelSurface = ({
 };
 
 const MarketOverviewPage = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [dataDiagnosticsOpen, setDataDiagnosticsOpen] = useState(false);
-  const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
+  const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot(language));
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [consumerEvidenceReadinessMatrix, setConsumerEvidenceReadinessMatrix] = useState<ConsumerEvidenceReadinessMatrix | null>(null);
@@ -1015,14 +1020,14 @@ const MarketOverviewPage = () => {
       return false;
     }
     const nextPanels = { ...latestPanelsRef.current };
-    assignPanelValue(nextPanels, panelKey, value);
+    assignPanelValue(nextPanels, panelKey, value, language);
     latestPanelsRef.current = nextPanels;
     setPanels(nextPanels);
     if (options?.persist) {
       queueLocalSnapshotPersist(nextPanels);
     }
     return true;
-  }, [queueLocalSnapshotPersist]);
+  }, [language, queueLocalSnapshotPersist]);
 
   const clearAutoRevalidateTimer = useCallback((panelKey: PanelKey) => {
     const timer = autoRevalidateTimersRef.current[panelKey];
@@ -1063,7 +1068,7 @@ const MarketOverviewPage = () => {
             return nextErrors;
           });
           commitPanelValue(panelKey, panel);
-          assignPanelValue(routeEntrySnapshotPanels, panelKey, panel);
+          assignPanelValue(routeEntrySnapshotPanels, panelKey, panel, language);
         }
       } catch (error) {
         if (!cancelledRef?.current) {
@@ -1075,7 +1080,7 @@ const MarketOverviewPage = () => {
             const fallback = fallbackPanelValue(panelKey, error);
             commitPanelValue(panelKey, fallback);
             if (!routeEntrySnapshotPanels[panelKey]) {
-              assignPanelValue(routeEntrySnapshotPanels, panelKey, fallback);
+              assignPanelValue(routeEntrySnapshotPanels, panelKey, fallback, language);
             }
           }
         }
@@ -1102,7 +1107,7 @@ const MarketOverviewPage = () => {
     if (!cancelledRef?.current) {
       queueLocalSnapshotPersist(routeEntrySnapshotPanels);
     }
-  }, [commitPanelValue, queueLocalSnapshotPersist]);
+  }, [commitPanelValue, language, queueLocalSnapshotPersist]);
 
   const refreshPanel = useCallback(async (
     panelKey: PanelKey,

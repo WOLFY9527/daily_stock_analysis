@@ -1532,5 +1532,11 @@ export interface PerformanceMetrics {
   requestedMode?: string | null;
   resolvedSource?: string | null;
   fallbackUsed?: boolean | null;
+  dataStatus?: string | null;
+  calculationStatus?: string | null;
+  sampleStatus?: string | null;
+  limitations?: string[];
+  executionReadiness?: BacktestExecutionReadiness | null;
+  noAdviceDisclosure?: string | null;
   executionAssumptions: AssumptionMap;
 }

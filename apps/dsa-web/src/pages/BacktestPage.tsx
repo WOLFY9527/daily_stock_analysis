@@ -14,6 +14,7 @@ import {
   getPeriodicString,
   type RuleBenchmarkMode,
   getStrategyPreviewSpec,
+  getHistoricalResolvedSourceLabel,
   parsePositiveInt,
 } from '../components/backtest/shared';
 import type { BacktestRunFeedback } from '../components/backtest/BacktestRunFeedbackBanner';
@@ -440,6 +441,7 @@ const BacktestPage: React.FC = () => {
 
   const historicalSourceMetadata = (() => {
     const candidates = [
+      historicalPerfSnapshot,
       runResult,
       selectedHistoricalRun,
       sampleStatus,
@@ -542,7 +544,7 @@ const BacktestPage: React.FC = () => {
     if (pricingResolvedSource) {
       parts.push(
         bt(language, 'page.historicalTransparency.pricingSource', {
-          source: pricingResolvedSource,
+          source: getHistoricalResolvedSourceLabel(pricingResolvedSource, language),
           detail: pricingFallbackUsed == null
             ? ''
             : bt(
@@ -1719,6 +1721,7 @@ const BacktestPage: React.FC = () => {
               >
                 {activeModule === 'historical' ? (
                   <HistoricalEvaluationPanel
+                    language={language}
                     normalizedCode={normalizedCode}
                     codeFilter={codeFilter}
                     onCodeChange={setCodeFilter}
@@ -1749,6 +1752,7 @@ const BacktestPage: React.FC = () => {
                     sampleStatus={sampleStatus}
                     sampleStatusError={sampleStatusError}
                     historicalAssumptions={historicalAssumptions}
+                    historicalPerformance={historicalPerfSnapshot}
                     historicalSourceMetadata={historicalSourceMetadata}
                     historicalSampleTransparency={historicalSampleTransparency}
                     isLoadingSampleStatus={isLoadingSampleStatus}

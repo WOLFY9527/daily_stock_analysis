@@ -12,6 +12,7 @@ import type {
   BacktestRunHistoryItem,
   BacktestRunResponse,
   BacktestSampleStatusResponse,
+  PerformanceMetrics,
   PrepareBacktestSamplesResponse,
 } from '../../types/backtest';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
@@ -31,6 +32,7 @@ import {
 } from './shared';
 
 type Props = {
+  language: 'zh' | 'en';
   normalizedCode: string;
   codeFilter: string;
   onCodeChange: (value: string) => void;
@@ -61,6 +63,7 @@ type Props = {
   sampleStatus: BacktestSampleStatusResponse | null;
   sampleStatusError: ParsedApiError | null;
   historicalAssumptions: AssumptionMap | null;
+  historicalPerformance: PerformanceMetrics | null;
   historicalSourceMetadata: {
     requestedMode: string | null;
     resolvedSource: string | null;
@@ -95,6 +98,7 @@ const GHOST_FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-
 const GHOST_CHECKBOX_CLASS = 'h-4 w-4 shrink-0 rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-accent)] accent-[var(--wolfy-accent)]';
 
 const HistoricalEvaluationPanel: React.FC<Props> = ({
+  language,
   normalizedCode,
   codeFilter,
   onCodeChange,
@@ -125,6 +129,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
   sampleStatus,
   sampleStatusError,
   historicalAssumptions,
+  historicalPerformance,
   historicalSourceMetadata,
   historicalSampleTransparency,
   isLoadingSampleStatus,
@@ -150,17 +155,18 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
   panelMode,
 }) => {
   const [currentStep, setCurrentStep] = useState<HistoricalWizardStep>('scope');
-  const sourceSummary = describeHistoricalDataSource(historicalSourceMetadata);
+  const copy = (zh: string, en: string) => (language === 'en' ? en : zh);
+  const sourceSummary = describeHistoricalDataSource(historicalSourceMetadata, language);
   const modeSummaryItems = [
     {
-      label: '评估范围',
-      value: normalizedCode || '全部标的',
-      note: normalizedCode ? '当前按单一标的过滤' : '当前查看整体汇总',
+      label: copy('评估范围', 'Evaluation scope'),
+      value: normalizedCode || copy('全部标的', 'All instruments'),
+      note: normalizedCode ? copy('当前按单一标的过滤', 'Filtered to one instrument') : copy('当前查看整体汇总', 'Viewing the overall aggregate'),
     },
     {
-      label: '样本状态',
+      label: copy('样本状态', 'Sample status'),
       value: isLoadingSampleStatus
-        ? '同步中'
+        ? copy('同步中', 'Syncing')
         : sampleStatus?.preparedCount != null
           ? String(sampleStatus.preparedCount)
           : prepareResult
@@ -168,25 +174,34 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             : '--',
       note: sampleStatus?.preparedStartDate && sampleStatus?.preparedEndDate
         ? `${sampleStatus.preparedStartDate} -> ${sampleStatus.preparedEndDate}`
-        : '样本准备状态',
+        : copy('样本准备状态', 'Sample preparation status'),
     },
     {
-      label: '评估执行',
-      value: isRunningHistoricalEval ? '运行中' : runResult ? '已有最新结果' : '等待执行',
-      note: runResult?.runId ? `运行 #${runResult.runId}` : '等待执行',
+      label: copy('评估执行', 'Evaluation run'),
+      value: isRunningHistoricalEval ? copy('运行中', 'Running') : runResult ? copy('已有最新结果', 'Latest result available') : copy('等待执行', 'Waiting to run'),
+      note: runResult?.runId ? copy(`运行 #${runResult.runId}`, `Run #${runResult.runId}`) : copy('等待执行', 'Waiting to run'),
     },
     {
-      label: '结果视图',
-      value: isLoadingResults ? '刷新中' : String(totalResults),
-      note: selectedRunId ? `锁定运行 #${selectedRunId}` : '当前过滤结果',
+      label: copy('结果视图', 'Results view'),
+      value: isLoadingResults ? copy('刷新中', 'Refreshing') : String(totalResults),
+      note: selectedRunId ? copy(`锁定运行 #${selectedRunId}`, `Locked to run #${selectedRunId}`) : copy('当前过滤结果', 'Current filtered results'),
     },
   ];
   const isProfessionalMode = panelMode === 'professional';
-  const historicalExecutionReadiness = runResult?.executionReadiness
+  const historicalExecutionReadiness = historicalPerformance?.executionReadiness
+    || runResult?.executionReadiness
     || sampleStatus?.executionReadiness
     || prepareResult?.executionReadiness
     || null;
-  const historicalNoAdviceDisclosure = runResult?.noAdviceDisclosure || null;
+  const historicalNoAdviceDisclosure = historicalPerformance?.noAdviceDisclosure || runResult?.noAdviceDisclosure || null;
+  const performanceFallbackNotice = historicalPerformance?.dataStatus === 'fallback'
+    ? {
+        title: language === 'en' ? 'Performance uses a non-primary fallback aggregate' : '表现指标使用非主来源回退汇总',
+        body: language === 'en'
+          ? 'Completed calculations do not establish primary-source authority. Review the fallback source before comparing results.'
+          : '计算已完成不代表主来源权威性成立；比较结果前请先核对回退来源。',
+      }
+    : null;
 
   const handleRunEvaluationClick = async () => {
     if (!isProfessionalMode) {
@@ -204,37 +219,37 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   const scopeSamplesSection = (
     <section className="backtest-control-section" data-testid="historical-control-section-scope-samples" data-active={currentStep === 'scope' ? 'true' : 'false'}>
-      <Card title="范围与样本" subtitle="步骤 1" className="product-section-card product-section-card--backtest-standard">
+      <Card title={copy('范围与样本', 'Scope and samples')} subtitle={copy('步骤 1', 'Step 1')} className="product-section-card product-section-card--backtest-standard">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">先确定标的范围和样本规模，再准备或重建历史评估样本。</p>
+          <p className="backtest-guided-step-helper">{copy('先确定标的范围和样本规模，再准备或重建历史评估样本。', 'Set the instrument scope and sample size before preparing or rebuilding historical evaluation samples.')}</p>
         ) : null}
         <label className="product-field">
-          <span className="theme-field-label">股票代码</span>
+          <span className="theme-field-label">{copy('股票代码', 'Stock code')}</span>
           <input
             type="text"
             className={GHOST_FIELD_CLASS}
             value={codeFilter}
             onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
             onKeyDown={onCodeEnter}
-            placeholder="输入股票代码，如 AAPL 或 600519"
-            aria-label="股票代码"
+            placeholder={copy('输入股票代码，如 AAPL 或 600519', 'Enter a stock code, such as AAPL or 600519')}
+            aria-label={copy('股票代码', 'Stock code')}
           />
-          <span className="product-field-help">留空时查看整体汇总；准备样本、清理样本时建议指定单一股票。</span>
+          <span className="product-field-help">{copy('留空时查看整体汇总；准备样本、清理样本时建议指定单一股票。', 'Leave blank to view the overall aggregate; select one instrument when preparing or clearing samples.')}</span>
         </label>
         <label className="product-field">
-          <span className="theme-field-label">分析样本数</span>
+          <span className="theme-field-label">{copy('分析样本数', 'Analysis samples')}</span>
           <div className="product-inline-fields">
             <select
               className={`${GHOST_FIELD_CLASS} appearance-none pr-10 truncate`}
               value={samplePreset}
               onChange={(event) => onSamplePresetChange(event.target.value)}
-              aria-label="分析样本数"
+              aria-label={copy('分析样本数', 'Analysis samples')}
             >
               <option value="20">20</option>
               <option value="60">60</option>
               <option value="120">120</option>
               <option value="252">252</option>
-              <option value="custom">自定义</option>
+              <option value="custom">{copy('自定义', 'Custom')}</option>
             </select>
             {samplePreset === 'custom' ? (
               <input
@@ -244,34 +259,34 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
                 max={365}
                 value={customSampleCount}
                 onChange={(event) => onCustomSampleCountChange(event.target.value)}
-                aria-label="自定义样本数"
+                aria-label={copy('自定义样本数', 'Custom sample count')}
               />
             ) : null}
           </div>
-          <span className="product-field-help">表示要准备多少条分析样本，而不是天数。</span>
+          <span className="product-field-help">{copy('表示要准备多少条分析样本，而不是天数。', 'Number of analysis samples to prepare, not the number of days.')}</span>
         </label>
         <div className="product-chip-list">
-          <span className="product-chip">目标样本数: {resolvedSampleCount} 条</span>
+          <span className="product-chip">{copy(`目标样本数: ${resolvedSampleCount} 条`, `Target sample count: ${resolvedSampleCount}`)}</span>
         </div>
         <div className="product-action-row backtest-control-actions">
-          <Button variant="secondary" onClick={onFilter}>应用筛选</Button>
-          <Button variant="secondary" onClick={() => void onPrepareSamples()} isLoading={isPreparingSamples} disabled={!normalizedCode} loadingText="准备中…">
-            准备分析样本
+          <Button variant="secondary" onClick={onFilter}>{copy('应用筛选', 'Apply filter')}</Button>
+          <Button variant="secondary" onClick={() => void onPrepareSamples()} isLoading={isPreparingSamples} disabled={!normalizedCode} loadingText={copy('准备中…', 'Preparing...')}>
+            {copy('准备分析样本', 'Prepare analysis samples')}
           </Button>
           <Button variant="outline" onClick={() => void onRebuildSamples()} disabled={isPreparingSamples || !normalizedCode}>
-            重建样本
+            {copy('重建样本', 'Rebuild samples')}
           </Button>
           <Button variant="ghost" onClick={() => void onClearSamples()} disabled={isPreparingSamples || !normalizedCode}>
-            清理样本
+            {copy('清理样本', 'Clear samples')}
           </Button>
         </div>
         {prepareResult ? (
           <Banner
             tone="success"
-            title="样本准备完成"
+            title={copy('样本准备完成', 'Sample preparation complete')}
             body={(
               <>
-                新增 {prepareResult.prepared} 条样本，跳过 {prepareResult.skippedExisting} 条已有样本。
+                {copy(`新增 ${prepareResult.prepared} 条样本，跳过 ${prepareResult.skippedExisting} 条已有样本。`, `Prepared ${prepareResult.prepared} new samples and skipped ${prepareResult.skippedExisting} existing samples.`)}
                 {prepareResult.noResultMessage ? <span className="product-banner__meta">{prepareResult.noResultMessage}</span> : null}
               </>
             )}
@@ -280,7 +295,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         ) : null}
         {prepareError ? <ApiErrorAlert error={prepareError} className="mt-4" /> : null}
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button onClick={() => setCurrentStep('params')}>继续</Button>
+          <Button onClick={() => setCurrentStep('params')}>{copy('继续', 'Continue')}</Button>
         </div>
       </Card>
     </section>
@@ -288,9 +303,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   const paramsSection = (
     <section className="backtest-control-section" data-testid="historical-control-section-params" data-active={currentStep === 'params' ? 'true' : 'false'}>
-      <Card title="评估参数" subtitle="步骤 2" className="product-section-card product-section-card--backtest-standard">
+      <Card title={copy('评估参数', 'Evaluation parameters')} subtitle={copy('步骤 2', 'Step 2')} className="product-section-card product-section-card--backtest-standard">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">设置评估窗口、成熟期和覆盖策略，确保结果口径一致。</p>
+          <p className="backtest-guided-step-helper">{copy('设置评估窗口、成熟期和覆盖策略，确保结果口径一致。', 'Set the evaluation window, maturity period, and overwrite policy to keep results comparable.')}</p>
         ) : null}
         <SummaryStrip items={modeSummaryItems} />
         <Banner
@@ -304,26 +319,36 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             </>
           )}
         />
-        <Disclosure summary="查看数据可用性说明">
+        {performanceFallbackNotice ? (
+          <div data-testid="historical-performance-fallback-notice">
+            <Banner
+              tone="warning"
+              className="mt-4"
+              title={performanceFallbackNotice.title}
+              body={performanceFallbackNotice.body}
+            />
+          </div>
+        ) : null}
+        <Disclosure summary={copy('查看数据可用性说明', 'View data availability')}>
           <div className="preview-grid">
             <div className="preview-card">
-              <p className="metric-card__label">请求方式</p>
-              <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
+              <p className="metric-card__label">{copy('请求方式', 'Requested mode')}</p>
+              <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode, language)}</p>
             </div>
             <div className="preview-card">
-              <p className="metric-card__label">实际数据来源</p>
-              <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
+              <p className="metric-card__label">{copy('实际数据来源', 'Resolved data source')}</p>
+              <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource, language)}</p>
             </div>
             <div className="preview-card">
-              <p className="metric-card__label">备用数据状态</p>
-              <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
+              <p className="metric-card__label">{copy('备用数据状态', 'Fallback status')}</p>
+              <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed, language)}</p>
             </div>
           </div>
           <p className="product-footnote mt-4">{historicalSampleTransparency}</p>
         </Disclosure>
         <div className="product-field-grid backtest-control-grid">
           <label className="product-field">
-            <span className="theme-field-label">评估窗口</span>
+            <span className="theme-field-label">{copy('评估窗口', 'Evaluation window')}</span>
             <input
               type="number"
               className={GHOST_FIELD_CLASS}
@@ -331,12 +356,12 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
               max={120}
               value={evaluationBars}
               onChange={(event) => onEvaluationBarsChange(event.target.value)}
-              aria-label="评估窗口"
+              aria-label={copy('评估窗口', 'Evaluation window')}
             />
-            <span className="product-field-help">单位是交易窗口，例如 10 = 从分析日往后评估 10 根日线。</span>
+            <span className="product-field-help">{copy('单位是交易窗口，例如 10 = 从分析日往后评估 10 根日线。', 'Measured in trading bars; for example, 10 evaluates the 10 daily bars after the analysis date.')}</span>
           </label>
           <label className="product-field">
-            <span className="theme-field-label">成熟期</span>
+            <span className="theme-field-label">{copy('成熟期', 'Maturity period')}</span>
             <input
               type="number"
               className={GHOST_FIELD_CLASS}
@@ -344,9 +369,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
               max={365}
               value={maturityDays}
               onChange={(event) => onMaturityDaysChange(event.target.value)}
-              aria-label="成熟期"
+              aria-label={copy('成熟期', 'Maturity period')}
             />
-            <span className="product-field-help">单位是自然日，例如 14 = 仅评估 14 天前的分析记录。</span>
+            <span className="product-field-help">{copy('单位是自然日，例如 14 = 仅评估 14 天前的分析记录。', 'Measured in calendar days; for example, 14 evaluates only analyses created at least 14 days ago.')}</span>
           </label>
         </div>
         <label className="product-checkbox-row">
@@ -355,13 +380,13 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             className={GHOST_CHECKBOX_CLASS}
             checked={forceReplaceResults}
             onChange={(event) => onForceReplaceResultsChange(event.target.checked)}
-            aria-label="覆盖已有同窗口结果"
+            aria-label={copy('覆盖已有同窗口结果', 'Overwrite existing results for this window')}
           />
-          <span>覆盖已有同窗口结果。这个开关只影响是否重算，不会改变窗口或成熟期定义。</span>
+          <span>{copy('覆盖已有同窗口结果。这个开关只影响是否重算，不会改变窗口或成熟期定义。', 'Overwrite existing results for this window. This only controls recalculation; it does not change the window or maturity definition.')}</span>
         </label>
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => setCurrentStep('scope')}>返回</Button>
-          <Button onClick={() => setCurrentStep('execute')}>继续</Button>
+          <Button variant="ghost" onClick={() => setCurrentStep('scope')}>{copy('返回', 'Back')}</Button>
+          <Button onClick={() => setCurrentStep('execute')}>{copy('继续', 'Continue')}</Button>
         </div>
       </Card>
     </section>
@@ -369,24 +394,24 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   const executeSection = (
     <section className="backtest-control-section" data-testid="historical-control-section-execute" data-active={currentStep === 'execute' ? 'true' : 'false'}>
-      <Card title="执行评估" subtitle="步骤 3" className="product-section-card product-section-card--backtest-flow">
+      <Card title={copy('执行评估', 'Run evaluation')} subtitle={copy('步骤 3', 'Step 3')} className="product-section-card product-section-card--backtest-flow">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">确认样本和参数后从这里执行历史评估，右侧显示板只负责展示结果。</p>
+          <p className="backtest-guided-step-helper">{copy('确认样本和参数后从这里执行历史评估，右侧显示板只负责展示结果。', 'Confirm samples and parameters, then run the historical evaluation here. The right display board shows results only.')}</p>
         ) : null}
-        <p className="product-section-copy">用历史 AI 分析信号去验证后续价格窗口的表现，只做样本级评估，不做账户净值回测。</p>
+        <p className="product-section-copy">{copy('用历史 AI 分析信号去验证后续价格窗口的表现，只做样本级评估，不做账户净值回测。', 'Uses historical analysis signals to evaluate subsequent price windows at sample level only; it is not an account-equity backtest.')}</p>
         <Banner
           tone="warning"
           className="mt-4"
-          title="这是历史信号验证，不是组合/账户回测。"
-          body="只检查单条历史分析样本在未来窗口中的方向与收益表现，不生成资金曲线、持仓路径或净值回放。"
+          title={copy('这是历史信号验证，不是组合/账户回测。', 'This validates historical signals, not a portfolio or account backtest.')}
+          body={copy('只检查单条历史分析样本在未来窗口中的方向与收益表现，不生成资金曲线、持仓路径或净值回放。', 'It checks direction and returns for individual historical analysis samples over future windows. It does not create an equity curve, position path, or net-asset replay.')}
         />
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer mt-4">
-          <Button variant="ghost" onClick={() => setCurrentStep('params')}>返回</Button>
-          <Button onClick={() => void handleRunEvaluationClick()} isLoading={isRunningHistoricalEval} loadingText="运行中…">
-            运行历史评估
+          <Button variant="ghost" onClick={() => setCurrentStep('params')}>{copy('返回', 'Back')}</Button>
+          <Button onClick={() => void handleRunEvaluationClick()} isLoading={isRunningHistoricalEval} loadingText={copy('运行中…', 'Running...')}>
+            {copy('运行历史评估', 'Run historical evaluation')}
           </Button>
           <Button variant="ghost" onClick={() => void onClearResults()} disabled={isRunningHistoricalEval || !normalizedCode}>
-            清理评估结果
+            {copy('清理评估结果', 'Clear evaluation results')}
           </Button>
         </div>
         {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
@@ -396,20 +421,20 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   const resultsSection = (
     <section className="backtest-control-section" data-testid="historical-control-section-results" data-active={currentStep === 'results' ? 'true' : 'false'}>
-      <Card title="结果复查" subtitle="步骤 4" className="product-section-card product-section-card--backtest-standard">
+      <Card title={copy('结果复查', 'Review results')} subtitle={copy('步骤 4', 'Step 4')} className="product-section-card product-section-card--backtest-standard">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">这里保留结果复查和重跑入口，详细汇总、结果表和历史记录仍在右侧显示板。</p>
+          <p className="backtest-guided-step-helper">{copy('这里保留结果复查和重跑入口，详细汇总、结果表和历史记录仍在右侧显示板。', 'Review and rerun entry points stay here; detailed aggregates, results, and history remain on the right display board.')}</p>
         ) : null}
         <div className="product-chip-list">
-          <span className="product-chip">当前结果: {runResult?.runId ? `运行 #${runResult.runId}` : selectedRunId ? `历史 #${selectedRunId}` : '暂无'}</span>
-          <span className="product-chip">结果数: {totalResults}</span>
-          <span className="product-chip">历史运行: {historyTotal}</span>
+          <span className="product-chip">{copy(`当前结果: ${runResult?.runId ? `运行 #${runResult.runId}` : selectedRunId ? `历史 #${selectedRunId}` : '暂无'}`, `Current result: ${runResult?.runId ? `Run #${runResult.runId}` : selectedRunId ? `History #${selectedRunId}` : 'None'}`)}</span>
+          <span className="product-chip">{copy(`结果数: ${totalResults}`, `Result count: ${totalResults}`)}</span>
+          <span className="product-chip">{copy(`历史运行: ${historyTotal}`, `Historical runs: ${historyTotal}`)}</span>
         </div>
-        <p className="product-footnote">右侧显示板会展示评估概览、结果表和历史记录。这个步骤只保留复查和重跑入口。</p>
+        <p className="product-footnote">{copy('右侧显示板会展示评估概览、结果表和历史记录。这个步骤只保留复查和重跑入口。', 'The right display board contains the evaluation summary, result table, and history. This step keeps only review and rerun entry points.')}</p>
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => setCurrentStep('execute')}>返回</Button>
-          <Button onClick={() => void handleRunEvaluationClick()} isLoading={isRunningHistoricalEval} loadingText="运行中…">
-            重新运行评估
+          <Button variant="ghost" onClick={() => setCurrentStep('execute')}>{copy('返回', 'Back')}</Button>
+          <Button onClick={() => void handleRunEvaluationClick()} isLoading={isRunningHistoricalEval} loadingText={copy('运行中…', 'Running...')}>
+            {copy('重新运行评估', 'Run evaluation again')}
           </Button>
         </div>
       </Card>
@@ -424,10 +449,10 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
   };
   const inspectionTone = performanceNotice?.tone || sourceSummary.tone;
   const inspectionTitle = performanceNotice
-    ? (performanceNotice.tone === 'danger' ? '当前结果存在阻断' : '当前结果需要复核')
+    ? (performanceNotice.tone === 'danger' ? copy('当前结果存在阻断', 'Current result is blocked') : copy('当前结果需要复核', 'Current result needs review'))
     : sourceSummary.title;
   const inspectionBody = performanceNotice?.message || sourceSummary.body;
-  const inspectionDetail = performanceNotice ? '请先处理数据完整性或执行状态，再继续判断样本表现。' : sourceSummary.detail;
+  const inspectionDetail = performanceNotice ? copy('请先处理数据完整性或执行状态，再继续判断样本表现。', 'Resolve data integrity or execution status before interpreting sample performance.') : sourceSummary.detail;
 
   return (
     <div
@@ -439,10 +464,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
       <div className="grid gap-3 min-w-0">
         <SectionEyebrow>Historical Evaluation</SectionEyebrow>
         <div className="grid gap-2 min-w-0">
-          <h1 className="m-0 text-[clamp(1.5rem,1.1vw+1.2rem,2.2rem)] leading-tight text-[var(--text-primary)]">历史评估工作台</h1>
+          <h1 className="m-0 text-[clamp(1.5rem,1.1vw+1.2rem,2.2rem)] leading-tight text-[var(--text-primary)]">{copy('历史评估工作台', 'Historical Evaluation Workbench')}</h1>
           <p className="m-0 text-sm leading-7 text-[var(--text-secondary)]">
-            全宽工作台现在把样本控制、诊断说明和结果区彻底拆开。左侧专注操作，中间专注说明，右侧专注汇总与结果，
-            不再把整块历史评估内容塞进 400px 的外层控制栏里。
+            {copy('全宽工作台现在把样本控制、诊断说明和结果区彻底拆开。左侧专注操作，中间专注说明，右侧专注汇总与结果，不再把整块历史评估内容塞进 400px 的外层控制栏里。', 'The full-width workbench separates sample controls, diagnostic guidance, and results. The left is for actions, the middle for context, and the right for aggregates and results.')}
           </p>
         </div>
       </div>
@@ -454,22 +478,22 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           data-panel-mode={panelMode}
         >
           <div className="backtest-control-panel__header shrink-0">
-            <SectionEyebrow>控制面板</SectionEyebrow>
-            <h2 className="backtest-control-panel__title">历史评估</h2>
+            <SectionEyebrow>{copy('控制面板', 'Control panel')}</SectionEyebrow>
+            <h2 className="backtest-control-panel__title">{copy('历史评估', 'Historical evaluation')}</h2>
             <p className="backtest-control-panel__description">
               {isProfessionalMode
-                ? '专业模式会展开全部历史评估控制区。'
-                : '普通模式按步骤收口历史评估流程，先控制样本与参数，再执行并查看结果。'}
+                ? copy('专业模式会展开全部历史评估控制区。', 'Professional mode expands all historical evaluation controls.')
+                : copy('普通模式按步骤收口历史评估流程，先控制样本与参数，再执行并查看结果。', 'Standard mode guides the evaluation by step: configure samples and parameters, then run and review results.')}
             </p>
           </div>
 
           {!isProfessionalMode ? (
-            <nav className="backtest-control-stepper" aria-label="历史评估步骤">
+            <nav className="backtest-control-stepper" aria-label={copy('历史评估步骤', 'Historical evaluation steps')}>
               {[
-                { key: 'scope', title: '范围与样本', short: '范围' },
-                { key: 'params', title: '评估参数', short: '参数' },
-                { key: 'execute', title: '执行评估', short: '执行' },
-                { key: 'results', title: '结果复查', short: '结果' },
+                { key: 'scope', title: copy('范围与样本', 'Scope and samples'), short: copy('范围', 'Scope') },
+                { key: 'params', title: copy('评估参数', 'Evaluation parameters'), short: copy('参数', 'Parameters') },
+                { key: 'execute', title: copy('执行评估', 'Run evaluation'), short: copy('执行', 'Run') },
+                { key: 'results', title: copy('结果复查', 'Review results'), short: copy('结果', 'Results') },
               ].map((step, index) => {
                 const stepKey = step.key as HistoricalWizardStep;
                 const stepOrder: HistoricalWizardStep[] = ['scope', 'params', 'execute', 'results'];
@@ -525,9 +549,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         >
           <div className="grid gap-3 min-w-0">
             <SectionEyebrow>Inspection</SectionEyebrow>
-            <h2 className="m-0 text-[1.2rem] leading-tight text-[var(--text-primary)]">历史评估显示面板</h2>
+            <h2 className="m-0 text-[1.2rem] leading-tight text-[var(--text-primary)]">{copy('历史评估显示面板', 'Historical evaluation inspection')}</h2>
             <p className="m-0 text-sm leading-7 text-[var(--text-secondary)]">
-              这个中间栏只放说明、口径和假设，固定宽度后不再被右侧结果表和左侧控制区共同挤压。
+              {copy('这个中间栏只放说明、口径和假设，固定宽度后不再被右侧结果表和左侧控制区共同挤压。', 'This middle column contains guidance, definitions, and assumptions without competing with the controls or results table.')}
             </p>
           </div>
 
@@ -544,7 +568,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
           <SummaryStrip items={modeSummaryItems} />
           <BacktestExecutionReadinessPanel
-            language="zh"
+            language={language}
             readiness={historicalExecutionReadiness}
             productReadModel={sampleStatus?.productReadModel || null}
             historicalOhlcvReadiness={sampleStatus?.historicalOhlcvReadiness || null}
@@ -555,44 +579,44 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             className="mt-4"
           />
 
-          <Disclosure summary="查看数据可用性说明">
+          <Disclosure summary={copy('查看数据可用性说明', 'View data availability')}>
             <div className="preview-grid">
               <div className="preview-card">
-                <p className="metric-card__label">请求方式</p>
-                <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
+                <p className="metric-card__label">{copy('请求方式', 'Requested mode')}</p>
+                <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode, language)}</p>
               </div>
               <div className="preview-card">
-                <p className="metric-card__label">实际数据来源</p>
-                <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
+                <p className="metric-card__label">{copy('实际数据来源', 'Resolved data source')}</p>
+                <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource, language)}</p>
               </div>
               <div className="preview-card">
-                <p className="metric-card__label">备用数据状态</p>
-                <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
+                <p className="metric-card__label">{copy('备用数据状态', 'Fallback status')}</p>
+                <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed, language)}</p>
               </div>
             </div>
             <p className="product-footnote mt-4">{historicalSampleTransparency}</p>
           </Disclosure>
 
-          <Disclosure summary="查看执行假设">
-            <AssumptionList assumptions={historicalAssumptions || undefined} emptyText="暂无执行假设" />
+          <Disclosure summary={copy('查看执行假设', 'View execution assumptions')}>
+            <AssumptionList assumptions={historicalAssumptions || undefined} emptyText={copy('暂无执行假设', 'No execution assumptions')} />
           </Disclosure>
         </section>
 
         <section className={`col-span-1 w-full min-w-0 flex flex-col gap-4 ${isProfessionalMode ? 'lg:col-span-7' : 'lg:col-span-5'}`} data-testid="backtest-display-board">
           <div className="backtest-display-board__header shrink-0">
-            <SectionEyebrow>显示面板</SectionEyebrow>
-            <h2 className="backtest-display-board__title">结果与记录</h2>
+            <SectionEyebrow>{copy('显示面板', 'Display board')}</SectionEyebrow>
+            <h2 className="backtest-display-board__title">{copy('结果与记录', 'Results and history')}</h2>
             <p className="backtest-display-board__description">
-              右侧吸收所有剩余宽度，承载汇总、结果表和历史记录，图表或大表格都只在这里伸展。
+              {copy('右侧吸收所有剩余宽度，承载汇总、结果表和历史记录，图表或大表格都只在这里伸展。', 'The right board uses the remaining width for aggregates, result tables, and history.')}
             </p>
           </div>
 
           <div className="backtest-display-board__stack flex flex-col min-w-0">
             <section className="backtest-display-section min-w-0" data-testid="historical-display-section-summary">
-              <Card title="评估概览" subtitle="关键指标" className="product-section-card product-section-card--backtest-result">
-                <p className="product-section-copy">这里只做历史信号验证，不展示账户权益曲线，也不表示完整策略盈亏回放。</p>
+              <Card title={copy('评估概览', 'Evaluation overview')} subtitle={copy('关键指标', 'Key metrics')} className="product-section-card product-section-card--backtest-result">
+                <p className="product-section-copy">{copy('这里只做历史信号验证，不展示账户权益曲线，也不表示完整策略盈亏回放。', 'This validates historical signals only. It does not show an account equity curve or a full strategy P&L replay.')}</p>
                 {(isLoadingSampleStatus || isLoadingPerf)
-                  ? <div className="product-empty-state product-empty-state--compact">正在汇总历史分析评估概览…</div>
+                  ? <div className="product-empty-state product-empty-state--compact">{copy('正在汇总历史分析评估概览…', 'Summarizing historical analysis evaluation...')}</div>
                   : <SummaryStrip items={historicalSummaryItems} />}
                 {sampleStatusError ? <ApiErrorAlert error={sampleStatusError} className="mt-4" /> : null}
                 {runResult ? <HistoricalRunSummary data={runResult} /> : null}
@@ -601,27 +625,27 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
             <section className="backtest-display-section min-w-0" data-testid="historical-display-section-results">
               <Card
-                title="评估结果"
-                subtitle={selectedRunId ? `评估结果 #${selectedRunId}` : '结果表'}
+                title={copy('评估结果', 'Evaluation results')}
+                subtitle={selectedRunId ? copy(`评估结果 #${selectedRunId}`, `Evaluation result #${selectedRunId}`) : copy('结果表', 'Results table')}
                 className="product-section-card product-section-card--backtest-result"
               >
                 {pageError ? <ApiErrorAlert error={pageError} className="mb-4" /> : null}
-                {isLoadingResults ? <div className="product-empty-state">正在加载历史分析评估结果…</div> : <HistoricalResultsTable rows={results} />}
+                {isLoadingResults ? <div className="product-empty-state">{copy('正在加载历史分析评估结果…', 'Loading historical analysis evaluation results...')}</div> : <HistoricalResultsTable rows={results} />}
                 <Pagination
                   className="mt-5"
                   currentPage={currentPage}
                   totalPages={Math.max(1, Math.ceil(totalResults / pageSize))}
                   onPageChange={onChangeResultsPage}
                 />
-                <p className="product-footnote">共 {totalResults} 条历史分析评估结果。</p>
+                <p className="product-footnote">{copy(`共 ${totalResults} 条历史分析评估结果。`, `${totalResults} historical analysis evaluation results.`)}</p>
               </Card>
             </section>
 
             <section className="backtest-display-section min-w-0" data-testid="historical-display-section-history">
-              <Card title="历史记录" subtitle="次级区域" className="product-section-card product-section-card--backtest-secondary">
+              <Card title={copy('历史记录', 'History')} subtitle={copy('次级区域', 'Secondary')} className="product-section-card product-section-card--backtest-secondary">
                 {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
                 {isLoadingHistory ? (
-                  <div className="product-empty-state">正在加载历史分析评估运行记录…</div>
+                  <div className="product-empty-state">{copy('正在加载历史分析评估运行记录…', 'Loading historical analysis evaluation history...')}</div>
                 ) : (
                   <HistoricalRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={(run) => void handleOpenHistoricalRun(run)} />
                 )}
@@ -631,7 +655,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
                   totalPages={Math.max(1, Math.ceil(historyTotal / historyPageSize))}
                   onPageChange={onChangeHistoryPage}
                 />
-                <p className="product-footnote">共 {historyTotal} 条历史分析评估运行记录。</p>
+                <p className="product-footnote">{copy(`共 ${historyTotal} 条历史分析评估运行记录。`, `${historyTotal} historical analysis evaluation runs.`)}</p>
               </Card>
             </section>
           </div>

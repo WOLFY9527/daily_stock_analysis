@@ -46,6 +46,19 @@ def _source_indicates_cached(payload: Dict[str, Any]) -> bool:
     return any(token in source for token in ("cache", "cached", "stale"))
 
 
+def _source_indicates_non_primary_performance(payload: Dict[str, Any]) -> bool:
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+    evaluation_mode = str(payload.get("evaluation_mode") or "").strip().lower()
+    source = _source_text(payload)
+    return (
+        payload.get("fallback_used") is True
+        or bool(diagnostics.get("fallback_reason"))
+        or "fallback" in evaluation_mode
+        or "proxy" in source
+        or ("deterministic" in evaluation_mode and "stored" in source)
+    )
+
+
 def _append_unique(items: List[str], value: Any) -> None:
     text = _clean_text(value)
     if text and text not in items:
@@ -148,7 +161,7 @@ def build_execution_readiness_contract(
             for item in reason_codes
             if item in {"missing_benchmark", "missing_adjustments", "stale_data", "missing_factor_inputs"}
         ]
-        state = "degraded" if degraded else "executable"
+        state = "degraded" if degraded or _source_indicates_non_primary_performance(payload) else "executable"
         result_contract_available = True
         engine_state = engine_state or "enabled"
     elif data_sufficiency.get("calculation_state") == "degraded":
@@ -235,6 +248,11 @@ def build_performance_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     if _source_indicates_fixture(payload):
         data_status = "fixture_or_example_data"
         limitations.append("Backtest data source is fixture or example data; metrics are not tradable evidence.")
+    elif data_status == "ready" and _source_indicates_non_primary_performance(payload):
+        data_status = "fallback"
+        limitations.append(
+            "Performance metrics are a non-primary fallback aggregate; calculation completion does not establish primary-source authority."
+        )
     elif data_status == "ready" and _source_indicates_cached(payload):
         data_status = "stale_or_cached"
         limitations.append("Metrics are derived from stored or cached backtest outputs; verify freshness before research use.")

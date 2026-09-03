@@ -895,7 +895,7 @@ function buildUsBreadthPanel(sourcePanel: MarketOverviewPanel | undefined): Mark
   };
 }
 
-function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
+function buildUsBreadthDisclosure(panel: MarketOverviewPanel | undefined, language: 'zh' | 'en'): {
   eyebrow: string;
   description: string;
   sourceLabel: string;
@@ -903,6 +903,14 @@ function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
 } {
   if (hasStructuredUsBreadthMetrics(panel) && !isPolygonComputedUsBreadth(panel)) {
     const fullCoverage = !panel?.isPartial && (panel?.missingMetrics || []).length === 0;
+    if (language === 'en') {
+      return {
+        eyebrow: 'Market breadth',
+        description: fullCoverage ? 'Advancers, decliners, highs, and lows are broadly covered' : 'Advancers, decliners, highs, or lows still need coverage',
+        sourceLabel: 'Breadth snapshot',
+        notice: fullCoverage ? 'Breadth coverage is substantial; use it alongside risk evidence.' : 'Breadth coverage has gaps; compare it with other risk signals first.',
+      };
+    }
     return {
       eyebrow: '市场宽度',
       description: fullCoverage ? '上涨/下跌与新高/新低统计较完整' : '上涨/下跌与高低点统计仍待补齐',
@@ -912,11 +920,27 @@ function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
   }
   if (isPolygonComputedUsBreadth(panel)) {
     const highLowMissing = (panel?.missingMetrics || []).some((symbol) => US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol));
+    if (language === 'en') {
+      return {
+        eyebrow: 'Market breadth',
+        description: `Advancers and decliners are available${highLowMissing ? '; highs and lows still need coverage' : '; use as a breadth-diffusion input'}`,
+        sourceLabel: 'Breadth snapshot',
+        notice: 'Breadth coverage remains incomplete and is observation-only.',
+      };
+    }
     return {
       eyebrow: '市场宽度',
       description: `上涨/下跌统计可用${highLowMissing ? '，新高/新低仍待补齐' : '，可辅助判断扩散度'}`,
       sourceLabel: '宽度快照',
       notice: '当前宽度统计仍不完整，仅供观察。',
+    };
+  }
+  if (language === 'en') {
+    return {
+      eyebrow: 'Market breadth',
+      description: 'Sector-strength snapshot',
+      sourceLabel: 'Breadth snapshot',
+      notice: 'Only partial breadth signals are available; treat them as observations.',
     };
   }
   return {
@@ -964,7 +988,7 @@ function buildUsBreadthCoverage(panel?: MarketOverviewPanel): {
   };
 }
 
-function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTruthStripView {
+function buildUsBreadthTruthStripView(panel: MarketOverviewPanel | undefined, language: 'zh' | 'en'): UsBreadthTruthStripView {
   const coverage = buildUsBreadthCoverage(panel);
   const structuredMetrics = hasStructuredUsBreadthMetrics(panel);
   const sourceText = [
@@ -993,7 +1017,9 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
     && !unavailable
     && !coverageGap;
 
-  const sourceLabel = unavailable
+  const sourceLabel = language === 'en'
+    ? (unavailable ? 'Evidence pending' : scoreGradeReady ? 'Broad coverage' : coverageGap ? 'Coverage pending' : proxyOnly || staleOrFallback ? 'Observation only' : 'Breadth unconfirmed')
+    : unavailable
     ? '待补数据'
     : scoreGradeReady
       ? '统计较完整'
@@ -1002,7 +1028,9 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
         : proxyOnly || staleOrFallback
           ? '仅作观察'
           : '宽度待确认';
-  const stateLabel = scoreGradeReady
+  const stateLabel = language === 'en'
+    ? (scoreGradeReady ? 'Breadth usable' : unavailable ? 'Breadth insufficient' : 'Breadth observation only')
+    : scoreGradeReady
     ? '宽度可参考'
     : unavailable
       ? '宽度不足'
@@ -1014,7 +1042,9 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
       : proxyOnly
         ? 'info'
         : 'caution';
-  const freshnessLabel = US_BREADTH_FRESHNESS_LABELS[String(panel?.freshness || 'cached')] || '待确认';
+  const freshnessLabel = language === 'en'
+    ? ({ live: 'Available', delayed: 'Delayed', cached: 'Cached', stale: 'Stale', fallback: 'Fallback', mock: 'Example', unavailable: 'Unavailable' }[String(panel?.freshness || 'cached')] || 'Unconfirmed')
+    : US_BREADTH_FRESHNESS_LABELS[String(panel?.freshness || 'cached')] || '待确认';
   const freshnessVariant = panel?.freshness === 'live'
     ? 'success'
     : panel?.freshness === 'delayed' || panel?.freshness === 'cached'
@@ -1026,7 +1056,9 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
           : panel?.freshness === 'unavailable'
             ? 'danger'
             : 'caution';
-  const coverageLabel = `覆盖 ${coverage.fulfilledCount}/${coverage.requiredCount}`;
+  const coverageLabel = language === 'en'
+    ? `Coverage ${coverage.fulfilledCount}/${coverage.requiredCount}`
+    : `覆盖 ${coverage.fulfilledCount}/${coverage.requiredCount}`;
   const coverageVariant = scoreGradeReady
     ? 'success'
     : coverageGap
@@ -1034,11 +1066,23 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
       : structuredMetrics
         ? 'info'
         : 'neutral';
-  const limitedMissing = coverage.missingSymbols.slice(0, 4).map((symbol) => formatUsBreadthInputLabel(symbol));
+  const limitedMissing = coverage.missingSymbols.slice(0, 4).map((symbol) => language === 'en' ? symbol : formatUsBreadthInputLabel(symbol));
   const missingSummary = coverageGap && (structuredMetrics || unavailable)
-    ? `缺口：${limitedMissing.join('、')}${coverage.missingSymbols.length > 4 ? ` 等${coverage.missingSymbols.length}项` : ''}`
+    ? (language === 'en'
+      ? `Missing: ${limitedMissing.join(', ')}${coverage.missingSymbols.length > 4 ? ` and ${coverage.missingSymbols.length - 4} more` : ''}`
+      : `缺口：${limitedMissing.join('、')}${coverage.missingSymbols.length > 4 ? ` 等${coverage.missingSymbols.length}项` : ''}`)
     : null;
-  const summary = scoreGradeReady
+  const summary = language === 'en'
+    ? (scoreGradeReady
+      ? 'Breadth-diffusion coverage is substantial; compare it with indices and volatility.'
+      : unavailable
+        ? 'Breadth statistics are insufficient; observe whether indices and volatility continue to confirm each other.'
+        : coverageGap
+          ? 'Breadth coverage has gaps and is suitable only as supporting observation.'
+          : staleOrFallback
+            ? 'The latest available breadth snapshot may be delayed.'
+            : 'Breadth signals are visible but need confirmation from additional evidence.')
+    : scoreGradeReady
     ? '当前宽度扩散统计较完整，可与指数和波动一起参考。'
     : unavailable
       ? '当前宽度统计不足，先观察指数与波动是否继续共振。'
@@ -1064,8 +1108,9 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
 
 const UsBreadthTruthStrip: React.FC<{
   panel?: MarketOverviewPanel;
-}> = ({ panel }) => {
-  const view = buildUsBreadthTruthStripView(panel);
+  language: 'zh' | 'en';
+}> = ({ panel, language }) => {
+  const view = buildUsBreadthTruthStripView(panel, language);
   return (
     <div
       data-testid="market-overview-us-breadth-truth-strip"
@@ -1085,7 +1130,12 @@ const UsBreadthTruthStrip: React.FC<{
   );
 }
 
-function unavailableMarketItem(symbol: string, label: string, message: string): MarketOverviewItem {
+function unavailableMarketItem(
+  symbol: string,
+  label: string,
+  message: string,
+  language: 'zh' | 'en' = 'zh',
+): MarketOverviewItem {
   return {
     symbol,
     label,
@@ -1096,7 +1146,7 @@ function unavailableMarketItem(symbol: string, label: string, message: string): 
     riskDirection: 'neutral',
     trend: [],
     source: 'unavailable',
-    sourceLabel: '未接入',
+    sourceLabel: language === 'en' ? 'Not connected' : '未接入',
     freshness: 'unavailable',
     isFallback: false,
     isUnavailable: true,
@@ -1105,14 +1155,16 @@ function unavailableMarketItem(symbol: string, label: string, message: string): 
   };
 }
 
-function buildCryptoLiquidityPanel(sourcePanel: MarketOverviewPanel | undefined): MarketOverviewPanel {
+function buildCryptoLiquidityPanel(sourcePanel: MarketOverviewPanel | undefined, language: 'zh' | 'en'): MarketOverviewPanel {
+  const unavailable = language === 'en' ? 'Unavailable' : '暂不可用';
+  const notConnected = language === 'en' ? 'Not connected' : '未接入';
   const fallbackItems = [
-    unavailableMarketItem('BTC_FUNDING', 'BTC 资金费率', '暂不可用'),
-    unavailableMarketItem('ETH_FUNDING', 'ETH 资金费率', '暂不可用'),
-    unavailableMarketItem('SOL_FUNDING', 'SOL 资金费率', '暂不可用'),
-    unavailableMarketItem('BNB_FUNDING', 'BNB 资金费率', '暂不可用'),
-    unavailableMarketItem('STABLECOIN_LIQUIDITY', '稳定币流动性', '未接入'),
-    unavailableMarketItem('BTC_DOMINANCE', 'BTC 占比', '未接入'),
+    unavailableMarketItem('BTC_FUNDING', 'BTC 资金费率', unavailable, language),
+    unavailableMarketItem('ETH_FUNDING', 'ETH 资金费率', unavailable, language),
+    unavailableMarketItem('SOL_FUNDING', 'SOL 资金费率', unavailable, language),
+    unavailableMarketItem('BNB_FUNDING', 'BNB 资金费率', unavailable, language),
+    unavailableMarketItem('STABLECOIN_LIQUIDITY', '稳定币流动性', notConnected, language),
+    unavailableMarketItem('BTC_DOMINANCE', 'BTC 占比', notConnected, language),
   ];
   const panel = buildFilteredPanel(
     sourcePanel,
@@ -2715,7 +2767,7 @@ const CnShortSentimentCard: React.FC<{
             </div>
           ))}
         </div>
-        {metrics.length > 6 ? <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">其余 {metrics.length - 6} 项已折叠</p> : null}
+        {metrics.length > 6 ? <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? `${metrics.length - 6} more items collapsed` : `其余 ${metrics.length - 6} 项已折叠`}</p> : null}
         {loading ? <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.loading')}</div> : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || (unavailable ? unavailableCopy : language === 'en' ? 'Available' : '可用')} />
       </div>
@@ -2746,7 +2798,7 @@ const ContextMetricModuleCard: React.FC<{
   refreshing = false,
   onRefresh,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const renderableItems = panel.items.filter(isRenderableMarketOverviewItem);
   const visibleItems = renderableItems.slice(0, 8);
   const hiddenItemCount = Math.max(renderableItems.length - visibleItems.length, 0);
@@ -2790,7 +2842,7 @@ const ContextMetricModuleCard: React.FC<{
           ))}
         </div>
         {hiddenItemCount > 0 ? (
-          <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">其余 {hiddenItemCount} 项已折叠</p>
+          <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? `${hiddenItemCount} more items collapsed` : `其余 ${hiddenItemCount} 项已折叠`}</p>
         ) : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
       </div>
@@ -2899,7 +2951,66 @@ function useMarketOverviewWorkbenchModel({
   );
 
   const usBreadthModulePanel = buildUsBreadthPanel(panels.usBreadth);
-  const usBreadthDisclosure = buildUsBreadthDisclosure(panels.usBreadth);
+  const usBreadthDisclosure = buildUsBreadthDisclosure(panels.usBreadth, language);
+  const contextModuleCopy = language === 'en'
+    ? {
+        usBreadthTitle: 'US Market Breadth',
+        sectorTitle: 'Sector Health',
+        sectorEyebrow: 'Sector ETFs',
+        sectorDescription: 'US sector-strength signals',
+        partial: 'Partially available',
+        macroPressureTitle: 'Macro Pressure',
+        macroContext: 'Supporting context',
+        macroSource: 'Macro context',
+        fxCnhTitle: 'CNH / External Pressure',
+        ratesTitle: 'Rates Core',
+        globalMacro: 'Global macro',
+        fxCommoditiesTitle: 'FX / Commodities',
+        fxCommoditiesEyebrow: 'USD / real assets',
+        globalRiskTitle: 'Global Risk',
+        globalRiskEyebrow: 'Risk assets',
+        globalRiskSource: 'Risk context',
+        cryptoMomentumTitle: 'Crypto Momentum',
+        cryptoMomentumEyebrow: 'Trend',
+        cryptoMomentumDescription: '24H momentum for BTC / ETH / SOL / BNB',
+        cryptoLiquidityTitle: 'Crypto Liquidity',
+        cryptoLiquidityEyebrow: 'Funding / liquidity',
+        cryptoLiquidityDescription: 'Funding rates, stablecoins, and dominance remain unavailable until evidence is complete.',
+        cryptoLiquiditySource: 'Partially available / evidence pending',
+        cryptoRiskTitle: 'Crypto Risk Context',
+        cryptoRiskEyebrow: 'Macro pressure',
+        cryptoRiskDescription: 'DXY / US10Y / VIX as supporting risk pressure',
+        cryptoRiskSource: 'Macro pressure',
+      }
+    : {
+        usBreadthTitle: '美股宽度',
+        sectorTitle: '行业健康度',
+        sectorEyebrow: '行业 ETF',
+        sectorDescription: '美股行业强弱线索',
+        partial: '部分可用',
+        macroPressureTitle: '宏观压力',
+        macroContext: '辅助上下文',
+        macroSource: '宏观上下文',
+        fxCnhTitle: 'CNH / 外部压力',
+        ratesTitle: '利率核心',
+        globalMacro: '全球宏观',
+        fxCommoditiesTitle: '外汇 / 商品',
+        fxCommoditiesEyebrow: '美元 / 实物资产',
+        globalRiskTitle: '全球风险',
+        globalRiskEyebrow: '风险资产',
+        globalRiskSource: '风险上下文',
+        cryptoMomentumTitle: '加密动量',
+        cryptoMomentumEyebrow: '趋势',
+        cryptoMomentumDescription: 'BTC / ETH / SOL / BNB 的 24H 动量',
+        cryptoLiquidityTitle: '加密流动性',
+        cryptoLiquidityEyebrow: '资金费率 / 流动性',
+        cryptoLiquidityDescription: '资金费率；稳定币与占比在证据补齐前保持不可用',
+        cryptoLiquiditySource: '部分可用 / 证据不足',
+        cryptoRiskTitle: '加密风险上下文',
+        cryptoRiskEyebrow: '宏观压力',
+        cryptoRiskDescription: 'DXY / US10Y / VIX 作为辅助风险压力',
+        cryptoRiskSource: '宏观压力',
+      };
 
   const moduleNodes: Record<MarketOverviewModuleId, React.ReactNode> = {
     globalIndices: globalIndicesCard,
@@ -2921,8 +3032,8 @@ function useMarketOverviewWorkbenchModel({
       <ContextMetricModuleCard
         moduleId="cnHkIndices"
         title={t('marketOverviewPage.cards.cnIndices.title')}
-        eyebrow="A股 / 港股"
-        description="上证 / 深成 / 创业板 / 沪深300 / 恒生 / A50 / USDCNH"
+        eyebrow={language === 'en' ? 'China / Hong Kong' : 'A股 / 港股'}
+        description={language === 'en' ? 'Shanghai / Shenzhen / ChiNext / CSI 300 / Hang Seng / A50 / USDCNH' : '上证 / 深成 / 创业板 / 沪深300 / 恒生 / A50 / USDCNH'}
         panel={buildMetricPanel(panels, 'CnHkIndexCoreModule', ['SHCOMP', 'SZCOMP', 'CHINEXT', 'CSI300', 'HSI', 'HSTECH', 'A50', 'USDCNH'])}
         sourceLabel={t('marketOverviewPage.cards.cnIndices.source')}
         refreshing={refreshingPanel === 'cnIndices'}
@@ -2934,8 +3045,8 @@ function useMarketOverviewWorkbenchModel({
     cryptoCore: (
       <ContextMetricModuleCard
         moduleId="cryptoCore"
-        title="加密核心"
-        eyebrow="加密资产"
+        title={language === 'en' ? 'Crypto Core' : '加密核心'}
+        eyebrow={language === 'en' ? 'Crypto assets' : '加密资产'}
         description="BTC / ETH / SOL / BNB"
         panel={buildMetricPanel(panels, 'CryptoCoreModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
         sourceLabel={t('marketOverviewPage.cards.crypto.source')}
@@ -3048,13 +3159,13 @@ function useMarketOverviewWorkbenchModel({
     usBreadth: (
       <ContextMetricModuleCard
         moduleId="usBreadth"
-        title="美股宽度"
+        title={contextModuleCopy.usBreadthTitle}
         eyebrow={usBreadthDisclosure.eyebrow}
         description={usBreadthDisclosure.description}
         notice={usBreadthDisclosure.notice}
         panel={usBreadthModulePanel}
         sourceLabel={usBreadthDisclosure.sourceLabel}
-        insightStrip={<UsBreadthTruthStrip panel={panels.usBreadth} />}
+        insightStrip={<UsBreadthTruthStrip panel={panels.usBreadth} language={language} />}
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           onRefreshPanel('usBreadth');
@@ -3064,15 +3175,15 @@ function useMarketOverviewWorkbenchModel({
     usSectorRotation: (
       <ContextMetricModuleCard
         moduleId="usSectorRotation"
-        title="行业健康度"
-        eyebrow="行业 ETF"
-        description="美股行业强弱线索"
+        title={contextModuleCopy.sectorTitle}
+        eyebrow={contextModuleCopy.sectorEyebrow}
+        description={contextModuleCopy.sectorDescription}
         panel={buildFilteredPanel(
           panels.usBreadth,
           'UsSectorHealthModule',
           ['STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'XLK', 'XLF', 'XLY', 'XLE', 'XLV', 'XLI', 'XLP', 'XLU', 'SECTOR_PROXY_UNAVAILABLE'],
         )}
-        sourceLabel="部分可用"
+        sourceLabel={contextModuleCopy.partial}
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           onRefreshPanel('usBreadth');
@@ -3082,11 +3193,11 @@ function useMarketOverviewWorkbenchModel({
     macroContext: (
       <ContextMetricModuleCard
         moduleId="macroContext"
-        title="宏观压力"
-        eyebrow="辅助上下文"
+        title={contextModuleCopy.macroPressureTitle}
+        eyebrow={contextModuleCopy.macroContext}
         description="DXY / US10Y / VIX / BTC"
         panel={buildMetricPanel(panels, 'UsMacroContextModule', ['DXY', 'US10Y', 'VIX', 'BTC'])}
-        sourceLabel="宏观上下文"
+        sourceLabel={contextModuleCopy.macroSource}
       />
     ),
     cnBreadth: (
@@ -3144,7 +3255,7 @@ function useMarketOverviewWorkbenchModel({
     fxCnhContext: (
       <ContextMetricModuleCard
         moduleId="fxCnhContext"
-        title="CNH / 外部压力"
+        title={contextModuleCopy.fxCnhTitle}
         eyebrow="FX / RATES"
         description="USDCNH / DXY / US10Y"
         panel={buildMetricPanel(panels, 'CnhContextModule', ['USDCNH', 'DXY', 'US10Y'])}
@@ -3154,8 +3265,8 @@ function useMarketOverviewWorkbenchModel({
     macroRates: (
       <ContextMetricModuleCard
         moduleId="macroRates"
-        title="利率核心"
-        eyebrow="全球宏观"
+        title={contextModuleCopy.ratesTitle}
+        eyebrow={contextModuleCopy.globalMacro}
         description="US10Y / US2Y / US30Y"
         panel={buildMetricPanel(panels, 'MacroRatesModule', ['US10Y', 'US2Y', 'US30Y'])}
         sourceLabel={t('marketOverviewPage.cards.rates.source')}
@@ -3168,8 +3279,8 @@ function useMarketOverviewWorkbenchModel({
     macroFxCommodities: (
       <ContextMetricModuleCard
         moduleId="macroFxCommodities"
-        title="外汇 / 商品"
-        eyebrow="美元 / 实物资产"
+        title={contextModuleCopy.fxCommoditiesTitle}
+        eyebrow={contextModuleCopy.fxCommoditiesEyebrow}
         description="DXY / USDJPY / USDCNH / GOLD / WTI"
         panel={buildMetricPanel(panels, 'MacroFxCommoditiesModule', ['DXY', 'USDJPY', 'USDCNH', 'GOLD', 'WTI'])}
         sourceLabel={t('marketOverviewPage.cards.fxCommodities.source')}
@@ -3182,19 +3293,19 @@ function useMarketOverviewWorkbenchModel({
     globalRisk: (
       <ContextMetricModuleCard
         moduleId="globalRisk"
-        title="全球风险"
-        eyebrow="风险资产"
+        title={contextModuleCopy.globalRiskTitle}
+        eyebrow={contextModuleCopy.globalRiskEyebrow}
         description="VIX / BTC / SPX"
         panel={buildMetricPanel(panels, 'GlobalRiskModule', ['VIX', 'BTC', 'SPX'])}
-        sourceLabel="风险上下文"
+        sourceLabel={contextModuleCopy.globalRiskSource}
       />
     ),
     cryptoMomentum: (
       <ContextMetricModuleCard
         moduleId="cryptoMomentum"
-        title="加密动量"
-        eyebrow="趋势"
-        description="BTC / ETH / SOL / BNB 的 24H 动量"
+        title={contextModuleCopy.cryptoMomentumTitle}
+        eyebrow={contextModuleCopy.cryptoMomentumEyebrow}
+        description={contextModuleCopy.cryptoMomentumDescription}
         panel={buildMetricPanel(panels, 'CryptoMomentumModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
         sourceLabel={t('marketOverviewPage.cards.crypto.source')}
         refreshing={refreshingPanel === 'crypto'}
@@ -3206,11 +3317,11 @@ function useMarketOverviewWorkbenchModel({
     cryptoLiquidity: (
       <ContextMetricModuleCard
         moduleId="cryptoLiquidity"
-        title="加密流动性"
-        eyebrow="资金费率 / 流动性"
-        description="资金费率；稳定币与占比在证据补齐前保持不可用"
-        panel={buildCryptoLiquidityPanel(panels.crypto)}
-        sourceLabel="部分可用 / 证据不足"
+        title={contextModuleCopy.cryptoLiquidityTitle}
+        eyebrow={contextModuleCopy.cryptoLiquidityEyebrow}
+        description={contextModuleCopy.cryptoLiquidityDescription}
+        panel={buildCryptoLiquidityPanel(panels.crypto, language)}
+        sourceLabel={contextModuleCopy.cryptoLiquiditySource}
         refreshing={refreshingPanel === 'crypto'}
         onRefresh={() => {
           onRefreshPanel('crypto');
@@ -3220,11 +3331,11 @@ function useMarketOverviewWorkbenchModel({
     cryptoRiskContext: (
       <ContextMetricModuleCard
         moduleId="cryptoRiskContext"
-        title="加密风险上下文"
-        eyebrow="宏观压力"
-        description="DXY / US10Y / VIX 作为辅助风险压力"
+        title={contextModuleCopy.cryptoRiskTitle}
+        eyebrow={contextModuleCopy.cryptoRiskEyebrow}
+        description={contextModuleCopy.cryptoRiskDescription}
         panel={buildMetricPanel(panels, 'CryptoRiskContextModule', ['DXY', 'US10Y', 'VIX'])}
-        sourceLabel="宏观压力"
+        sourceLabel={contextModuleCopy.cryptoRiskSource}
       />
     ),
     cryptoSentiment: (

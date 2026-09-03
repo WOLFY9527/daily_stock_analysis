@@ -6557,7 +6557,7 @@ function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
   const isEnglish = locale === 'en';
   return (
     <section
-      className="mt-3 min-w-0 rounded-[10px] border border-amber-300/22 bg-amber-300/[0.075] px-4 py-3 text-amber-50/88"
+      className="mt-3 min-w-0 rounded-[10px] border border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)] px-4 py-3 text-[color:var(--state-warning-text)]"
       data-testid="guest-preview-unavailable-state"
       role="status"
       aria-live="polite"
@@ -6565,7 +6565,7 @@ function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
       <p className="text-sm font-semibold">
         {isEnglish ? 'Public preview is temporarily unavailable' : '公开预览暂时不可用'}
       </p>
-      <p className="mt-1 text-xs leading-5 text-amber-50/68">
+      <p className="mt-1 text-xs leading-5 text-[color:var(--state-warning-text)]">
         {isEnglish
           ? 'No public research preview is available right now. Try again later, or sign in to continue with saved research workflows.'
           : '当前没有可用的公开研究预览。可以稍后再试，或登录后继续使用已保存的研究流程。'}
@@ -6889,7 +6889,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         if (isCancelled) {
           return;
         }
-        setGuestMarketBriefing(normalizeMarketBriefingConsumerCopy(response));
+        setGuestMarketBriefing(normalizeMarketBriefingConsumerCopy(response, locale));
       })
       .catch(() => {
         if (isCancelled) {
@@ -6907,7 +6907,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return () => {
       isCancelled = true;
     };
-  }, [isGuest]);
+  }, [isGuest, locale]);
 
   useEffect(() => {
     if (isGuest || !showNeutralHomeStart) {
@@ -6935,7 +6935,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           return;
         }
         if (briefingResult.status === 'fulfilled') {
-          setMemberMarketBriefing(normalizeMarketBriefingConsumerCopy(briefingResult.value));
+          setMemberMarketBriefing(normalizeMarketBriefingConsumerCopy(briefingResult.value, locale));
         } else {
           setMemberMarketBriefing(null);
           setMemberMarketBriefingUnavailable(true);
@@ -6952,7 +6952,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return () => {
       isCancelled = true;
     };
-  }, [isGuest, showNeutralHomeStart]);
+  }, [isGuest, locale, showNeutralHomeStart]);
 
   useEffect(() => {
     if (isGuest || !activeEvidenceTicker) {

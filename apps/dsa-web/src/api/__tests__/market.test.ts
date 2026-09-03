@@ -231,6 +231,26 @@ describe('market temperature evidence normalization', () => {
     }
   });
 
+  it('keeps the canonical market warning vocabulary localized for English consumers', () => {
+    expect(marketModule.normalizeMarketConsumerText('当前真实数据不足，市场温度仅供界面演示。', 'en'))
+      .toBe('Key market data is currently insufficient; no market-temperature conclusion is produced.');
+    expect(marketModule.normalizeMarketConsumerText('备用示例数据仅用于保持界面结构', 'en'))
+      .toBe('Sample data is shown only to explain the page structure');
+    expect(marketModule.normalizeMarketConsumerText('当前关键数据不足，暂不生成强市场判断。', 'en'))
+      .toBe('Key market data is currently insufficient; no strong market conclusion is produced.');
+    const briefing = marketModule.normalizeMarketBriefingConsumerCopy({
+      source: 'fallback',
+      sourceLabel: '最近可用数据',
+      warning: '当前关键数据不足，暂不生成强市场判断。',
+      items: [{ title: '评分已暂停', message: '最近可用数据仅保留市场结构观察，不参与市场温度评分。' }],
+    }, 'en');
+    expect(briefing.sourceLabel).toBe('Delayed data available');
+    expect(briefing.items[0]).toMatchObject({
+      title: 'Scoring is paused',
+      message: 'The latest available data preserves market-structure observations only and does not contribute to market-temperature scoring.',
+    });
+  });
+
   it('rewrites fallback demo wording into consumer-safe observation copy', () => {
     const panel = marketModule.normalizeMarketOverviewPanelConsumerCopy({
       panelName: 'ChinaIndicesCard',

@@ -91,6 +91,19 @@ const ZH_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
   SOL: { primary: 'Solana', secondary: 'SOL' },
   SOLANA: { primary: 'Solana', secondary: 'SOL' },
   BNB: { primary: 'BNB', secondary: 'BNB' },
+  ADVANCERS: { primary: '上涨家数', secondary: 'ADVANCERS' },
+  DECLINERS: { primary: '下跌家数', secondary: 'DECLINERS' },
+  UNCHANGED: { primary: '平盘家数', secondary: 'UNCHANGED' },
+  ADVANCE_DECLINE_RATIO: { primary: '涨跌家数比', secondary: 'A/D' },
+  NEW_HIGHS: { primary: '新高家数', secondary: 'NEW HIGHS' },
+  NEW_LOWS: { primary: '新低家数', secondary: 'NEW LOWS' },
+  HIGH_LOW_RATIO: { primary: '新高/新低比', secondary: 'H/L' },
+  BTC_FUNDING: { primary: 'BTC 资金费率', secondary: 'BTC FUNDING' },
+  ETH_FUNDING: { primary: 'ETH 资金费率', secondary: 'ETH FUNDING' },
+  SOL_FUNDING: { primary: 'SOL 资金费率', secondary: 'SOL FUNDING' },
+  BNB_FUNDING: { primary: 'BNB 资金费率', secondary: 'BNB FUNDING' },
+  STABLECOIN_LIQUIDITY: { primary: '稳定币流动性', secondary: 'STABLECOIN LIQUIDITY' },
+  BTC_DOMINANCE: { primary: 'BTC 占比', secondary: 'BTC DOMINANCE' },
 };
 
 const EN_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
@@ -155,6 +168,19 @@ const EN_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
   SOL: { primary: 'Solana', secondary: 'SOL' },
   SOLANA: { primary: 'Solana', secondary: 'SOL' },
   BNB: { primary: 'BNB', secondary: 'BNB' },
+  ADVANCERS: { primary: 'Advancers', secondary: 'ADVANCERS' },
+  DECLINERS: { primary: 'Decliners', secondary: 'DECLINERS' },
+  UNCHANGED: { primary: 'Unchanged', secondary: 'UNCHANGED' },
+  ADVANCE_DECLINE_RATIO: { primary: 'Advance/decline ratio', secondary: 'A/D' },
+  NEW_HIGHS: { primary: 'New highs', secondary: 'NEW HIGHS' },
+  NEW_LOWS: { primary: 'New lows', secondary: 'NEW LOWS' },
+  HIGH_LOW_RATIO: { primary: 'High/low ratio', secondary: 'H/L' },
+  BTC_FUNDING: { primary: 'BTC funding rate', secondary: 'BTC FUNDING' },
+  ETH_FUNDING: { primary: 'ETH funding rate', secondary: 'ETH FUNDING' },
+  SOL_FUNDING: { primary: 'SOL funding rate', secondary: 'SOL FUNDING' },
+  BNB_FUNDING: { primary: 'BNB funding rate', secondary: 'BNB FUNDING' },
+  STABLECOIN_LIQUIDITY: { primary: 'Stablecoin liquidity', secondary: 'STABLECOIN LIQUIDITY' },
+  BTC_DOMINANCE: { primary: 'BTC dominance', secondary: 'BTC DOMINANCE' },
 };
 
 function normalizeToken(value?: string | null): string {

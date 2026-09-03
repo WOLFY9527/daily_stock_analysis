@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8324,
-      "sha256": "94017c683d6ace0126f9816766c98030c098e8a534f8f3a37fb752811c08e4b1"
+      "count": 8325,
+      "sha256": "d90425c87b5e3e5dd628de8b02d40d163bcf041577521b80957d3b46d7db52c6"
     },
     "tests": [
       {
@@ -322,6 +322,11 @@
         "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_root_lists_guest_analysis_by_symbol",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_root_openapi_does_not_advertise_task_filters",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_root_projects_safe_admin_audit_fields_with_reason_code",

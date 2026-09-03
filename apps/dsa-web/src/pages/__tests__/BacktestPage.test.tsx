@@ -8,6 +8,7 @@ import type {
   BacktestResultItem,
   BacktestRunHistoryItem,
   BacktestRunResponse,
+  PerformanceMetrics,
   PrepareBacktestSamplesResponse,
   RuleBacktestParseResponse,
   RuleBacktestRunResponse,
@@ -1373,6 +1374,81 @@ describe('BacktestPage', () => {
     expect(within(table).getByText('Historical exit signal')).toBeInTheDocument();
     expect(table).not.toHaveTextContent(/\b(advice|recommendation|buy|sell|hold|target price|stop-loss|position sizing)\b/i);
     expectNoRawI18nKeys(screen.getByTestId('backtest-page-shell'), { patterns: [/\bbacktest\.[A-Za-z0-9_.]+/] });
+  });
+
+  it('keeps fallback performance visible as non-primary evidence on the English historical surface', async () => {
+    getOverallPerformance.mockResolvedValue({
+      scope: 'overall',
+      evalWindowDays: 10,
+      engineVersion: 'historical-analysis-v1',
+      totalEvaluations: 4,
+      completedCount: 4,
+      insufficientCount: 0,
+      longCount: 2,
+      cashCount: 2,
+      winCount: 2,
+      lossCount: 2,
+      neutralCount: 0,
+      adviceBreakdown: {},
+      diagnostics: {},
+      evaluationMode: 'rule_deterministic_fallback',
+      requestedMode: 'local_first',
+      resolvedSource: 'stored_rule_backtest_runs',
+      fallbackUsed: true,
+      dataStatus: 'fallback',
+      calculationStatus: 'ready',
+      sampleStatus: 'ready',
+      limitations: ['Performance metrics are a non-primary fallback aggregate.'],
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'degraded',
+        resultContractAvailable: true,
+        engineState: 'enabled',
+        dataStatus: 'fallback',
+        calculationStatus: 'ready',
+        sampleStatus: 'ready',
+        benchmarkState: 'not_requested',
+        reasonCodes: [],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+      executionAssumptions: {},
+    } satisfies PerformanceMetrics);
+    getSampleStatus.mockResolvedValue({
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'executable',
+        resultContractAvailable: true,
+        engineState: 'enabled',
+        dataStatus: 'ready',
+        calculationStatus: 'ready',
+        sampleStatus: 'ready',
+        benchmarkState: 'not_requested',
+        reasonCodes: [],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+    });
+
+    window.history.replaceState(window.history.state, '', '/en/backtest');
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+    renderBacktestRoutes(['/en/backtest']);
+    fireEvent.click(await screen.findByRole('tab', { name: bt('en', 'page.historicalTab') }));
+    const scopeSection = await screen.findByTestId('historical-control-section-scope-samples');
+    expect(scopeSection).toHaveTextContent('Scope and samples');
+    expect(scopeSection).not.toHaveTextContent(/[\u4e00-\u9fff]/);
+    fireEvent.click(within(scopeSection).getByRole('button', { name: 'Continue' }));
+
+    const fallbackNotice = await screen.findByTestId('historical-performance-fallback-notice');
+    expect(fallbackNotice).toHaveTextContent('Performance uses a non-primary fallback aggregate');
+    expect(fallbackNotice).toHaveTextContent('Completed calculations do not establish primary-source authority');
+    const page = screen.getByTestId('backtest-page-shell');
+    expect(page).toHaveTextContent('Rule-run fallback aggregate');
+    expect(page).toHaveTextContent('Fallback used');
+    expect(page).not.toHaveTextContent('stored_rule_backtest_runs');
+    expect(screen.getByTestId('historical-backtest-execution-readiness')).toHaveAttribute('data-readiness-state', 'degraded');
   });
 
   it('renders the deterministic professional workspace shell', async () => {

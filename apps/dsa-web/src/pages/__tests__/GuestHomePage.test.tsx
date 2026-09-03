@@ -39,12 +39,16 @@ vi.mock('../../api/stocks', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/market', () => ({
-  marketApi: {
-    getMarketBriefing: (...args: unknown[]) => marketBriefingMock(...args),
-  },
-  normalizeMarketBriefingConsumerCopy: <T,>(value: T) => value,
-}));
+vi.mock('../../api/market', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/market')>();
+  return {
+    ...actual,
+    marketApi: {
+      ...actual.marketApi,
+      getMarketBriefing: (...args: unknown[]) => marketBriefingMock(...args),
+    },
+  };
+});
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
@@ -336,6 +340,36 @@ describe('GuestHomePage', () => {
     expect(screen.queryByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
     expect((screen.getByTestId('guest-home-clean-search').textContent || '')).not.toMatch(GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN);
+    expect(unavailable).toHaveClass('text-[color:var(--state-warning-text)]');
+    expect(unavailable).toHaveClass('bg-[color:var(--state-warning-bg)]');
+  });
+
+  it('localizes canonical market warning and observation copy for the English guest route', async () => {
+    languageState.value = 'en';
+    window.history.replaceState(window.history.state, '', '/en');
+    marketBriefingMock.mockResolvedValue({
+      source: 'fallback',
+      sourceLabel: '备用数据',
+      freshness: 'fallback',
+      isFallback: true,
+      isReliable: false,
+      warning: '当前真实数据不足，市场温度仅供界面演示。',
+      items: [{
+        title: '备用示例数据仅用于保持界面结构',
+        message: '备用示例数据，不代表当前行情',
+      }],
+    });
+
+    renderGuest(['/en/guest']);
+
+    const marketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => {
+      expect(marketPreviewStrip).toHaveTextContent('Key market data is currently insufficient');
+    });
+    expect(marketPreviewStrip).toHaveTextContent('Sample data is shown only to explain the page structure');
+    expect(marketPreviewStrip).toHaveTextContent('Sample data is not a current market observation');
+    expect(marketPreviewStrip).not.toHaveTextContent('当前真实数据不足');
+    expect(marketPreviewStrip).not.toHaveTextContent('备用示例数据');
   });
 
   it('keeps the guest shell in a preview-unavailable state when the preview request never settles', async () => {
