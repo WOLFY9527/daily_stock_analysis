@@ -46,6 +46,10 @@ BROWSER_CASES = (
     "professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
     "rollback error preserves portfolio state and exposes unavailable data",
 )
+BROWSER_PROJECTS = (
+    "release-real-runtime",
+    "release-real-runtime-mobile",
+)
 
 
 def _load_json(path: Path) -> Any:
@@ -93,19 +97,20 @@ def _browser_details(report: Any, browser_spec: Path | None) -> tuple[dict[str, 
         if ".route(" in source:
             errors.append("browser_release_spec_contains_mocked_routes")
 
-    outcomes: dict[str, str] = {}
+    outcomes: dict[tuple[str, str], str] = {}
     retries_observed = 0
     skipped = 0
     failed = 0
     for spec in _walk_specs(report):
         title = str(spec.get("title") or "")
         for test in spec.get("tests", []):
-            if not isinstance(test, dict) or test.get("projectName") != "release-real-runtime":
+            if not isinstance(test, dict) or test.get("projectName") not in BROWSER_PROJECTS:
                 continue
+            project = str(test["projectName"])
             results = test.get("results") if isinstance(test.get("results"), list) else []
             first = next((result for result in results if isinstance(result, dict) and result.get("retry", 0) == 0), None)
             status = str(first.get("status") if isinstance(first, dict) else test.get("status") or "missing")
-            outcomes[title] = status
+            outcomes[(project, title)] = status
             retries_observed += sum(
                 1 for result in results if isinstance(result, dict) and int(result.get("retry") or 0) > 0
             )
@@ -113,12 +118,13 @@ def _browser_details(report: Any, browser_spec: Path | None) -> tuple[dict[str, 
                 skipped += 1
             elif status != "passed":
                 failed += 1
-    missing = sorted(set(BROWSER_CASES) - set(outcomes))
-    unexpected = sorted(set(outcomes) - set(BROWSER_CASES))
+    expected = {(project, title) for project in BROWSER_PROJECTS for title in BROWSER_CASES}
+    missing = sorted(expected - set(outcomes))
+    unexpected = sorted(set(outcomes) - expected)
     if missing:
-        errors.append("browser_required_cases_missing:" + ",".join(missing))
+        errors.append("browser_required_cases_missing:" + ",".join(f"{project}:{title}" for project, title in missing))
     if unexpected:
-        errors.append("browser_unexpected_cases:" + ",".join(unexpected))
+        errors.append("browser_unexpected_cases:" + ",".join(f"{project}:{title}" for project, title in unexpected))
     if skipped:
         errors.append("browser_required_case_skipped")
     if retries_observed:
@@ -126,7 +132,7 @@ def _browser_details(report: Any, browser_spec: Path | None) -> tuple[dict[str, 
     if failed:
         errors.append("browser_first_attempt_failed")
     details = {
-        "project": "release-real-runtime",
+        "projects": list(BROWSER_PROJECTS),
         "mockedRouteSuites": 0 if "browser_release_spec_contains_mocked_routes" not in errors else 1,
         "retriesObserved": retries_observed,
         "requiredCases": list(BROWSER_CASES),
@@ -341,13 +347,18 @@ def _validate_gate_details(gate_id: str, details: Any, candidate: dict[str, Any]
             errors.append("production_build_assets_missing")
     elif gate_id == "playwright-real-runtime":
         first = details.get("firstAttempt") if isinstance(details.get("firstAttempt"), dict) else {}
-        if details.get("project") != "release-real-runtime" or details.get("mockedRouteSuites") != 0:
+        if details.get("projects") != list(BROWSER_PROJECTS) or details.get("mockedRouteSuites") != 0:
             errors.append("browser_project_or_mode_invalid")
         if details.get("retriesObserved") != 0:
             errors.append("browser_retry_observed")
         if details.get("requiredCases") != list(BROWSER_CASES):
             errors.append("browser_required_cases_invalid")
-        if first != {"total": len(BROWSER_CASES), "passed": len(BROWSER_CASES), "failed": 0, "skipped": 0}:
+        if first != {
+            "total": len(BROWSER_CASES) * len(BROWSER_PROJECTS),
+            "passed": len(BROWSER_CASES) * len(BROWSER_PROJECTS),
+            "failed": 0,
+            "skipped": 0,
+        }:
             errors.append("browser_first_attempt_not_pass")
     elif gate_id == "runtime-uat":
         if details.get("contract") != "wolfystock_uat_runtime_harness_v1":

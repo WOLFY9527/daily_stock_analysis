@@ -37,6 +37,10 @@ REQUIRED_BROWSER_CASES = (
     "professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
     "rollback error preserves portfolio state and exposes unavailable data",
 )
+REQUIRED_BROWSER_PROJECTS = (
+    "release-real-runtime",
+    "release-real-runtime-mobile",
+)
 LOCK_HASH = "7a3c9f1c582c0efb5ae48ae4871cb4cae77db9c257558cbf9af2c454013a46f4"
 AMD64_PROJECTION = "231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86"
 ARM64_PROJECTION = "d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef"
@@ -222,13 +226,13 @@ def _build_candidate(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
 def _gate_details(gate_id: str, candidate: dict[str, object]) -> dict[str, object]:
     if gate_id == "playwright-real-runtime":
         return {
-            "project": "release-real-runtime",
+            "projects": list(REQUIRED_BROWSER_PROJECTS),
             "mockedRouteSuites": 0,
             "retriesObserved": 0,
             "requiredCases": list(REQUIRED_BROWSER_CASES),
             "firstAttempt": {
-                "total": len(REQUIRED_BROWSER_CASES),
-                "passed": len(REQUIRED_BROWSER_CASES),
+                "total": len(REQUIRED_BROWSER_CASES) * len(REQUIRED_BROWSER_PROJECTS),
+                "passed": len(REQUIRED_BROWSER_CASES) * len(REQUIRED_BROWSER_PROJECTS),
                 "failed": 0,
                 "skipped": 0,
             },
@@ -560,7 +564,7 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
                                 "title": title,
                                 "tests": [
                                     {
-                                        "projectName": "release-real-runtime",
+                                        "projectName": project,
                                         "status": "skipped" if index == 0 else "expected",
                                         "results": [
                                             {
@@ -569,6 +573,7 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
                                             }
                                         ],
                                     }
+                                    for project in REQUIRED_BROWSER_PROJECTS
                                 ],
                             }
                             for index, title in enumerate(REQUIRED_BROWSER_CASES)
@@ -849,6 +854,8 @@ def test_release_gate_summary_allows_dirty_repo_with_explicit_flag(tmp_path):
     assert "release-operator-evidence-gate-" in release_text
     assert "operator-evidence-consumer.result" in release_text
     assert "npm --prefix apps/dsa-web test -- --maxWorkers=1" in release_text
+    assert "--project=release-real-runtime-mobile" in release_text
+    assert "--workers=1 --reporter=json" in release_text
 
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "npm --prefix apps/dsa-web test -- --maxWorkers=1" in ci_text
@@ -860,6 +867,7 @@ def test_release_gate_summary_allows_dirty_repo_with_explicit_flag(tmp_path):
     playwright_text = (REPO_ROOT / "apps/dsa-web/playwright.config.ts").read_text(encoding="utf-8")
     browser_spec = REPO_ROOT / "apps/dsa-web/e2e/release-real-runtime.release.spec.ts"
     assert "name: 'release-real-runtime'" in playwright_text
+    assert "name: 'release-real-runtime-mobile'" in playwright_text
     assert "retries: 0" in playwright_text
     assert "release-real-runtime.release.spec.ts" in playwright_text
     assert browser_spec.is_file()

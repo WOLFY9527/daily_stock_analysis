@@ -75,7 +75,7 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     assert result["backendTests"] == 8_324
     assert result["vitestFiles"] == 178
     assert result["playwrightSpecs"] == 71
-    assert result["playwrightProjectCases"] == 774
+    assert result["playwrightProjectCases"] == 780
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -209,11 +209,12 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     cases = playwright["projectCases"]
 
     assert len(specs) == 71
-    assert len(cases) == 774
+    assert len(cases) == 780
     assert playwright["inventory"]["projectCaseCounts"] == {
         "chromium": 384,
         "chromium-mobile": 384,
         "release-real-runtime": 6,
+        "release-real-runtime-mobile": 6,
     }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
     protected_auth_specs = [spec for spec in specs if any(word in spec["path"] for word in ("auth", "session", "rbac"))]
@@ -231,9 +232,9 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     release_spec = next(spec for spec in specs if spec["path"] == release_path)
     release_cases = [case for case in cases if case["spec"] == release_path]
     assert release_spec == {"path": release_path, "owner": "bounded_integration", "mandatory": False}
-    assert len(release_cases) == 6
-    assert sum(case["owner"] == "protected_critical" and case["mandatory"] for case in release_cases) == 1
-    assert sum(case["owner"] == "bounded_integration" and not case["mandatory"] for case in release_cases) == 5
+    assert len(release_cases) == 12
+    assert sum(case["owner"] == "protected_critical" and case["mandatory"] for case in release_cases) == 2
+    assert sum(case["owner"] == "bounded_integration" and not case["mandatory"] for case in release_cases) == 10
 
 
 def test_first_attempts_and_retries_are_never_coalesced(

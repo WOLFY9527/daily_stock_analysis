@@ -766,6 +766,10 @@ test.describe.serial('qualified release real runtime', () => {
         memberPage.close({ runBeforeUnload: false }),
         adminPage.close({ runBeforeUnload: false }),
       ]);
+      await Promise.all([
+        memberContext.close(),
+        adminContext.close(),
+      ]);
     }
   });
 

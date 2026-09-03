@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-08-26",
+  "capturedOn": "2026-09-03",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -41983,231 +41983,7 @@
       "tests/test_yfinance_symbol_boundary.py::test_to_yfinance_symbol_preserves_existing_market_parity[000001-000001.SZ]"
     ],
     "networkTests": [],
-    "knownBaselineFailures": [
-      "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_duplicate_summary_requires_cost_observability_capability",
-      "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_llm_ledger_summary_requires_cost_observability_capability",
-      "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_model_pricing_policies_requires_cost_observability_capability",
-      "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_business_event_list_requires_auth_and_admin_can_read_classification_fields",
-      "tests/api/test_admin_provider_circuit_diagnostics.py::AdminProviderCircuitDiagnosticsApiTestCase::test_provider_circuit_diagnostics_auth_boundaries_remain_401_403_and_admin_200",
-      "tests/api/test_admin_quota_dry_run.py::AdminQuotaDryRunApiTestCase::test_admin_cost_capability_required",
-      "tests/api/test_admin_spa_shell_guard.py::test_admin_spa_guard_preserves_api_and_static_asset_behavior",
-      "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_sanitizes_tickflow_failure_reason",
-      "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_keeps_failed_proxy_symbol_on_item_level_fallback",
-      "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_merges_delayed_proxy_items_onto_existing_fallback_card",
-      "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failure",
-      "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_uses_delayed_yfinance_adapter_without_live_label",
-      "tests/api/test_market_intelligence_payload_smoke.py::test_authenticated_market_overview_funds_flow_payload_smoke_keeps_proxy_wording_non_authoritative",
-      "tests/api/test_market_rotation_radar.py::test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_without_broadening_headlines",
-      "tests/api/test_market_rotation_radar.py::test_market_rotation_radar_timeout_degrades_to_fallback_payload_in_api",
-      "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_macro_api_preserves_official_authority_projection_fields",
-      "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_official_macro_rows_keep_authority_metadata",
-      "tests/scripts/test_dev_start_backend.py::test_dev_start_backend_help_runs_directly",
-      "tests/scripts/test_dev_start_backend.py::test_dev_start_backend_print_command_handles_empty_extra_args",
-      "tests/scripts/test_market_regime_evidence_verifier.py::test_cli_outputs_market_regime_evidence_pack_from_explicit_local_paths",
-      "tests/services/test_home_source_provenance_sidecar.py::test_helper_runtime_integration_is_limited_to_home_response_assembly",
-      "tests/test_agent_executor.py::TestBuildUserMessage::test_basic_message",
-      "tests/test_agent_pipeline.py::TestAgentFactorySkillBaseline::test_explicit_empty_request_falls_back_to_primary_default_skill",
-      "tests/test_agent_pipeline.py::TestAgentFactorySkillBaseline::test_implicit_default_run_keeps_default_skill_policy",
-      "tests/test_ai_decision_public_safety.py::PublicPreviewSafetyTestCase::test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis",
-      "tests/test_ai_evidence_cross_engine_contracts.py::test_reason_code_and_quality_flag_regressions_stay_stable_for_incomplete_evidence",
-      "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_batch_deduplication",
-      "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_flow_manual_name",
-      "tests/test_analysis_integration.py::TestAnalysisIntegration::test_trigger_analysis_metadata_isolation_in_batch",
-      "tests/test_backend_modular_import_boundaries.py::test_api_schema_upward_import_mapping_is_explicit",
-      "tests/test_backend_modular_import_boundaries.py::test_options_lab_service_public_options_schema_allowlist_is_frozen",
-      "tests/test_backend_modular_import_boundaries.py::test_provider_heavy_service_file_inventory_is_explicit",
-      "tests/test_backend_modular_import_boundaries.py::test_provider_runtime_import_inventory_is_explicit",
-      "tests/test_backend_modular_import_boundaries.py::test_service_api_upward_import_inventory_is_frozen",
-      "tests/test_backtest_regime_attribution_readiness.py::BacktestRegimeAttributionReadinessTestCase::test_support_export_index_discovers_readiness_export",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_accepts_explicit_local_safe_test_dsn_without_leaking_value",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_accepts_real_restore_evidence_artifact",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_does_not_mutate_files",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_for_incompatible_application_schema",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_for_incompatible_schema",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_for_pitr_target_outside_window",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_for_stale_metadata",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_when_restore_target_exists",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_fails_without_pitr_metadata",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_prints_production_like_preflight_evidence",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_incomplete_real_restore_evidence",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_production_dsn_without_leaking_value",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_with_pitr_target_outside_window",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_with_unredacted_dsn",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_with_unredacted_env_value",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_without_backup_identity",
-      "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_without_no_overwrite_assertion",
-      "tests/test_contracts_namespace.py::test_evidence_namespace_imports_and_exposes_expected_contract_surface",
-      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_doc_stays_product_language",
-      "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe",
-      "tests/test_evidence_cli_contracts.py::test_successful_cli_paths_keep_review_required_non_approval_language",
-      "tests/test_evidence_cli_contracts.py::test_workflow_smoke_success_uses_bounded_output_dir_label",
-      "tests/test_evidence_validator_adversarial_matrix.py::test_manifest_verifier_redacts_artifact_bodies_and_path_traversal_attempts",
-      "tests/test_evidence_validator_adversarial_matrix.py::test_offline_validators_reject_launch_approval_wording_without_leaking_values[automatic-GO matrix-automatic-go-value-should-not-leak-restore-pitr-_accepted_artifact-_run_restore_pitr]",
-      "tests/test_evidence_validator_adversarial_matrix.py::test_offline_validators_reject_launch_approval_wording_without_leaking_values[launch-approved matrix-launch-approved-value-should-not-leak-restore-pitr-_accepted_artifact-_run_restore_pitr]",
-      "tests/test_evidence_validator_adversarial_matrix.py::test_offline_validators_reject_launch_approval_wording_without_leaking_values[production-ready matrix-production-ready-value-should-not-leak-restore-pitr-_accepted_artifact-_run_restore_pitr]",
-      "tests/test_evidence_validator_adversarial_matrix.py::test_offline_validators_reject_launch_approval_wording_without_leaking_values[release-approved matrix-release-approved-value-should-not-leak-restore-pitr-_accepted_artifact-_run_restore_pitr]",
-      "tests/test_historical_ohlcv_cache_preflight.py::test_disabled_default_preflight_is_dry_run_without_provider_or_mutation",
-      "tests/test_historical_ohlcv_cache_preflight.py::test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag",
-      "tests/test_historical_ohlcv_cache_preflight.py::test_us_provider_error_is_failed_safely_without_leaking_details",
-      "tests/test_historical_ohlcv_cache_preflight.py::test_us_seed_reports_dependency_missing_without_provider_call",
-      "tests/test_homepage_capabilities_service.py::test_homepage_capabilities_contract_serializes_stable_version_and_capabilities",
-      "tests/test_homepage_capabilities_service.py::test_homepage_capabilities_default_flags_are_bounded",
-      "tests/test_homepage_public_copy_consistency.py::test_serialized_public_homepage_outputs_do_not_leak_internal_or_execution_copy[homepage_intelligence_service.build_bundle]",
-      "tests/test_homepage_section_layout_service.py::test_default_layout_serializes_stable_frontend_uat_contract",
-      "tests/test_homepage_section_layout_service.py::test_layout_does_not_leak_internal_diagnostics_or_secrets",
-      "tests/test_homepage_section_layout_service.py::test_layout_sections_use_public_chinese_labels_and_bounded_taxonomy",
-      "tests/test_homepage_section_layout_service.py::test_schema_file_defines_standalone_bounded_taxonomy",
-      "tests/test_incident_response_evidence.py::test_incident_response_evidence_accepts_sanitized_local_pack",
-      "tests/test_incident_response_evidence.py::test_incident_response_evidence_default_mode_is_safe_no_go",
-      "tests/test_incident_response_evidence.py::test_incident_response_evidence_missing_admin_family_is_no_go",
-      "tests/test_incident_response_evidence.py::test_incident_response_evidence_rejects_secret_values_without_echoing_them",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_admin_log_retention_capacity_rehearsal_is_backed_by_repo_local_offline_anchors",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_approved",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_allow_no_go_returns_zero_for_review_attachment",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_local_offline_anchors",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_input_release_approved_true_is_ignored",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_keeps_provider_circuit_required_when_missing",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_market_data_freshness_fallback_is_backed_by_repo_local_offline_anchors",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_missing_categories_remain_no_go",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_notification_rehearsal_is_backed_by_offline_checker",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_build_artifact_secret_patterns_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_mfa_secret_fields_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_new_operator_unsafe_markers_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_public_matrix_secret_aliases_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_secret_like_values_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_rejects_traceback_debug_markers_without_leaking",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_requires_budget_alert_dry_run_checks",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_requires_quota_pilot_checks",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_requires_supply_chain_manifest_and_artifact_checks",
-      "tests/test_launch_acceptance_evidence.py::test_launch_acceptance_evidence_user_data_privacy_rehearsal_is_backed_by_repo_local_offline_anchors",
-      "tests/test_launch_acceptance_evidence.py::test_manual_approval_evidence_cannot_auto_approve_release",
-      "tests/test_market_cache_fallback_contracts.py::test_market_overview_fallback_payload_projects_without_persisting_last_error",
-      "tests/test_market_cache_fallback_contracts.py::test_market_overview_fallback_payload_round_trips_through_json",
-      "tests/test_market_cache_fallback_contracts.py::test_market_overview_live_payload_round_trips_through_json",
-      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_global_timeout_skips_later_live_smoke_probes",
-      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
-      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_times_out_live_smoke_probe_and_keeps_partial_results",
-      "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_checklist_captures_scope_and_validation_commands",
-      "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata",
-      "tests/test_market_intelligence_smoke_checklist.py::test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_when_degraded",
-      "tests/test_market_overview_core_quote_repair.py::test_vix_fred_transport_overlay_is_consumed_when_fresh_enough",
-      "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_evidence_snapshot_reuses_shared_provider_helper_without_widening_contract",
-      "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_fallback_panel_projects_evidence_snapshot",
-      "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout",
-      "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss",
-      "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback",
-      "tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl",
-      "tests/test_market_overview_provider_deadlines.py::test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live",
-      "tests/test_market_scanner_ops_service.py::MarketScannerOperationsServiceTestCase::test_manual_us_empty_run_persists_only_coarse_empty_reason_after_local_filters",
-      "tests/test_market_scanner_ops_service.py::MarketScannerOperationsServiceTestCase::test_runtime_failure_persists_structured_diagnostics",
-      "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_apply_score_caps_and_explainability_preserves_authorized_non_proxy_scores",
-      "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_terminal_empty_run_maps_profile_filter_blocker_from_existing_counts",
-      "tests/test_market_temperature_input_snapshot.py::test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects",
-      "tests/test_market_temperature_input_snapshot.py::test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge",
-      "tests/test_multi_agent.py::TestOrchestratorExecution::test_execute_pipeline_timeout_after_decision_preserves_dashboard",
-      "tests/test_multi_user_phase3.py::MultiUserAuthorizationApiTestCase::test_portfolio_events_and_broker_connections_stay_owner_scoped",
-      "tests/test_operator_evidence_archive_schema_workflow.py::test_archive_packager_and_schema_reference_cover_offline_workflow",
-      "tests/test_operator_evidence_command_docs.py::test_operator_evidence_command_examples_use_safe_placeholders",
-      "tests/test_operator_evidence_command_docs.py::test_operator_evidence_command_scripts_support_safe_help",
-      "tests/test_operator_evidence_command_docs.py::test_operator_evidence_docs_reference_existing_scripts",
-      "tests/test_operator_evidence_gap_analyzer.py::test_complete_synthetic_fixture_produces_review_required_with_no_unsafe_leak",
-      "tests/test_operator_evidence_manifest_check.py::test_create_manifest_for_sanitized_fixture_directory",
-      "tests/test_operator_evidence_manifest_check.py::test_manifest_output_does_not_leak_raw_artifact_body_values",
-      "tests/test_operator_evidence_manifest_check.py::test_missing_artifact_fails_verification",
-      "tests/test_operator_evidence_manifest_check.py::test_modified_artifact_fails_verification",
-      "tests/test_operator_evidence_manifest_check.py::test_verify_unchanged_manifest_passes",
-      "tests/test_operator_evidence_preflight.py::test_artifact_dir_mode_adds_local_workflow_check_without_approving_launch",
-      "tests/test_operator_evidence_preflight.py::test_synthetic_preflight_passes_with_review_required_non_approval_summary",
-      "tests/test_operator_evidence_workflow_e2e.py::test_operator_evidence_workflow_manifest_detects_tampered_artifact",
-      "tests/test_operator_evidence_workflow_e2e.py::test_operator_evidence_workflow_missing_artifact_is_incomplete_no_go",
-      "tests/test_operator_evidence_workflow_e2e.py::test_operator_evidence_workflow_smoke_generates_review_required_outputs",
-      "tests/test_operator_evidence_workflow_run.py::test_init_creates_all_templates",
-      "tests/test_operator_evidence_workflow_smoke.py::test_operator_evidence_workflow_smoke_fails_if_unsafe_fixture_is_not_rejected",
-      "tests/test_operator_evidence_workflow_smoke.py::test_operator_evidence_workflow_smoke_uses_synthetic_fixture_pack",
-      "tests/test_operator_evidence_workspace_guard.py::test_local_operator_evidence_workspace_paths_are_ignored",
-      "tests/test_portfolio_api_contract.py::PortfolioApiDiagnosticsContractTestCase::test_snapshot_endpoint_exposes_optional_diagnostics_fields",
-      "tests/test_postgres_phase_a.py::PostgresPhaseAStorageTestCase::test_auth_disabled_bootstrap_admin_and_legacy_cookie_compatibility_survive_phase_a_enablement",
-      "tests/test_postgres_phase_a.py::PostgresPhaseAStorageTestCase::test_guest_preview_keeps_guest_sessions_non_persistent_under_phase_a",
-      "tests/test_private_beta_acceptance_scorecard.py::test_cli_json_and_human_summary_are_compact_and_deterministic",
-      "tests/test_private_beta_acceptance_scorecard.py::test_scorecard_accepts_repository_default_evidence_map",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_accepts_sanitized_contract",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_auth_disabled_is_public_no_go",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_cors_raw_url_is_rejected_without_echo",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_default_mode_is_safe_no_go",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_missing_admin_auth_is_public_no_go",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_missing_required_config_is_no_go",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_never_prints_secret_values",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_public_searxng_enabled_is_no_go",
-      "tests/test_production_config_readiness.py::test_production_config_readiness_reports_global_mfa_scope_as_fail_closed",
-      "tests/test_professional_data_capability_registry_service.py::test_professional_registry_returns_expected_categories_and_capabilities",
-      "tests/test_provider_capability_matrix.py::test_provider_capability_metadata_documents_provenance_vocabulary_parity_guard",
-      "tests/test_provider_fit_metadata.py::test_provider_fit_dry_run_probe_contracts_stay_disabled_and_secret_safe",
-      "tests/test_provider_fit_metadata.py::test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted",
-      "tests/test_provider_runtime_boundary.py::test_marketcache_boundary_matches_fixture",
-      "tests/test_quant_duckdb_service.py::test_concurrent_init_build_boundary_is_documented_as_not_production_ready",
-      "tests/test_quota_policy_service.py::QuotaPolicyServiceTestCase::test_quota_pilot_decision_contract_is_read_only_and_not_analysis_route_wired",
-      "tests/test_quota_storage_idempotency.py::QuotaStorageIdempotencyTestCase::test_migration_backfills_quota_window_identity_before_unique_index",
-      "tests/test_release_gate_summary.py::test_release_gate_summary_completed_foundation_evidence_stays_non_approving",
-      "tests/test_release_gate_summary.py::test_release_gate_summary_go_no_go_json_keeps_launch_blocked",
-      "tests/test_release_gate_summary.py::test_release_gate_summary_prints_required_fields_on_clean_repo",
-      "tests/test_release_restore_rollback_drill.py::test_destructive_text_is_rejected_and_no_destructive_operations_run",
-      "tests/test_release_restore_rollback_drill.py::test_missing_fields_keep_drill_in_no_go_posture",
-      "tests/test_release_restore_rollback_drill.py::test_offline_default_mode_is_review_required_no_go",
-      "tests/test_release_restore_rollback_drill.py::test_output_is_bounded_and_omits_raw_input_values",
-      "tests/test_release_restore_rollback_drill.py::test_sanitized_operator_artifact_is_review_ready_without_release_approval",
-      "tests/test_release_restore_rollback_drill.py::test_unsafe_paths_and_secret_like_values_are_rejected_without_echoing",
-      "tests/test_release_secret_scan.py::test_release_secret_scan_files_from_scans_only_listed_files",
-      "tests/test_release_secret_scan.py::test_release_secret_scan_files_from_skips_generated_static_paths",
-      "tests/test_release_secret_scan.py::test_release_secret_scan_local_only_skips_committed_branch_changes",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_accepts_sanitized_artifact",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_accepts_valid_real_drill_fixture",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_launch_approval_claim",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_local_preflight_fixture",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_needs_review_outcome",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_private_hosts_usernames_paths_and_stacktraces",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_production_destructive_marker",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_public_launch_ready_claim",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_raw_sql_dump",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_secret_values_without_echoing",
-      "tests/test_restore_pitr_operator_evidence_check.py::test_restore_pitr_operator_evidence_rejects_template_or_local_preflight_as_real",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_accepts_sanitized_local_pack",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_default_mode_is_safe_no_go",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_rejects_credential_bearing_urls_without_echoing",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_rejects_destructive_default_commands",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_rejects_launch_go_claim",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_rejects_sensitive_evidence_classes_without_echoing",
-      "tests/test_rollback_rehearsal_evidence.py::test_rollback_rehearsal_evidence_rejects_sensitive_values_without_echoing",
-      "tests/test_rule_backtest_support_bundle_e2e.py::RuleBacktestSupportBundleE2ETestCase::test_support_bundle_e2e_live_storage_repair_preserves_http_contract",
-      "tests/test_rule_backtest_support_bundle_e2e.py::RuleBacktestSupportBundleE2ETestCase::test_support_bundle_e2e_missing_trace_closes_trace_exports",
-      "tests/test_rule_backtest_support_bundle_e2e.py::RuleBacktestSupportBundleE2ETestCase::test_support_bundle_e2e_robustness_evidence_readback_uses_stored_payload_without_recompute",
-      "tests/test_rule_backtest_support_bundle_e2e.py::RuleBacktestSupportBundleE2ETestCase::test_support_bundle_e2e_stored_first_surface_is_coherent",
-      "tests/test_scanner_strategy_simulation.py::ScannerStrategySimulationTestCase::test_calculates_forward_benchmark_excess_and_symbol_aggregation",
-      "tests/test_scanner_strategy_simulation.py::ScannerStrategySimulationTestCase::test_filters_matching_theme_profile_market_and_lookback",
-      "tests/test_scanner_strategy_simulation.py::ScannerStrategySimulationTestCase::test_handles_missing_forward_price_data_without_faking_returns",
-      "tests/test_scanner_strategy_simulation.py::ScannerStrategySimulationTestCase::test_returns_insufficient_history_with_fewer_than_two_comparable_runs",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_accepts_sanitized_artifact",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_rejects_credential_urls_and_raw_host_urls",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_rejects_local_dry_run_and_launch_flags",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_rejects_raw_bodies_and_secret_values",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_requires_admin_fail_closed",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_defaults_to_dry_run_without_network",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
-      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",
-      "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_allows_guest_access_without_auth_dependency",
-      "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404",
-      "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy",
-      "tests/test_stock_service_validation.py::StockServiceValidationTestCase::test_get_realtime_quote_placeholder_does_not_claim_live_freshness",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_attaches_post_add_scanner_lineage_without_provider_fanout",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_preserves_candidate_when_scanner_data_is_missing",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_projects_local_cache_score_disclosure_without_provider_calls",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_projects_local_us_parquet_dir_provenance_without_runtime_fetches",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_projects_scanner_score_explainability_disclosure_metadata",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_projects_unknown_reason_family_sidecar_without_provider_calls",
-      "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_uses_bounded_bulk_lookup_for_large_watchlist"
-    ],
+    "knownBaselineFailures": [],
     "offlinePolicy": {
       "default": "deny_non_loopback_sockets",
       "networkMarkerFields": [
@@ -42998,8 +42774,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/AdminLogsPage.test.tsx",
         "owner": "runtime_operator_tooling",
-        "bytes": 76617,
-        "lines": 1811
+        "bytes": 79832,
+        "lines": 1849
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/BacktestPage.test.tsx",
@@ -43016,8 +42792,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 273445,
-        "lines": 5863
+        "bytes": 276913,
+        "lines": 5946
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/LiquidityMonitorPage.test.tsx",
@@ -43034,20 +42810,20 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx",
         "owner": "market",
-        "bytes": 124547,
-        "lines": 2499
+        "bytes": 125877,
+        "lines": 2520
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketRotationRadarPage.test.tsx",
         "owner": "market",
-        "bytes": 99799,
-        "lines": 2251
+        "bytes": 106937,
+        "lines": 2391
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/OptionsLabPage.test.tsx",
         "owner": "market",
-        "bytes": 136393,
-        "lines": 3344
+        "bytes": 138082,
+        "lines": 3379
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/PortfolioPage.test.tsx",
@@ -43058,8 +42834,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 117632,
-        "lines": 2545
+        "bytes": 120125,
+        "lines": 2610
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/RuleBacktestComparePage.test.tsx",
@@ -43088,8 +42864,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx",
         "owner": "scanner",
-        "bytes": 140138,
-        "lines": 3139
+        "bytes": 144489,
+        "lines": 3269
       }
     ]
   },
@@ -43104,17 +42880,19 @@
     "projects": [
       "chromium",
       "chromium-mobile",
-      "release-real-runtime"
+      "release-real-runtime",
+      "release-real-runtime-mobile"
     ],
     "inventory": {
       "specCount": 71,
       "specSha256": "90a5b535109925090a3905f57cdcfbad48886e7116f91f4f2c4f46e7169eae5f",
-      "projectCaseCount": 774,
-      "projectCaseSha256": "a874e8f9d77b0db3439b06cc53eeffdf7e8741ebf2fba86ad05e5d3cd0bcdce6",
+      "projectCaseCount": 780,
+      "projectCaseSha256": "724bf3c2b61b182af25d33722a3199023f2ca2666b858dc752fc37612e00bedb",
       "projectCaseCounts": {
         "chromium": 384,
         "chromium-mobile": 384,
-        "release-real-runtime": 6
+        "release-real-runtime": 6,
+        "release-real-runtime-mobile": 6
       }
     },
     "specs": [
@@ -43135,7 +42913,7 @@
       },
       {
         "path": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
@@ -43435,7 +43213,7 @@
       },
       {
         "path": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
-        "owner": "bounded_integration",
+        "owner": "milestone",
         "mandatory": false
       },
       {
@@ -43598,42 +43376,42 @@
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › Chinese mobile drawer keeps admin navigation, identity, and search usable",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: Chinese at 1280px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1024px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1280px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1440px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin shell transitions continuously at the 1024px desktop breakpoint",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
@@ -45747,14 +45525,14 @@
         "id": "chromium-mobile::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › keeps an empty pool useful without inventing evidence",
         "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "milestone",
         "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › renders the filled-pool readiness matrix without provenance collapse",
         "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
         "project": "chromium-mobile",
-        "owner": "bounded_integration",
+        "owner": "milestone",
         "mandatory": false
       },
       {
@@ -46286,42 +46064,42 @@
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › Chinese mobile drawer keeps admin navigation, identity, and search usable",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: Chinese at 1280px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1024px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1280px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin header navigation and search remain reachable: English at 1440px",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts::admin-nav-search-responsive.spec.ts › admin shell transitions continuously at the 1024px desktop breakpoint",
         "spec": "apps/dsa-web/e2e/admin-nav-search-responsive.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "route_owner",
         "mandatory": false
       },
       {
@@ -48435,14 +48213,14 @@
         "id": "chromium::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › keeps an empty pool useful without inventing evidence",
         "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "milestone",
         "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts::t727-watchlist-readiness-truth.spec.ts › T727 Watchlist research readiness and provenance truth › renders the filled-pool readiness matrix without provenance collapse",
         "spec": "apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts",
         "project": "chromium",
-        "owner": "bounded_integration",
+        "owner": "milestone",
         "mandatory": false
       },
       {
@@ -48848,6 +48626,48 @@
         "id": "chromium::apps/dsa-web/e2e/watchlist-user-alerts.smoke.spec.ts::watchlist-user-alerts.smoke.spec.ts › watchlist user alerts browser smoke › watchlist detail rail keeps user alerts bounded and observation-only in the real route shell",
         "spec": "apps/dsa-web/e2e/watchlist-user-alerts.smoke.spec.ts",
         "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › login logout and revoked session",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › member admin boundary and portfolio read",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › member core research loop persists qualification-only truth across scanner research watchlist backtest portfolio and admin",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › production startup readiness and static assets",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › professional backtest parsing preserves explicit identity and rejects unqualified indicator prose",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime-mobile::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › rollback error preserves portfolio state and exposes unavailable data",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime-mobile",
         "owner": "bounded_integration",
         "mandatory": false
       },

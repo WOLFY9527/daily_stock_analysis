@@ -164,5 +164,15 @@ export default defineConfig({
         trace: 'retain-on-failure',
       },
     },
+    {
+      name: 'release-real-runtime-mobile',
+      testMatch: '**/release-real-runtime.release.spec.ts',
+      retries: 0,
+      use: {
+        ...devices['Pixel 5'],
+        executablePath: managedChromiumExecutable,
+        trace: 'retain-on-failure',
+      },
+    },
   ],
 });
