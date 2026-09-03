@@ -130,11 +130,19 @@ async function login(page: Page, username: string, password: string, redirect: s
 }
 
 async function logoutFromShell(page: Page): Promise<Response> {
-  const accountEntry = page.locator('[data-testid="shell-account-center-entry"]:visible');
-  await expect(accountEntry).toHaveCount(1);
-  await accountEntry.getByRole('button', { name: '账户中心' }).click();
-  const menu = page.locator('[data-testid="shell-account-center-menu"]:visible');
-  await menu.getByRole('menuitem', { name: '退出登录' }).click();
+  const mobileStrip = page.getByTestId('shell-mobile-strip');
+  if (await mobileStrip.isVisible().catch(() => false)) {
+    await mobileStrip.getByRole('button', { name: '打开导航菜单' }).click();
+    const drawer = page.getByRole('dialog', { name: '导航菜单' });
+    await expect(drawer).toBeVisible();
+    await drawer.getByTestId('shell-mobile-account-center').getByRole('button', { name: '退出登录' }).click();
+  } else {
+    const accountEntry = page.locator('[data-testid="shell-account-center-entry"]:visible');
+    await expect(accountEntry).toHaveCount(1);
+    await accountEntry.getByRole('button', { name: '账户中心' }).click();
+    const menu = page.locator('[data-testid="shell-account-center-menu"]:visible');
+    await menu.getByRole('menuitem', { name: '退出登录' }).click();
+  }
   const dialog = page.getByRole('dialog', { name: '退出登录' });
   const responsePromise = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/auth/logout') && response.request().method() === 'POST',
