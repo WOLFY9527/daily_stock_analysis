@@ -151,6 +151,15 @@ async function logoutFromShell(page: Page): Promise<Response> {
   return responsePromise;
 }
 
+async function selectProfessionalWorkflowStep(page: Page, testId: string): Promise<void> {
+  const mobileStep = page.getByTestId(`${testId}-mobile`);
+  if (await mobileStep.isVisible().catch(() => false)) {
+    await mobileStep.click();
+    return;
+  }
+  await page.getByTestId(testId).click();
+}
+
 function projectPublicParseIdentity(payload: Record<string, unknown>) {
   const parsedStrategy = payload.parsed_strategy;
   const parsed = parsedStrategy && typeof parsedStrategy === 'object' && !Array.isArray(parsedStrategy)
@@ -373,12 +382,12 @@ test.describe.serial('qualified release real runtime', () => {
     await login(page, memberUsername, memberPassword, '/en/backtest');
     await page.getByRole('tab', { name: 'Research diagnostics' }).click();
     await expect(page.getByTestId('pro-backtest-workspace')).toBeVisible();
-    await page.getByTestId('pro-workflow-step-assets').click();
+    await selectProfessionalWorkflowStep(page, 'pro-workflow-step-assets');
     const assetsStep = page.getByTestId('pro-step-assets');
     await expect(assetsStep).toBeVisible();
     const ticker = assetsStep.getByLabel('Ticker');
     await expect(ticker).toHaveValue('');
-    await page.getByTestId('pro-workflow-step-strategy').click();
+    await selectProfessionalWorkflowStep(page, 'pro-workflow-step-strategy');
     const strategyStep = page.getByTestId('pro-step-strategy');
     await expect(strategyStep).toBeVisible();
 
@@ -427,10 +436,10 @@ test.describe.serial('qualified release real runtime', () => {
     expect(mainFrameNavigations).toBe(beforeMissingParseNavigations);
 
     await strategyStep.getByRole('button', { name: 'Reset' }).click();
-    await page.getByTestId('pro-workflow-step-assets').click();
+    await selectProfessionalWorkflowStep(page, 'pro-workflow-step-assets');
     await expect(assetsStep).toBeVisible();
     await ticker.fill('AAPL');
-    await page.getByTestId('pro-workflow-step-strategy').click();
+    await selectProfessionalWorkflowStep(page, 'pro-workflow-step-strategy');
     await expect(strategyStep).toBeVisible();
     await strategyText.fill(indicatorStrategy);
 
