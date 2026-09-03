@@ -393,7 +393,10 @@ test.describe.serial('qualified release real runtime', () => {
 
     const strategyText = page.getByLabel('Strategy text');
     const confirmation = strategyStep.getByLabel('Confirm parse result');
-    const execute = page.getByRole('button', { name: 'Execute backtest task' });
+    const mobileExecutionSummary = page.getByTestId('pro-mobile-execution-summary');
+    const execute = await mobileExecutionSummary.isVisible().catch(() => false)
+      ? mobileExecutionSummary.getByRole('button', { name: 'Execute backtest task' })
+      : page.getByTestId('pro-execution-rail').getByRole('button', { name: 'Execute backtest task' });
     const indicatorStrategy = 'RSI below 30 buy and RSI above 70 sell';
     await strategyText.fill(indicatorStrategy);
 
