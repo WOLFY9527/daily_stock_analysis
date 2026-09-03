@@ -439,7 +439,8 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert (
         "npm --prefix apps/dsa-web exec -- playwright test "
         "--config=apps/dsa-web/playwright.config.ts --project=release-real-runtime "
-        "--reporter=json > output/release/raw/playwright.json"
+        "--project=release-real-runtime-mobile --workers=1 --reporter=json "
+        "> output/release/raw/playwright.json"
     ) in release_text
     assert "playwright install chromium" not in release_text
     assert "PLAYWRIGHT_BROWSERS_PATH" not in release_text
