@@ -46,6 +46,11 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvProvider,
     HistoricalOhlcvReadinessService,
 )
+from src.services.development_historical_replay import (
+    DevelopmentDataPlaneHistoricalOhlcvProvider,
+    DevelopmentHistoricalReplayProvider,
+    compose_development_historical_ohlcv_provider,
+)
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
 from src.services.quote_snapshot_readiness import (
     QuoteSnapshotProvider,
@@ -842,9 +847,14 @@ class MarketScannerService:
         if self._r06_nonlive_fixture_context is not None and historical_ohlcv_provider is not None:
             raise R06NonliveScannerFixtureContextError("fixture_cache_provider_unavailable")
         configured_local_us_ohlcv_provider = None
+        configured_development_replay_provider = None
         if historical_ohlcv_provider is None:
             configured_local_us_ohlcv_provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
-            historical_ohlcv_provider = configured_local_us_ohlcv_provider
+            configured_development_replay_provider = DevelopmentHistoricalReplayProvider.from_env()
+            historical_ohlcv_provider = compose_development_historical_ohlcv_provider(
+                local_us_provider=configured_local_us_ohlcv_provider,
+                replay_provider=configured_development_replay_provider,
+            )
         if historical_ohlcv_provider is None and _scanner_historical_ohlcv_runtime_enabled():
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.data_manager)
         if self._r06_nonlive_fixture_context is not None and configured_local_us_ohlcv_provider is None:
@@ -865,6 +875,15 @@ class MarketScannerService:
         self.local_universe_cache_path = Path(str(configured_path)).expanduser()
         self._run_review_cache: Dict[int, Dict[str, Any]] = {}
         self._benchmark_review_cache: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
+
+    def _uses_development_historical_replay_for_market(self, market: str) -> bool:
+        provider = self.historical_ohlcv_provider
+        normalized_market = str(market or "").strip().upper()
+        if isinstance(provider, DevelopmentHistoricalReplayProvider):
+            return True
+        return isinstance(provider, DevelopmentDataPlaneHistoricalOhlcvProvider) and not (
+            normalized_market == "US" and provider.local_us_provider is not None
+        )
 
     def _visibility_kwargs(
         self,
@@ -8152,12 +8171,15 @@ class MarketScannerService:
             if not history_df.empty and "date" in history_df.columns
             else None
         )
+        is_development_replay = self._uses_development_historical_replay_for_market(profile.market)
         history_diag = {
             "source": (
                 fixture_context.source
                 if fixture_source
                 else "local_us_parquet_cache"
                 if local_cache_readiness is not None
+                else "development_historical_replay"
+                if is_development_replay and readiness.get("providerState") == "available"
                 else "historical_ohlcv_runtime"
                 if readiness.get("providerState") == "available"
                 else "unavailable"
@@ -8167,6 +8189,8 @@ class MarketScannerService:
             "network_used": False,
             "network_failed": False,
             "partial_local_fallback": False,
+            "stale": str(readiness.get("freshnessState") or "").strip().lower() == "stale",
+            "observationOnly": is_development_replay,
             "historicalOhlcvReadiness": readiness,
             "unavailable_reason": result.unavailable_reason,
         }
@@ -8893,7 +8917,11 @@ class MarketScannerService:
             or _is_fallback_score_cap_source(snapshot_source, source_type=snapshot_source_type)
         )
         is_stale = bool(history_diag.get("stale"))
-        is_partial = history_source in SCANNER_SCORE_CAP_PARTIAL_SOURCES or bool(core_missing)
+        is_partial = (
+            history_source in SCANNER_SCORE_CAP_PARTIAL_SOURCES
+            or bool(history_diag.get("observationOnly"))
+            or bool(core_missing)
+        )
         degradation_reason = None
         if is_fallback:
             degradation_reason = "fallback_source"

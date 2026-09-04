@@ -108,10 +108,10 @@ def _optional_query_token(value: object) -> str | None:
     return token or None
 
 
-def _market_regime_read_model_payload() -> dict[str, object]:
+def _market_regime_read_model_payload(market: str | None = None) -> dict[str, object]:
     try:
         return build_market_regime_read_model(
-            market="US",
+            market=str(market or "US").strip().upper(),
             symbols=list(DEFAULT_MARKET_REGIME_SYMBOLS),
             benchmark_symbol=DEFAULT_BENCHMARK_SYMBOL,
             growth_proxy_symbol=DEFAULT_GROWTH_PROXY_SYMBOL,
@@ -162,7 +162,7 @@ def get_research_radar(
         profile=profile,
         owner_id=owner_id,
         limit=bounded_limit,
-        market_regime_read_model=_market_regime_read_model_payload(),
+        market_regime_read_model=_market_regime_read_model_payload(market),
     )
     return consumer_safe_json_response(
         ResearchRadarResponse.model_validate(payload),
@@ -209,7 +209,7 @@ def get_research_queue(
         backtest_sample_reader=_backtest_sample_status if backtest_service is not None else None,
     )
     watchlist_overlay = _watchlist_research_overlay_payload(owner_id=owner_id)
-    market_payload = _market_regime_read_model_payload()
+    market_payload = _market_regime_read_model_payload(market)
     payload = ResearchQueueAggregatorService().build_queue(
         scanner_payload=scanner_payload,
         watchlist_overlay=watchlist_overlay,

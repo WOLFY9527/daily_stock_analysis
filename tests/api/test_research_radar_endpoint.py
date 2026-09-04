@@ -242,13 +242,23 @@ class _FakeBacktestService:
         }
 
 
-def _client(monkeypatch, *, regime_read_model: dict[str, object] | None = None) -> TestClient:
+def _client(
+    monkeypatch,
+    *,
+    regime_read_model: dict[str, object] | None = None,
+    regime_calls: list[dict[str, object]] | None = None,
+) -> TestClient:
     from api.v1.endpoints import research
 
     _FakeResearchRadarService.calls = []
     monkeypatch.setattr(research, "ResearchRadarService", _FakeResearchRadarService)
     monkeypatch.setattr(research, "BacktestService", _FakeBacktestService)
-    monkeypatch.setattr(research, "build_market_regime_read_model", lambda **_: regime_read_model)
+    def fake_market_regime_read_model(**kwargs: object) -> dict[str, object] | None:
+        if regime_calls is not None:
+            regime_calls.append(dict(kwargs))
+        return regime_read_model
+
+    monkeypatch.setattr(research, "build_market_regime_read_model", fake_market_regime_read_model)
 
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -391,3 +401,18 @@ def test_get_research_radar_endpoint_passes_market_regime_read_model(monkeypatch
             "hasBacktestSampleReader": True,
         }
     ]
+
+
+def test_get_research_radar_endpoint_passes_non_us_market_and_preserves_unknown_context(monkeypatch) -> None:
+    regime_calls: list[dict[str, object]] = []
+    unknown_context = {"status": "blocked", "market": "UNKNOWN", "readiness": {"label": "unknown"}}
+
+    response = _client(
+        monkeypatch,
+        regime_read_model=unknown_context,
+        regime_calls=regime_calls,
+    ).get("/api/v1/research/radar", params={"market": "CN"})
+
+    assert response.status_code == 200, response.text
+    assert regime_calls and regime_calls[0]["market"] == "CN"
+    assert _FakeResearchRadarService.calls[0]["market_regime_read_model"] == unknown_context

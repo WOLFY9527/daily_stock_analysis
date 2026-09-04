@@ -88,7 +88,7 @@ def _serialized_values(payload: object) -> str:
     return json.dumps(values, ensure_ascii=False, sort_keys=True).lower()
 
 
-def _client(monkeypatch) -> tuple[TestClient, dict[str, object]]:
+def _client(monkeypatch, *, regime_calls: list[dict[str, object]] | None = None) -> tuple[TestClient, dict[str, object]]:
     from api.v1.endpoints import research
 
     calls: dict[str, object] = {"scanner": [], "watchlist": []}
@@ -103,6 +103,11 @@ def _client(monkeypatch) -> tuple[TestClient, dict[str, object]]:
 
     monkeypatch.setattr(research, "_latest_scanner_research_payload", fake_scanner_payload)
     monkeypatch.setattr(research, "_watchlist_research_overlay_payload", fake_watchlist_overlay)
+    monkeypatch.setattr(
+        research,
+        "build_market_regime_read_model",
+        lambda **kwargs: (regime_calls.append(dict(kwargs)) if regime_calls is not None else None),
+    )
 
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -174,3 +179,14 @@ def test_get_research_queue_fails_closed_when_sources_are_empty(monkeypatch) -> 
     assert payload["dataQuality"]["failClosed"] is True
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+
+
+def test_get_research_queue_passes_non_us_market_to_regime_and_keeps_unknown_blocked(monkeypatch) -> None:
+    regime_calls: list[dict[str, object]] = []
+    client, _ = _client(monkeypatch, regime_calls=regime_calls)
+    response = client.get("/api/v1/research/queue", params={"market": "HK"})
+
+    assert response.status_code == 200, response.text
+    assert regime_calls and regime_calls[0]["market"] == "HK"
+    assert response.json()["observationOnly"] is True
+    assert response.json()["decisionGrade"] is False

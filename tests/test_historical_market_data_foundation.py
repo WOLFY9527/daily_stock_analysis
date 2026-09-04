@@ -324,6 +324,28 @@ def test_historical_natural_key_keeps_same_code_index_and_stock_distinct(tmp_pat
             [{"Date": "not-a-date", "Open": 10, "High": 11, "Low": 9, "Close": 10, "Volume": 1}],
             "malformed_timestamp",
         ),
+        (
+            [{"Date": "2026-01-05", "Open": 10, "High": 11, "Low": 9, "Close": "bad", "Volume": 1}],
+            "non_finite_ohlcv",
+        ),
+        (
+            [{"Date": "2026-01-05", "Open": 10, "High": 11, "Low": 9, "Close": True, "Volume": 1}],
+            "non_finite_ohlcv",
+        ),
+        (
+            [
+                {
+                    "Date": "2026-01-05",
+                    "Open": 10,
+                    "High": 11,
+                    "Low": 9,
+                    "Close": 10,
+                    "Volume": 1,
+                    "adjustedClose": "bad",
+                }
+            ],
+            "non_finite_adjusted_close",
+        ),
     ],
 )
 def test_quality_rejects_unusable_payloads(rows, reason_code) -> None:

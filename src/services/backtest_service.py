@@ -11,8 +11,10 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
 from sqlalchemy import and_, select
 
+from data_provider.base import attach_stock_daily_close_tokens
 from src.config import get_config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
 from src.core.trading_calendar import MARKET_EXCHANGE, MARKET_TIMEZONE, get_market_for_stock
@@ -32,8 +34,14 @@ from src.services.backtest_reproducibility_manifest import (
     build_backtest_reproducibility_manifest,
 )
 from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvProvider,
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
+)
+from src.services.development_historical_replay import (
+    DevelopmentDataPlaneHistoricalOhlcvProvider,
+    DevelopmentHistoricalReplayProvider,
+    compose_development_historical_ohlcv_provider,
 )
 from src.services.product_read_model import build_backtest_readiness_read_model
 from src.services.us_ohlcv_coverage_readiness import (
@@ -52,6 +60,7 @@ logger = logging.getLogger(__name__)
 LOCAL_BACKTEST_STARTER_SYMBOLS = starter_us_ohlcv_coverage_symbols()
 AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON = "aggregate_side_effect_boundary"
 SINGLE_SYMBOL_RUNTIME_PROBE_MODE = "bounded_provider_observation"
+DEVELOPMENT_HISTORICAL_REPLAY_SOURCE = "development_historical_replay"
 
 
 @dataclass(frozen=True)
@@ -80,12 +89,31 @@ class BacktestService:
         *,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
+        historical_ohlcv_provider: HistoricalOhlcvProvider | None = None,
     ):
         self.db = db_manager or DatabaseManager.get_instance()
         self.repo = BacktestRepository(self.db)
         self.stock_repo = StockRepository(self.db)
         self.owner_id = owner_id
         self.include_all_owners = bool(include_all_owners)
+        self.historical_ohlcv_provider = historical_ohlcv_provider
+
+    def _selected_historical_ohlcv_provider(self) -> HistoricalOhlcvProvider | None:
+        if self.historical_ohlcv_provider is not None:
+            return self.historical_ohlcv_provider
+        return compose_development_historical_ohlcv_provider(
+            local_us_provider=build_readonly_local_us_ohlcv_cache_provider_from_env(),
+            replay_provider=DevelopmentHistoricalReplayProvider.from_env(),
+        )
+
+    def _development_replay_blocks_runtime_fallback(self, *, code: str) -> bool:
+        provider = self._selected_historical_ohlcv_provider()
+        market = str(get_market_for_stock(code) or "unknown").upper()
+        if isinstance(provider, DevelopmentHistoricalReplayProvider):
+            return True
+        return isinstance(provider, DevelopmentDataPlaneHistoricalOhlcvProvider) and not (
+            market == "US" and provider.local_us_provider is not None
+        )
 
     def _owner_kwargs(self) -> Dict[str, Any]:
         return {
@@ -650,6 +678,25 @@ class BacktestService:
         )
 
         rows = self._load_stock_daily_rows(normalized_code)
+        if not rows and self._selected_historical_ohlcv_provider() is not None:
+            replay = self._fetch_development_replay_history(
+                code=normalized_code,
+                start=date(1900, 1, 1),
+                end=date.today(),
+            )
+            if replay is not None:
+                replay_frame, replay_source = replay
+                authority = assess_backtest_data_source_eligibility(
+                    code=normalized_code,
+                    source=replay_source,
+                )
+                if not authority.rejected:
+                    self.db.save_daily_data(
+                        replay_frame,
+                        code=normalized_code,
+                        data_source=replay_source,
+                    )
+                    rows = self._load_stock_daily_rows(normalized_code)
         candidate_rows = self._select_preparable_rows(rows, eval_window_days=settings.eval_window_days)
         if not candidate_rows:
             source_metadata = warmup_source_metadata or self._build_source_metadata_from_runtime_sources(
@@ -1167,18 +1214,17 @@ class BacktestService:
     ) -> Dict[str, Any]:
         date_range = data_basis["date_range"]
         effective = date_range["effective"]
-        source = market_data_sources[0] if market_data_sources else "database_cache"
-        authority = assess_backtest_data_source_eligibility(code=code, source=source)
+        source_authority = cls._aggregate_market_data_source_authority(
+            code=code,
+            market_data_sources=market_data_sources,
+        )
         blockers = list(data_basis.get("blocking_reasons") or [])
         lineage = {
             "manifest_version": "backtest_dataset_reproducibility_manifest.v1",
-            "dataset_id": f"historical_analysis:{source}:{code}",
+            "dataset_id": f"historical_analysis:{source_authority['source']}:{code}",
             "content_identity": cls._standard_result_content_identity(code=code, rows=rows),
             "source_lineage": {
-                "source": source,
-                "authority_status": authority.authority_status,
-                "authority_source_type": authority.source_type,
-                "authority_reason_codes": list(authority.reason_codes),
+                **source_authority,
             },
             "price_basis": data_basis["price_basis"],
             "calendar_identity": data_basis["calendar_identity"],
@@ -1235,6 +1281,37 @@ class BacktestService:
                 deduped.append(item)
         return deduped
 
+    @staticmethod
+    def _aggregate_market_data_source_authority(
+        *,
+        code: str,
+        market_data_sources: List[str],
+    ) -> Dict[str, Any]:
+        sources = [str(source).strip() for source in market_data_sources if str(source).strip()]
+        assessments = [
+            assess_backtest_data_source_eligibility(code=code, source=source)
+            for source in (sources or ["database_cache"])
+        ]
+        if any(item.rejected for item in assessments):
+            authority_status = "rejected"
+        elif any(not item.authority_allowed for item in assessments):
+            authority_status = "degraded_fill_only"
+        else:
+            authority_status = "allowed"
+        source_types = {item.source_type for item in assessments}
+        reason_codes: List[str] = []
+        for assessment in assessments:
+            for reason_code in assessment.reason_codes:
+                if reason_code not in reason_codes:
+                    reason_codes.append(reason_code)
+        return {
+            "source": (sources[0] if sources else "database_cache") if len(sources) <= 1 else "mixed",
+            "sources": sources,
+            "authority_status": authority_status,
+            "authority_source_type": source_types.pop() if len(source_types) == 1 else "mixed",
+            "authority_reason_codes": reason_codes,
+        }
+
     def _standard_result_ohlcv_rows(
         self,
         *,
@@ -1265,8 +1342,10 @@ class BacktestService:
         eval_window_days: int,
         market_data_sources: List[str],
     ) -> Dict[str, Any]:
-        source = market_data_sources[0] if market_data_sources else "database_cache"
-        authority = assess_backtest_data_source_eligibility(code=code, source=source)
+        source_authority = BacktestService._aggregate_market_data_source_authority(
+            code=code,
+            market_data_sources=market_data_sources,
+        )
         warnings = [
             {
                 "code": "unadjusted_price_basis",
@@ -1282,25 +1361,26 @@ class BacktestService:
                     "message": "Stored bars do not expose a concrete upstream provider.",
                 }
             )
-        if authority.authority_status != "allowed":
+        if source_authority["authority_status"] != "allowed":
             warnings.append(
                 {
-                    "code": "backtest_authority_rejected" if authority.rejected else "backtest_authority_degraded",
+                    "code": (
+                        "backtest_authority_rejected"
+                        if source_authority["authority_status"] == "rejected"
+                        else "backtest_authority_degraded"
+                    ),
                     "severity": "warning",
                     "message": (
-                        f"Backtest authority source {source} is rejected for reproducible authority."
-                        if authority.rejected
-                        else f"Backtest authority source {source} is fill-only and not reproducible authority."
+                        f"Backtest authority source {source_authority['source']} is rejected for reproducible authority."
+                        if source_authority["authority_status"] == "rejected"
+                        else f"Backtest authority source {source_authority['source']} is fill-only and not reproducible authority."
                     ),
                 }
             )
         return {
             "symbol": code,
-            "provider": source,
-            "source": source,
-            "authority_status": authority.authority_status,
-            "authority_source_type": authority.source_type,
-            "authority_reason_codes": list(authority.reason_codes),
+            "provider": source_authority["source"],
+            **source_authority,
             "frequency": "1d",
             "requested_start": analysis_date.isoformat() if analysis_date else None,
             "requested_end": None,
@@ -1354,7 +1434,7 @@ class BacktestService:
             source_available = False
         request = HistoricalOhlcvReadinessRequest(
             symbol=code,
-            market="US" if self._requested_mode_for_code(code) == "local_first" else "unknown",
+            market=str(get_market_for_stock(code) or "unknown").upper(),
             timeframe="1d",
             start=start,
             end=end,
@@ -1369,7 +1449,7 @@ class BacktestService:
             rows=rows,
             default_to_cache=bool(rows),
         )
-        provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
+        provider = self._selected_historical_ohlcv_provider()
         cached_readiness: Optional[Dict[str, Any]] = None
         if provider is not None and (not source_available or benchmark_required):
             result = HistoricalOhlcvReadinessService(provider=provider).fetch(request)
@@ -1377,9 +1457,17 @@ class BacktestService:
             if result.readiness.get("providerState") == "available":
                 return result.readiness, self._build_source_metadata_from_fetch_source(
                     code=code,
-                    source="local_us_parquet",
+                    source=(
+                        DEVELOPMENT_HISTORICAL_REPLAY_SOURCE
+                        if self._development_replay_blocks_runtime_fallback(code=code)
+                        else "local_us_parquet"
+                    ),
                 )
-        if not source_available and allow_runtime_probe:
+        if (
+            not source_available
+            and allow_runtime_probe
+            and not self._development_replay_blocks_runtime_fallback(code=code)
+        ):
             runtime_probe = self._probe_runtime_historical_ohlcv_readiness(
                 request=request,
                 code=code,
@@ -1388,11 +1476,25 @@ class BacktestService:
                 return runtime_probe
             if cached_readiness is not None:
                 return cached_readiness, stock_source_metadata
+        if cached_readiness is not None and self._development_replay_blocks_runtime_fallback(code=code):
+            return cached_readiness, self._build_source_metadata_from_fetch_source(
+                code=code,
+                source=DEVELOPMENT_HISTORICAL_REPLAY_SOURCE,
+            )
         result = HistoricalOhlcvReadinessService().assess_supplied_history(
             request,
             [self._stock_daily_to_ohlcv_bar(row) for row in rows],
             source_available=source_available,
             adjustments_available=None,
+            freshness_state=(
+                "stale"
+                if any(
+                    str(getattr(row, "data_source", "") or "").strip().lower()
+                    == DEVELOPMENT_HISTORICAL_REPLAY_SOURCE
+                    for row in rows
+                )
+                else None
+            ),
             unavailable_reason="provider_missing" if not source_available else None,
         )
         return result.readiness, stock_source_metadata
@@ -1884,14 +1986,20 @@ class BacktestService:
         try:
             # Fetch a window that covers the analysis bar plus the forward evaluation bars.
             end_date = analysis_date + timedelta(days=max(eval_window_days * 2, 30))
-            df, source = fetch_daily_history_with_local_us_fallback(
-                code,
-                start_date=analysis_date,
-                end_date=end_date,
-                days=eval_window_days * 2,
-                log_context="[historical-eval fill]",
-                allow_provider_fallback=False,
-            )
+            replay = self._fetch_development_replay_history(code=code, start=analysis_date, end=end_date)
+            if replay is None:
+                if self._development_replay_blocks_runtime_fallback(code=code):
+                    return None
+                df, source = fetch_daily_history_with_local_us_fallback(
+                    code,
+                    start_date=analysis_date,
+                    end_date=end_date,
+                    days=eval_window_days * 2,
+                    log_context="[historical-eval fill]",
+                    allow_provider_fallback=False,
+                )
+            else:
+                df, source = replay
             if df is None or df.empty:
                 return None
             authority = assess_backtest_data_source_eligibility(code=code, source=source)
@@ -1914,6 +2022,47 @@ class BacktestService:
         except Exception as exc:
             logger.warning(f"补全历史分析评估日线数据失败({code}): {exc}")
             return None
+
+    def _fetch_development_replay_history(
+        self,
+        *,
+        code: str,
+        start: date | None,
+        end: date | None,
+    ) -> tuple[pd.DataFrame, str] | None:
+        provider = self._selected_historical_ohlcv_provider()
+        if provider is None:
+            return None
+        market = str(get_market_for_stock(code) or "unknown").upper()
+        result = provider.fetch_ohlcv_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol=code,
+                market=market,
+                timeframe="1d",
+                start=start,
+                end=end,
+            )
+        )
+        metadata = result.metadata
+        if (
+            result.unavailable_reason
+            or not result.bars
+            or metadata.get("development") is not True
+            or metadata.get("historical") is not True
+            or metadata.get("replay") is not True
+            or metadata.get("delivery") != "local_replay"
+            or metadata.get("productionEligible") is not False
+            or metadata.get("observationOnly") is not True
+        ):
+            return None
+        frame = pd.DataFrame([bar.as_dict() for bar in result.bars])
+        return (
+            attach_stock_daily_close_tokens(
+                frame,
+                [Decimal(str(bar.close)) for bar in result.bars],
+            ),
+            DEVELOPMENT_HISTORICAL_REPLAY_SOURCE,
+        )
 
     def _ensure_market_history(
         self,
@@ -1941,14 +2090,20 @@ class BacktestService:
                 return 0, self._build_source_metadata_for_stock_rows(code=code, rows=rows, default_to_cache=True)
 
         try:
-            df, source = fetch_daily_history_with_local_us_fallback(
-                code,
-                start_date=start_date,
-                end_date=end_date,
-                days=lookback_days,
-                log_context="[historical-eval warmup]",
-                allow_provider_fallback=allow_provider_fallback,
-            )
+            replay = self._fetch_development_replay_history(code=code, start=start_date, end=end_date)
+            if replay is not None:
+                df, source = replay
+            elif self._development_replay_blocks_runtime_fallback(code=code):
+                return 0, None
+            else:
+                df, source = fetch_daily_history_with_local_us_fallback(
+                    code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    days=lookback_days,
+                    log_context="[historical-eval warmup]",
+                    allow_provider_fallback=allow_provider_fallback,
+                )
             if df is None or df.empty:
                 return 0, None
             authority = assess_backtest_data_source_eligibility(code=code, source=source)
@@ -2599,6 +2754,8 @@ class BacktestService:
             return "DatabaseCache"
         if lower in {"local_us_parquet", "localparquet"} or "parquet" in lower or "stooq" in lower:
             return "LocalParquet"
+        if lower == DEVELOPMENT_HISTORICAL_REPLAY_SOURCE:
+            return "DevelopmentHistoricalReplay"
         if "yfinance" in lower:
             return "YfinanceFetcher"
         if "cache" in lower or lower.startswith("db_") or lower == "db":
@@ -2608,7 +2765,10 @@ class BacktestService:
     def _build_source_metadata_from_fetch_source(self, *, code: str, source: Optional[str]) -> BacktestSourceMetadata:
         requested_mode = self._requested_mode_for_code(code)
         normalized_source = self._normalize_resolved_source_label(source) or "Unknown"
-        fallback_used = requested_mode == "local_first" and normalized_source != "LocalParquet"
+        fallback_used = requested_mode == "local_first" and normalized_source not in {
+            "LocalParquet",
+            "DevelopmentHistoricalReplay",
+        }
         return BacktestSourceMetadata(
             requested_mode=requested_mode,
             resolved_source=normalized_source,

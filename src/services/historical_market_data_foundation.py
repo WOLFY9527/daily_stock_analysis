@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -168,11 +169,17 @@ class HistoricalBarQualityOutcome:
                 add("missing_required_identity", "reject")
             if bar.session_date == date.min:
                 add("malformed_timestamp", "reject")
-            if any(value < 0 for value in (bar.open, bar.high, bar.low, bar.close)):
+            if not all(math.isfinite(value) for value in (bar.open, bar.high, bar.low, bar.close, bar.volume)):
+                add("non_finite_ohlcv", "reject")
+            elif "adjustedClose" in bar.adjustment_metadata and not math.isfinite(
+                bar.adjustment_metadata["adjustedClose"]
+            ):
+                add("non_finite_adjusted_close", "reject")
+            elif any(value < 0 for value in (bar.open, bar.high, bar.low, bar.close)):
                 add("negative_price", "reject")
-            if bar.volume < 0:
+            elif bar.volume < 0:
                 add("negative_volume", "reject")
-            if bar.high < max(bar.open, bar.low, bar.close) or bar.low > min(bar.open, bar.high, bar.close):
+            elif bar.high < max(bar.open, bar.low, bar.close) or bar.low > min(bar.open, bar.high, bar.close):
                 add("invalid_ohlc_relationship", "reject")
             if bar.observed_at is None or bar.as_of is None:
                 add("source_metadata_gap", "degrade")
@@ -630,6 +637,8 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _float_or_sentinel(value: Any) -> float:
+    if isinstance(value, bool):
+        return float("nan")
     try:
         parsed = float(value)
     except (TypeError, ValueError):

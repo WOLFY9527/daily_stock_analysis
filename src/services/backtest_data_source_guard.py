@@ -35,6 +35,7 @@ _LOCAL_AUTHORITY_SOURCE_ALIASES = {
 _UNKNOWN_AUTHORITY_SOURCES = frozenset({"unknown", "missing"})
 _UNKNOWN_AUTHORITY_REASON_CODE = "source_authority_unknown"
 _QUALIFICATION_FIXTURE_REASON_CODE = "qualification_fixture_not_authoritative"
+_DEVELOPMENT_REPLAY_REASON_CODE = "development_replay_not_production_authoritative"
 _PROXY_FILL_ONLY_PROVIDERS = frozenset(
     {
         "yahoo_yfinance",
@@ -120,6 +121,20 @@ def assess_backtest_data_source_eligibility(
             degraded_fill_only=True,
             rejected=False,
             reason_codes=(_QUALIFICATION_FIXTURE_REASON_CODE,),
+        )
+
+    if authority_source == "development_historical_replay":
+        return BacktestDataSourceEligibility(
+            request=request,
+            plan=plan,
+            source=normalized_source,
+            provider_id=provider_id,
+            source_type="cache_snapshot",
+            authority_status="degraded_fill_only",
+            authority_allowed=False,
+            degraded_fill_only=True,
+            rejected=False,
+            reason_codes=(_DEVELOPMENT_REPLAY_REASON_CODE,),
         )
 
     if authority_source in _LOCAL_AUTHORITY_SOURCES or source_type == "cache_snapshot":

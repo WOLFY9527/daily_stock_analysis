@@ -53,6 +53,27 @@ time. The foundation preserves both fields independently.
 Quality validation is deterministic and does not repair, interpolate, or
 fabricate historical market data.
 
+## Development Local Replay
+
+`WOLFYSTOCK_DEVELOPMENT_DATA_MANIFEST` 是显式 opt-in 的本地 historical
+replay 输入。它只接受一个 manifest 文件；其中每个 payload 必须是 manifest
+目录下的相对 JSON 路径，并以 SHA-256 绑定。manifest、entry 和 payload 的
+market、canonical symbol、source、provider、`observedAt`、`asOf`、interval
+和 non-production 标记必须一致，否则 replay fail closed。
+
+replay 复用本合同的 canonical identity、质量和 persistence owner，供已接入
+的 Scanner 与 Backtest consumer seam 读取。它不改变现有 local US parquet
+优先级，也不启用 provider network path。每项 replay observation 都必须保留：
+
+- `delivery=local_replay`、`historical=true`、`replay=true`、`development=true`；
+- `authority=false`、`fallback=false`、`productionEligible=false`、`observationOnly=true`；
+- `freshness=stale`，因为 historical replay 不能表示 current 或 live 市场状态。
+
+该输入机制不是随仓数据集，也不证明任一市场有可分发或可用的真实数据。不得使用
+synthetic/R06 fixture、fabricated price、缺失 hash 的 payload，或把 replay 用作
+DATA-001、REL-001、production provider、实时 market context、portfolio valuation
+或免费网络 provider qualification 的证据。
+
 ## Persistence
 
 `src.repositories.historical_market_data_repo.HistoricalMarketDataRepository`

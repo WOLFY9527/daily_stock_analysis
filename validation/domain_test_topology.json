@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8334,
-      "sha256": "b15f6c05bfad9f38805d7eebfbf05aa5ed84e3d8a4e3f51ee3b2c68aec610124"
+      "count": 8369,
+      "sha256": "c93aa71fec05f7aa610df62c9e9a571d002184f2ab787d2d710166b928418b90"
     },
     "tests": [
       {
@@ -5064,6 +5064,11 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_research_queue_endpoint.py::test_get_research_queue_passes_non_us_market_to_regime_and_keeps_unknown_blocked",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_research_queue_endpoint.py::test_get_research_queue_returns_bounded_unified_contract",
         "domain": "provider_external_network",
         "baseline": true
@@ -5082,6 +5087,11 @@
         "id": "tests/api/test_research_radar_endpoint.py::test_get_research_radar_endpoint_passes_market_regime_read_model",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_research_radar_endpoint.py::test_get_research_radar_endpoint_passes_non_us_market_and_preserves_unknown_context",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/api/test_research_radar_endpoint.py::test_get_research_radar_endpoint_uses_typed_response_model",
@@ -15754,6 +15764,156 @@
         "baseline": false
       },
       {
+        "id": "tests/test_development_historical_replay.py::test_backtest_explicit_missing_manifest_blocks_runtime_fallback",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_backtest_persists_verified_replay_without_provider_fallback",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_backtest_sample_status_with_missing_manifest_skips_runtime_readiness_probe",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_backtest_uses_cn_manifest_replay_without_runtime_fallback_when_local_us_cache_exists",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_content_hash_tampering_fails_closed_before_replay",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_from_env_requires_an_existing_manifest_without_creating_a_fallback",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_invalid_canonical_numeric_replay_rows_fail_closed[boolean-adjusted-close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_invalid_canonical_numeric_replay_rows_fail_closed[boolean-close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_invalid_canonical_numeric_replay_rows_fail_closed[text-adjusted-close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_non_finite_ohlcv_fails_closed_as_replay_unavailable",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_production_authority_claim_fails_closed_even_with_a_valid_hash",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[entry-development-False-observation_development_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[manifest-replay-False-manifest_replay_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-authority-True-payload_authority_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-fallback-True-payload_fallback_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-provider-unit_fixture-payload_synthetic_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-delayed_fixture-payload_source_type_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-disabled_live_stub-payload_source_type_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-fallback-payload_fallback_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-fallback_static-payload_fallback_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-malformed_fixture-payload_source_type_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-missing-payload_missing_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-synthetic_fixture-payload_synthetic_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_metadata_and_synthetic_source_claims_fail_closed[payload-source-unavailable-payload_missing_source_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replays_verified_cn_hk_us_observations_through_canonical_identity[CN-SH600519-600519.SH-600519-akshare_archive-eastmoney_historical]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replays_verified_cn_hk_us_observations_through_canonical_identity[HK-00700-HK00700-HK00700-stooq_archive-stooq_historical]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replays_verified_cn_hk_us_observations_through_canonical_identity[US-AAPL-AAPL.US-AAPL-stooq_archive-stooq_historical]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_scanner_combines_local_us_cache_with_cn_manifest_replay",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_scanner_explicit_missing_manifest_stays_unavailable_without_runtime_provider",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_scanner_loads_explicit_replay_after_local_us_cache_selection",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_domain_normalization_contracts.py::test_market_payload_classification_golden_parity",
         "domain": "api_schema_contracts",
         "baseline": false
@@ -17632,6 +17792,21 @@
         "id": "tests/test_historical_market_data_foundation.py::test_quality_rejects_unusable_payloads[rows3-malformed_timestamp]",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_quality_rejects_unusable_payloads[rows4-non_finite_ohlcv]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_quality_rejects_unusable_payloads[rows5-non_finite_ohlcv]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_historical_market_data_foundation.py::test_quality_rejects_unusable_payloads[rows6-non_finite_adjusted_close]",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_historical_market_data_foundation.py::test_repository_conflict_policy_preserves_existing_canonical_bar",
