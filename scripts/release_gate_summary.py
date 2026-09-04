@@ -199,10 +199,29 @@ def _operator_details(
     details = {
         "bundleSchema": report.get("schemaVersion"),
         "bundleStatus": report["bundleStatus"],
+        "providerQualificationStatus": report.get("providerQualificationStatus"),
     }
     errors: list[str] = []
     if report.get("schemaVersion") != "wolfystock_operator_evidence_bundle_summary_v1":
         errors.append("operator_evidence_schema_mismatch")
+    if report.get("providerQualificationStatus") != "QUALIFIED":
+        errors.append("operator_evidence_provider_not_qualified")
+    binding = report.get("candidateBinding") if isinstance(report.get("candidateBinding"), dict) else {}
+    details.update(
+        {
+            "candidateBindingStatus": binding.get("status"),
+            "candidateBindingSha": binding.get("candidateSha"),
+            "candidateBindingTree": binding.get("candidateTree"),
+            "candidateBindingExpectedSha": binding.get("expectedCandidateSha"),
+            "candidateBindingExpectedTree": binding.get("expectedCandidateTree"),
+        }
+    )
+    if binding.get("status") != "pass":
+        errors.append("operator_evidence_candidate_binding_not_pass")
+    if binding.get("candidateSha") != candidate["commitSha"] or binding.get("expectedCandidateSha") != candidate["commitSha"]:
+        errors.append("operator_evidence_candidate_binding_sha_mismatch")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(binding.get("candidateTree") or "")) or binding.get("candidateTree") != binding.get("expectedCandidateTree"):
+        errors.append("operator_evidence_candidate_binding_tree_mismatch")
     if operator_evidence_dir is None or not operator_evidence_dir.is_dir():
         return details, [*errors, "operator_evidence_directory_missing"]
     try:
@@ -398,8 +417,16 @@ def _validate_gate_details(gate_id: str, details: Any, candidate: dict[str, Any]
             errors.append("operator_evidence_schema_mismatch")
         if details.get("bundleStatus") != "complete-review-required":
             errors.append("operator_evidence_not_complete")
+        if details.get("providerQualificationStatus") != "QUALIFIED":
+            errors.append("operator_evidence_provider_not_qualified")
         if details.get("releaseCandidateSha") != candidate["commitSha"]:
             errors.append("operator_evidence_candidate_sha_mismatch")
+        if details.get("candidateBindingStatus") != "pass":
+            errors.append("operator_evidence_candidate_binding_not_pass")
+        if details.get("candidateBindingSha") != candidate["commitSha"] or details.get("candidateBindingExpectedSha") != candidate["commitSha"]:
+            errors.append("operator_evidence_candidate_binding_sha_mismatch")
+        if not re.fullmatch(r"[0-9a-f]{40}", str(details.get("candidateBindingTree") or "")) or details.get("candidateBindingTree") != details.get("candidateBindingExpectedTree"):
+            errors.append("operator_evidence_candidate_binding_tree_mismatch")
         if details.get("environment") != "release-approval":
             errors.append("operator_evidence_environment_invalid")
     elif gate_id == "artifact-provenance":

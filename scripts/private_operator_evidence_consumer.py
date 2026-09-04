@@ -760,6 +760,7 @@ def _run_candidate_validators(
     *,
     candidate_root: Path,
     candidate_sha: str,
+    candidate_tree: str,
     input_directory: Path,
     sanitized_directory: Path,
     validation_directory: Path,
@@ -804,6 +805,8 @@ def _run_candidate_validators(
             str(validation_directory),
             "--expected-candidate-sha",
             candidate_sha,
+            "--expected-candidate-tree",
+            candidate_tree,
         ],
         cwd=candidate_root,
     )
@@ -870,6 +873,7 @@ def validate_handoff(
     _run_candidate_validators(
         candidate_root=candidate_root,
         candidate_sha=candidate,
+        candidate_tree=tree,
         input_directory=input_directory,
         sanitized_directory=sanitized_directory,
         validation_directory=validation_directory,

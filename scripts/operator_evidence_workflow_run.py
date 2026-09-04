@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from operator_evidence_bundle_check import (
+    ARTIFACT_SPECS,
     BUNDLE_STATUSES,
     REQUIRED_REASON_MISSING,
     build_bundle_summary,
@@ -41,7 +42,11 @@ REPORT_OUTPUT = "release-review-report.md"
 UNSAFE_MARKER_REASON = "unsafe_marker"
 REPORT_OK_STATUSES = {BUNDLE_STATUSES["complete"]}
 EXPECTED_CANDIDATE_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
-CANDIDATE_SHA_MISMATCH_REASON = "release_candidate_sha_mismatch"
+NON_OBSERVED_REFERENCE_PATTERN = re.compile(
+    r"(?:synthetic|simulat(?:ed|ion)|dry[-_ ]?run|fixture|replay|mock|no[-_ ]?network|unavailable)",
+    re.IGNORECASE,
+)
+CANDIDATE_BINDING_FILENAME = "candidate_binding_operator_evidence.json"
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -158,22 +163,107 @@ def _workflow_exit(bundle: dict[str, Any], verification: dict[str, Any]) -> tupl
     return EXIT_OK, "[OK] operator evidence workflow completed: review-required"
 
 
-def _candidate_binding_error(artifact_dir: Path, expected_candidate_sha: str | None) -> str | None:
-    if expected_candidate_sha is None:
-        return None
+def _candidate_binding_summary(
+    artifact_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    expected_candidate_sha: str | None,
+    expected_candidate_tree: str | None,
+) -> dict[str, Any]:
+    if expected_candidate_sha is None or expected_candidate_tree is None:
+        return {
+            "status": "not-requested",
+            "recordFileLabel": CANDIDATE_BINDING_FILENAME,
+            "reasonCodes": ["expected_candidate_identity_not_provided"],
+        }
+    reasons: list[str] = []
     try:
-        manual_review = _load_json_object(artifact_dir / "manual_release_approval_review_record.json")
+        record = _load_json_object(artifact_dir / CANDIDATE_BINDING_FILENAME)
     except (OSError, json.JSONDecodeError, ValueError):
-        return CANDIDATE_SHA_MISMATCH_REASON
-    if manual_review.get("releaseCandidateSha") != expected_candidate_sha:
-        return CANDIDATE_SHA_MISMATCH_REASON
-    return None
+        record = {}
+        reasons.append("candidate_binding_record_unreadable")
+
+    if record.get("candidateSha") != expected_candidate_sha:
+        reasons.append("candidate_binding_sha_mismatch")
+    if record.get("candidateTree") != expected_candidate_tree:
+        reasons.append("candidate_binding_tree_mismatch")
+    if record.get("synthetic") is not False:
+        reasons.append("candidate_binding_synthetic_rejected")
+    if record.get("outcome") != "accepted":
+        reasons.append("candidate_binding_outcome_not_accepted")
+    if record.get("outcome") == "accepted" and NON_OBSERVED_REFERENCE_PATTERN.search(
+        str(record.get("observationRef") or "")
+    ):
+        reasons.append("candidate_binding_observation_ref_not_observed")
+    if _contains_template_marker(record):
+        reasons.append("candidate_binding_placeholder_rejected")
+
+    entries = manifest.get("entries")
+    manifest_digests = {
+        (entry.get("category"), entry.get("fileLabel")): entry.get("sha256")
+        for entry in entries
+        if isinstance(entry, dict)
+    } if isinstance(entries, list) else {}
+    expected_digests = {
+        spec.filename: manifest_digests.get((spec.category, spec.filename))
+        for spec in ARTIFACT_SPECS
+        if spec.filename != CANDIDATE_BINDING_FILENAME
+    }
+    if record.get("artifactDigests") != expected_digests:
+        reasons.append("candidate_binding_artifact_digests_mismatch")
+    template_artifact_labels = _template_artifact_labels(artifact_dir)
+    if template_artifact_labels:
+        reasons.append("candidate_binding_template_artifact_present")
+    return {
+        "status": "pass" if not reasons else "fail",
+        "recordFileLabel": CANDIDATE_BINDING_FILENAME,
+        "candidateSha": record.get("candidateSha") if EXPECTED_CANDIDATE_SHA_PATTERN.fullmatch(str(record.get("candidateSha") or "")) else None,
+        "candidateTree": record.get("candidateTree") if EXPECTED_CANDIDATE_SHA_PATTERN.fullmatch(str(record.get("candidateTree") or "")) else None,
+        "expectedCandidateSha": expected_candidate_sha,
+        "expectedCandidateTree": expected_candidate_tree,
+        "artifactDigestCount": len(record.get("artifactDigests")) if isinstance(record.get("artifactDigests"), dict) else 0,
+        "templateArtifactCount": len(template_artifact_labels),
+        "templateArtifactLabels": template_artifact_labels,
+        "reasonCodes": sorted(set(reasons)),
+    }
+
+
+def _contains_template_marker(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(
+            str(key).strip().lower() == "templateplaceholders" or _contains_template_marker(child)
+            for key, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_template_marker(child) for child in value)
+    return isinstance(value, str) and bool(re.search(r"<[^>\r\n]+>", value))
+
+
+def _template_artifact_labels(artifact_dir: Path) -> list[str]:
+    labels: list[str] = []
+    for spec in ARTIFACT_SPECS:
+        if spec.filename == CANDIDATE_BINDING_FILENAME:
+            continue
+        try:
+            payload = _load_json_object(artifact_dir / spec.filename)
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        if _contains_template_marker(payload):
+            labels.append(spec.filename)
+    return labels
 
 
 def _parse_expected_candidate_sha(value: str) -> str:
     if not EXPECTED_CANDIDATE_SHA_PATTERN.fullmatch(value):
         raise argparse.ArgumentTypeError("expected_candidate_sha_must_be_full_lowercase_sha")
     return value
+
+
+def _expected_candidate_identity_supplied(args: argparse.Namespace) -> bool:
+    supplied = (args.expected_candidate_sha is not None, args.expected_candidate_tree is not None)
+    if supplied[0] != supplied[1]:
+        raise ValueError("expected_candidate_sha_and_tree_must_be_supplied_together")
+    return supplied[0]
 
 
 def _run_init(args: argparse.Namespace) -> int:
@@ -198,6 +288,18 @@ def _run_check(args: argparse.Namespace) -> int:
 
     verification = verify_manifest(artifact_dir, manifest_path)
     bundle = build_bundle_summary(artifact_dir)
+    try:
+        _expected_candidate_identity_supplied(args)
+        binding = _candidate_binding_summary(
+            artifact_dir,
+            manifest,
+            expected_candidate_sha=args.expected_candidate_sha,
+            expected_candidate_tree=args.expected_candidate_tree,
+        )
+    except ValueError as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        return EXIT_USAGE_OR_IO
+    bundle["candidateBinding"] = binding
     _write_json(output_dir / BUNDLE_SUMMARY_OUTPUT, bundle)
 
     report = render_report(
@@ -207,11 +309,10 @@ def _run_check(args: argparse.Namespace) -> int:
     (output_dir / REPORT_OUTPUT).write_text(report, encoding="utf-8")
 
     exit_code, message = _workflow_exit(bundle, verification)
-    if exit_code == EXIT_OK:
-        candidate_binding_error = _candidate_binding_error(artifact_dir, args.expected_candidate_sha)
-        if candidate_binding_error is not None:
-            exit_code = EXIT_VALIDATOR_REJECTION
-            message = f"[FAIL] release candidate binding rejected: {candidate_binding_error}"
+    if exit_code == EXIT_OK and binding["status"] != "pass" and _expected_candidate_identity_supplied(args):
+        reasons = ", ".join(binding["reasonCodes"])
+        exit_code = EXIT_VALIDATOR_REJECTION
+        message = f"[FAIL] release candidate binding rejected: {reasons}"
     stream = sys.stdout if exit_code == EXIT_OK else sys.stderr
     print(message, file=stream)
     return exit_code
@@ -251,7 +352,12 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument(
         "--expected-candidate-sha",
         type=_parse_expected_candidate_sha,
-        help="Full candidate SHA that the sanitized manual review record must bind.",
+        help="Full candidate SHA that the sanitized candidate-binding record must bind.",
+    )
+    check_parser.add_argument(
+        "--expected-candidate-tree",
+        type=_parse_expected_candidate_sha,
+        help="Full candidate tree SHA that the sanitized candidate-binding record must bind.",
     )
     check_parser.set_defaults(func=_run_check)
 

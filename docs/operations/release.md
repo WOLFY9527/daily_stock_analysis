@@ -70,6 +70,22 @@ credential-bearing process has ended. The public workflow uploads only the
 bounded derived operator-evidence gate record between jobs; raw private
 handoff files and evidence bodies are never public Actions artifacts.
 
+The candidate-owned workflow requires the bundle's
+`candidate_binding_operator_evidence.json` record to bind the exact candidate
+SHA and tree and the generated manifest's other artifact checksums. The derived
+operator-evidence gate accepts only `candidateBinding.status=pass` with the
+same exact SHA/tree and `providerQualificationStatus=QUALIFIED`. The provider
+matrix must retain CN/HK/US source authority, source state, coverage, freshness,
+delivery, entitlement, display-rights, and rate-limit facts. A structurally
+accepted provider record that is stale, fallback, unavailable, partial,
+degraded, or proxy-or-unknown remains `NOT_QUALIFIED` and rejects the bundle;
+it cannot make the operator-evidence gate pass. The required provider
+SLA/licensing artifact must also retain accepted licensing and staging-probe
+states before the aggregate can be `QUALIFIED`. Delayed delivery remains a
+recorded fact and does not imply realtime or an unproven age threshold. Its
+captured timestamp is a manual freshness-review input; it does not automatically
+approve freshness, a target environment, or release.
+
 Qualification initializes operator evidence to FAIL. Only a successful
 authenticated consumer job and successfully imported canonical gate record can
 replace that file before the authoritative twelve-gate aggregate. Missing
@@ -105,7 +121,11 @@ spend cap or distributed enforcement owner that does not exist.
 
 Diagnostics do not authorize changes to provider order, fallback, retry,
 timeout, cache, credentials, source authority, entitlement, or display rights.
-Real entitlement and target-environment evidence remain required.
+Real entitlement and target-environment evidence remain required. An accepted
+provider operator artifact must retain distinct CN, HK, and US sanitized
+observations and prove entitled/permitted status for every market; stale,
+fallback, delayed, and unavailable observations remain truthful states rather
+than implicit qualification.
 
 ### Database And Restore
 

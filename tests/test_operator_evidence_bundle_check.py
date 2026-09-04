@@ -26,12 +26,47 @@ def _provider_artifact(**overrides: object) -> dict[str, object]:
         "observedAt": "2026-05-08T10:30:00Z",
         "probeMode": "manual_provider_probe",
         "networkCallsEnabled": True,
+        "synthetic": False,
         "credentialPresence": "redacted",
         "circuitState": {"state": "closed", "summary": "No forced circuit override recorded."},
         "fallbackState": {"state": "unchanged", "summary": "Runtime fallback policy was observed only."},
+        "qualificationStatus": "QUALIFIED",
+        "observationMatrix": [
+            {
+                "market": market,
+                "providerLabel": "tradier",
+                "sourceLabel": "market-data",
+                "sourceState": "primary",
+                "sourceAuthority": "official",
+                "coverageState": "covered",
+                "asOf": "2026-05-08T10:30:00Z",
+                "freshness": "fresh",
+                "delivery": "realtime",
+                "entitlement": "entitled",
+                "displayRights": "permitted",
+                "rateLimitState": "normal",
+                "observationRef": f"provider-observation-{market.lower()}",
+            }
+            for market in ("CN", "HK", "US")
+        ],
         "outcome": "accepted",
         "evidenceRedactionVersion": "provider_operator_redaction_v1",
         "notes": "Sanitized operator artifact for later review.",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _candidate_binding_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schemaVersion": "wolfystock_operator_evidence_candidate_binding_v1",
+        "candidateSha": "a" * 40,
+        "candidateTree": "b" * 40,
+        "observationRef": "operator-run-123",
+        "capturedAt": "2026-05-08T10:30:00Z",
+        "synthetic": False,
+        "artifactDigests": {"provider_operator_evidence.json": "0" * 64},
+        "outcome": "accepted",
     }
     payload.update(overrides)
     return payload
@@ -44,10 +79,10 @@ def _provider_sla_artifact(**overrides: object) -> dict[str, object]:
         "operator": "provider-ops",
         "observedAt": "2026-05-08T10:30:00Z",
         "providerFamily": "data-source-validation",
-        "entitlementLicensingStatus": "needs-review",
+        "entitlementLicensingStatus": "accepted",
         "credentialPresence": "redacted",
         "allowedUsageScope": "admin-probe-review",
-        "stagingProbeResult": "not-run",
+        "stagingProbeResult": "accepted",
         "degradedFallbackPolicy": "unchanged",
         "runtimeEnforcement": {
             "claim": "not-claimed",
@@ -707,6 +742,7 @@ def _write_bundle(tmp_path: Path, artifacts: dict[str, object]) -> Path:
 
 def _accepted_artifacts() -> dict[str, object]:
     return {
+        "candidate_binding_operator_evidence.json": _candidate_binding_artifact(),
         "api_abuse_safety_evidence.json": _api_abuse_request_safety_artifact(),
         "provider_operator_evidence.json": _provider_artifact(),
         "provider_sla_licensing_evidence.json": _provider_sla_artifact(),
@@ -801,19 +837,100 @@ def test_missing_required_artifact_is_incomplete_no_go(tmp_path: Path) -> None:
 
 def test_rejected_artifact_is_rejected_no_go(tmp_path: Path) -> None:
     artifacts = _accepted_artifacts()
-    rejected_restore = deepcopy(artifacts["restore_pitr_operator_evidence.json"])
-    assert isinstance(rejected_restore, dict)
-    rejected_restore["outcome"] = "rejected"
-    artifacts["restore_pitr_operator_evidence.json"] = rejected_restore
+    rejected_provider_sla = deepcopy(artifacts["provider_sla_licensing_evidence.json"])
+    assert isinstance(rejected_provider_sla, dict)
+    rejected_provider_sla["outcome"] = "rejected"
+    artifacts["provider_sla_licensing_evidence.json"] = rejected_provider_sla
 
     result = _run_checker(_write_bundle(tmp_path, artifacts))
 
     assert result.returncode == 1
     payload = _stdout_json(result)
     assert payload["bundleStatus"] == "rejected-no-go"
-    restore = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "restore-pitr")
-    assert restore["status"] == "rejected"
-    assert "operator_outcome_is_accepted:fail" in restore["blockingReasonSummaries"]
+    provider_sla = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider-sla-licensing")
+    assert provider_sla["status"] == "rejected"
+
+    artifacts = _accepted_artifacts()
+    rejected_provider_sla = deepcopy(artifacts["provider_sla_licensing_evidence.json"])
+    assert isinstance(rejected_provider_sla, dict)
+    runtime_enforcement = rejected_provider_sla["runtimeEnforcement"]
+    assert isinstance(runtime_enforcement, dict)
+    runtime_enforcement["acceptedArtifact"] = {"outcome": "rejected"}
+    artifacts["provider_sla_licensing_evidence.json"] = rejected_provider_sla
+    nested_root = tmp_path / "nested-rejected"
+    nested_root.mkdir()
+
+    result = _run_checker(_write_bundle(nested_root, artifacts))
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert payload["bundleStatus"] == "rejected-no-go"
+    provider_sla = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider-sla-licensing")
+    assert provider_sla["status"] == "rejected"
+    assert provider_sla["blockingReasonSummaries"] == []
+
+
+def test_accepted_not_qualified_provider_rejects_bundle(tmp_path: Path) -> None:
+    artifacts = _accepted_artifacts()
+    provider = deepcopy(artifacts["provider_operator_evidence.json"])
+    assert isinstance(provider, dict)
+    provider["qualificationStatus"] = "NOT_QUALIFIED"
+    matrix = provider["observationMatrix"]
+    assert isinstance(matrix, list)
+    matrix[0]["freshness"] = "stale"
+    provider["circuitState"] = {
+        "state": "closed",
+        "summary": "Probe retained for review.",
+        "outcome": "needs-review",
+    }
+    artifacts["provider_operator_evidence.json"] = provider
+
+    result = _run_checker(_write_bundle(tmp_path, artifacts))
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert payload["bundleStatus"] == "rejected-no-go"
+    assert payload["providerQualificationStatus"] == "NOT_QUALIFIED"
+    provider_summary = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider")
+    assert provider_summary["status"] == "rejected"
+    assert "provider_not_qualified" in provider_summary["blockingReasonSummaries"]
+
+    artifacts = _accepted_artifacts()
+    provider_sla = deepcopy(artifacts["provider_sla_licensing_evidence.json"])
+    assert isinstance(provider_sla, dict)
+    provider_sla["entitlementLicensingStatus"] = "needs-review"
+    provider_sla["stagingProbeResult"] = "not-run"
+    artifacts["provider_sla_licensing_evidence.json"] = provider_sla
+    provider_sla_root = tmp_path / "provider-sla-unqualified"
+    provider_sla_root.mkdir()
+
+    result = _run_checker(_write_bundle(provider_sla_root, artifacts))
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert payload["bundleStatus"] == "rejected-no-go"
+    assert payload["providerQualificationStatus"] == "NOT_QUALIFIED"
+    provider_summary = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider")
+    assert provider_summary["status"] == "rejected"
+    assert "provider_sla_not_qualified" in provider_summary["blockingReasonSummaries"]
+
+    artifacts = _accepted_artifacts()
+    provider = deepcopy(artifacts["provider_operator_evidence.json"])
+    assert isinstance(provider, dict)
+    provider["circuitState"] = {"state": "closed", "outcome": "needs-review"}
+    artifacts["provider_operator_evidence.json"] = provider
+    review_root = tmp_path / "provider-needs-review"
+    review_root.mkdir()
+
+    result = _run_checker(_write_bundle(review_root, artifacts))
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert payload["bundleStatus"] == "rejected-no-go"
+    assert payload["providerQualificationStatus"] == "NOT_QUALIFIED"
+    provider_summary = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider")
+    assert provider_summary["status"] == "rejected"
+    assert "provider_evidence_not_accepted" in provider_summary["blockingReasonSummaries"]
 
 
 def test_unsafe_marker_does_not_leak_into_summary_output(tmp_path: Path) -> None:
@@ -830,7 +947,7 @@ def test_unsafe_marker_does_not_leak_into_summary_output(tmp_path: Path) -> None
     payload = _stdout_json(result)
     provider = next(artifact for artifact in payload["artifacts"] if artifact["category"] == "provider")
     assert provider["status"] == "rejected"
-    assert provider["blockingReasonSummaries"] == ["unsafe_marker"]
+    assert "unsafe_marker" in provider["blockingReasonSummaries"]
 
 
 def test_unknown_extra_artifact_is_reported_as_advisory_only(tmp_path: Path) -> None:

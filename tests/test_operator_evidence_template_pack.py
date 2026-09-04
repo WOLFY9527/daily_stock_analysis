@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_template_pack.py"
 
 EXPECTED_FILES = {
+    "candidate_binding_operator_evidence.json",
     "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
@@ -31,6 +32,7 @@ PLACEHOLDERS = {
     "<redacted-or-configured>",
     "<review-ticket-label>",
     "<release-candidate-sha>",
+    "<release-candidate-tree>",
 }
 
 RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS = {

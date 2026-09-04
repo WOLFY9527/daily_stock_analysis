@@ -15,6 +15,7 @@ Repository-owned offline helpers:
 - `scripts/operator_evidence_preflight.py`
 - `scripts/operator_evidence_workflow_smoke.py`
 - `scripts/operator_evidence_workflow_run.py`
+- `scripts/operator_evidence_candidate_binding_check.py`
 - `scripts/operator_evidence_schema_reference.py`
 - `scripts/operator_evidence_archive_pack.py`
 - `scripts/operator_evidence_gap_analyzer.py`
@@ -27,6 +28,7 @@ Inspect a command before preparing evidence:
 python3 scripts/operator_evidence_preflight.py --help
 python3 scripts/operator_evidence_workflow_smoke.py --help
 python3 scripts/operator_evidence_workflow_run.py --help
+python3 scripts/operator_evidence_candidate_binding_check.py --help
 python3 scripts/operator_evidence_schema_reference.py --help
 python3 scripts/operator_evidence_archive_pack.py --help
 python3 scripts/operator_evidence_gap_analyzer.py --help
@@ -45,6 +47,16 @@ python3 scripts/operator_evidence_workflow_smoke.py --help
 
 Synthetic or dry-run material remains synthetic. It cannot qualify a real
 target environment.
+
+Every reviewed bundle also contains the required
+`candidate_binding_operator_evidence.json` artifact. Its accepted record binds
+the full candidate SHA and tree, one safe external observation/run reference, a
+captured timestamp, `synthetic=false`, and SHA-256 digests for every other
+required artifact. Its digest map deliberately excludes the binding record
+itself. The observation/run reference must identify observed rather than
+synthetic, simulated, dry-run, fixture, replay, mock, no-network, or unavailable
+material. The generated template is unresolved and `needs-review`; changing only
+the manual review SHA cannot turn it into candidate-bound evidence.
 
 ## Redaction
 
@@ -79,10 +91,41 @@ Check a sanitized directory, compare bundles when required, and package only
 the reviewed outputs:
 
 ```bash
-python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>
+python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir> --expected-candidate-sha <full-candidate-sha> --expected-candidate-tree <full-candidate-tree>
 python3 scripts/operator_evidence_bundle_diff.py --help
 python3 scripts/operator_evidence_archive_pack.py --help
 ```
+
+When both expected identity arguments are supplied, the workflow creates its
+manifest first, then requires the binding record to match the SHA, tree, and
+manifest checksums exactly. The bounded `candidateBinding` result in
+`bundle-summary.json` is a review input, not an approval.
+
+For an `accepted` provider record, `provider_operator_evidence.json` contains a
+sanitized observation matrix with distinct `CN`, `HK`, and `US` rows. Each row
+records safe provider/source labels and observation reference, source state,
+source authority (`official`, `authorized`, or `proxy-or-unknown`), coverage,
+ISO as-of time, freshness, delivery, entitlement, display rights, and rate-limit
+state. `qualificationStatus` distinguishes a structurally accepted observation
+from release-eligible provider qualification. `QUALIFIED` requires every market
+to be primary, covered, fresh, non-degraded, official/authorized, entitled, and
+display-permitted; accepted provider evidence must also explicitly set
+`synthetic=false` and use an observed probe mode that is neither synthetic,
+simulated, dry-run, fixture, replay, mock, no-network, nor unavailable, with
+`networkCallsEnabled=true`. Its provider/source/observation labels must
+likewise not identify synthetic, simulated, dry-run, fixture, replay, mock,
+no-network, or unavailable material.
+The required provider SLA/licensing artifact must independently report both
+`entitlementLicensingStatus=accepted` and `stagingProbeResult=accepted`; any
+other state makes the aggregate provider qualification `NOT_QUALIFIED`.
+An explicit `outcome=rejected` at any depth rejects its artifact; a provider
+artifact must itself be accepted before it can contribute `QUALIFIED`.
+`delivery=delayed` remains an explicit observation rather
+than an invented realtime claim or age threshold. Stale, fallback, unavailable,
+partial, degraded, and proxy-or-unknown states remain observable facts but must
+be `NOT_QUALIFIED`; an accepted `NOT_QUALIFIED` provider record makes the bundle
+`rejected-no-go`. A nonaccepted provider record also preserves
+`qualificationStatus=NOT_QUALIFIED` rather than claiming qualification.
 
 Archive packaging is an operator evidence bundle operation, not permission to
 create a documentation archive lane. Temporary evidence retirement follows
@@ -142,6 +185,10 @@ API failure, synthetic artifact, expiry, unsafe archive, provenance mismatch,
 candidate mismatch, or validator rejection leaves the initialized gate at FAIL
 and release at NO-GO. Producer success never supplies manual reviewer approval
 and never determines release GO.
+
+The binding record's `capturedAt` timestamp supports manual freshness review.
+It is not an automatic freshness decision, target-environment approval, or
+release authorization.
 
 The synthetic qualification smoke run `31923336452` and artifact `9257055688`
 are negative contract evidence only. Their synthetic artifact name and marker

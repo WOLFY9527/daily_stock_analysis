@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8325,
-      "sha256": "d90425c87b5e3e5dd628de8b02d40d163bcf041577521b80957d3b46d7db52c6"
+      "count": 8334,
+      "sha256": "b15f6c05bfad9f38805d7eebfbf05aa5ed84e3d8a4e3f51ee3b2c68aec610124"
     },
     "tests": [
       {
@@ -26644,6 +26644,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_operator_evidence_bundle_check.py::test_accepted_not_qualified_provider_rejects_bundle",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_operator_evidence_bundle_check.py::test_all_sanitized_accepted_artifacts_require_manual_review",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -26907,6 +26912,16 @@
         "id": "tests/test_operator_evidence_workflow_e2e.py::test_operator_evidence_workflow_smoke_generates_review_required_outputs",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/test_operator_evidence_workflow_run.py::test_candidate_binding_rejects_embedded_unresolved_marker",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_operator_evidence_workflow_run.py::test_candidate_binding_rejects_tree_and_manifest_digest_mismatches",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_operator_evidence_workflow_run.py::test_check_on_complete_sanitized_fixture_produces_review_required_report",
@@ -32729,6 +32744,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_provider_operator_evidence_check.py::test_accepted_provider_evidence_rejects_missing_entitlement_or_display_rights",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_operator_evidence_check.py::test_accepted_provider_evidence_requires_distinct_cn_hk_us_observations",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_provider_operator_evidence_check.py::test_accepts_sanitized_operator_artifact",
         "domain": "provider_external_network",
         "baseline": true
@@ -32749,6 +32774,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_provider_operator_evidence_check.py::test_qualified_provider_evidence_rejects_noneligible_observed_states",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_provider_operator_evidence_check.py::test_raw_credential_markers_are_rejected_without_echoing_values",
         "domain": "provider_external_network",
         "baseline": true
@@ -32757,6 +32787,11 @@
         "id": "tests/test_provider_operator_evidence_check.py::test_raw_response_request_and_debug_payloads_are_rejected",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_provider_operator_evidence_check.py::test_stale_or_fallback_observations_remain_truthful_when_entitled_and_permitted",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_provider_plan_advisor.py::test_advisory_helpers_are_deterministic_and_side_effect_free",
@@ -34325,6 +34360,16 @@
       },
       {
         "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[UNKNOWN]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_operator_evidence_candidate_binding_missing_or_mismatched_blocks_qualification",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_operator_evidence_not_qualified_provider_blocks_qualification",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

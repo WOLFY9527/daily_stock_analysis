@@ -30,6 +30,7 @@ from provider_operator_evidence_check import validate_provider_operator_evidence
 from provider_sla_licensing_evidence_check import validate_provider_sla_licensing_evidence
 from api_abuse_request_safety_evidence_check import validate_api_abuse_request_safety_evidence
 from config_snapshot_evidence_check import validate_config_snapshot_evidence
+from operator_evidence_candidate_binding_check import validate_candidate_binding
 from manual_release_approval_evidence_check import validate_manual_release_approval_evidence
 from notification_delivery_rehearsal_evidence_check import validate_artifact as validate_notification_delivery_rehearsal_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
@@ -65,6 +66,12 @@ class ArtifactSpec:
 
 
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
+    ArtifactSpec(
+        category="candidate-binding",
+        filename="candidate_binding_operator_evidence.json",
+        validator_name="operator_evidence_candidate_binding_check.py",
+        validate=validate_candidate_binding,
+    ),
     ArtifactSpec(
         category="api-abuse-request-safety",
         filename="api_abuse_safety_evidence.json",
@@ -235,6 +242,15 @@ def _artifact_status(*, payload: Any, validator_summary: dict[str, Any]) -> str:
 
     outcomes = _collect_outcomes(payload)
     passed = _validator_passed(validator_summary)
+    if outcomes & REJECTED_OUTCOMES:
+        return "rejected"
+    if (
+        passed
+        and validator_summary.get("qualificationStatus") == "NOT_QUALIFIED"
+        and isinstance(payload, dict)
+        and payload.get("outcome") == "accepted"
+    ):
+        return "rejected"
     if passed:
         if outcomes and outcomes.issubset(ACCEPTED_OUTCOMES):
             return "accepted"
@@ -280,13 +296,30 @@ def _summarize_artifact(artifact_dir: Path, spec: ArtifactSpec) -> dict[str, Any
             "blockingReasonSummaries": ["validator_execution_failed"],
         }
 
-    return {
+    summary = {
         "category": spec.category,
         "pathLabel": _path_label(path),
         "status": _artifact_status(payload=payload, validator_summary=validator_summary),
         "validatorName": spec.validator_name,
         "blockingReasonSummaries": _reason_summaries(validator_summary),
     }
+    if spec.category == "provider":
+        qualification_status = validator_summary.get("qualificationStatus")
+        summary["qualificationStatus"] = qualification_status
+        if summary["status"] == "rejected" and qualification_status == "NOT_QUALIFIED":
+            summary["blockingReasonSummaries"] = sorted(
+                set(summary["blockingReasonSummaries"] + ["provider_not_qualified"])
+            )
+    if spec.category == "provider-sla-licensing":
+        artifact = validator_summary.get("artifact")
+        if isinstance(artifact, dict):
+            summary["qualificationStatus"] = (
+                "QUALIFIED"
+                if artifact.get("entitlementLicensingStatus") == "accepted"
+                and artifact.get("stagingProbeResult") == "accepted"
+                else "NOT_QUALIFIED"
+            )
+    return summary
 
 
 def _summarize_unknown_artifacts(artifact_dir: Path) -> list[dict[str, Any]]:
@@ -309,6 +342,27 @@ def _summarize_unknown_artifacts(artifact_dir: Path) -> list[dict[str, Any]]:
 
 def build_bundle_summary(artifact_dir: Path) -> dict[str, Any]:
     artifacts = [_summarize_artifact(artifact_dir, spec) for spec in ARTIFACT_SPECS]
+    provider = next((artifact for artifact in artifacts if artifact["category"] == "provider"), {})
+    provider_sla = next((artifact for artifact in artifacts if artifact["category"] == "provider-sla-licensing"), {})
+    provider_qualified = (
+        provider.get("status") == "accepted"
+        and provider.get("qualificationStatus") == "QUALIFIED"
+    )
+    provider_sla_qualified = (
+        provider_sla.get("status") == "accepted"
+        and provider_sla.get("qualificationStatus") == "QUALIFIED"
+    )
+    if provider.get("qualificationStatus") == "QUALIFIED" and provider.get("status") != "accepted":
+        provider["status"] = "rejected"
+        provider["blockingReasonSummaries"] = sorted(
+            set(provider.get("blockingReasonSummaries", []) + ["provider_evidence_not_accepted"])
+        )
+    elif provider_qualified and not provider_sla_qualified:
+        provider["status"] = "rejected"
+        provider["blockingReasonSummaries"] = sorted(
+            set(provider.get("blockingReasonSummaries", []) + ["provider_sla_not_qualified"])
+        )
+        provider_qualified = False
     missing = any(artifact["status"] == "missing" for artifact in artifacts)
     rejected = any(artifact["status"] == "rejected" for artifact in artifacts)
     if missing:
@@ -325,6 +379,7 @@ def build_bundle_summary(artifact_dir: Path) -> dict[str, Any]:
         "runtimeBehaviorChanged": False,
         "networkCallsExecutedByValidator": False,
         "rawArtifactBodiesIncluded": False,
+        "providerQualificationStatus": "QUALIFIED" if provider_qualified else "NOT_QUALIFIED",
         "artifacts": artifacts,
         "advisories": _summarize_unknown_artifacts(artifact_dir),
     }

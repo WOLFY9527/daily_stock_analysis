@@ -33,6 +33,20 @@ def _template_placeholders() -> dict[str, list[str]]:
     }
 
 
+def _candidate_binding_template() -> dict[str, Any]:
+    return {
+        "schemaVersion": "wolfystock_operator_evidence_candidate_binding_v1",
+        "candidateSha": "<release-candidate-sha>",
+        "candidateTree": "<release-candidate-tree>",
+        "observationRef": "review-ticket-label",
+        "capturedAt": TEMPLATE_TIMESTAMP,
+        "synthetic": False,
+        "artifactDigests": {},
+        "outcome": "needs-review",
+        "templatePlaceholders": _template_placeholders(),
+    }
+
+
 def _provider_template() -> dict[str, Any]:
     return {
         "providerName": "<redacted-or-configured>",
@@ -50,6 +64,7 @@ def _provider_template() -> dict[str, Any]:
             "state": "<redacted-or-configured>",
             "summary": "<redacted-or-configured>",
         },
+        "qualificationStatus": "NOT_QUALIFIED",
         "outcome": "needs-review",
         "evidenceRedactionVersion": "provider_operator_redaction_v1",
         "notes": "<review-ticket-label>",
@@ -738,6 +753,11 @@ class TemplateSpec:
 
 
 TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
+    TemplateSpec(
+        "candidate-binding",
+        "candidate_binding_operator_evidence.json",
+        _candidate_binding_template,
+    ),
     TemplateSpec(
         "api-abuse-request-safety",
         "api_abuse_safety_evidence.json",

@@ -279,7 +279,13 @@ def _gate_details(gate_id: str, candidate: dict[str, object]) -> dict[str, objec
         return {
             "bundleSchema": "wolfystock_operator_evidence_bundle_summary_v1",
             "bundleStatus": "complete-review-required",
+            "providerQualificationStatus": "QUALIFIED",
             "releaseCandidateSha": "a" * 40,
+            "candidateBindingStatus": "pass",
+            "candidateBindingSha": "a" * 40,
+            "candidateBindingExpectedSha": "a" * 40,
+            "candidateBindingTree": "b" * 40,
+            "candidateBindingExpectedTree": "b" * 40,
             "environment": "release-approval",
         }
     if gate_id == "artifact-provenance":
@@ -482,6 +488,52 @@ def test_green_operator_evidence_gate_alone_cannot_authorize_promotion(tmp_path:
     assert {gate["status"] for gate in summary["gates"] if gate["gateId"] != "operator-evidence"} == {"MISSING"}
 
 
+def test_operator_evidence_candidate_binding_missing_or_mismatched_blocks_qualification(tmp_path: Path) -> None:
+    manifest, _artifact_dir, candidate = _build_candidate(tmp_path)
+    evidence_dir = tmp_path / "evidence"
+    qualification = tmp_path / "qualification.json"
+    _write_evidence(evidence_dir, candidate)
+    evidence_path = evidence_dir / "operator-evidence.json"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    details = evidence["details"]
+    assert isinstance(details, dict)
+    details.pop("candidateBindingStatus")
+    details["candidateBindingTree"] = "c" * 40
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    result = _qualify(manifest, evidence_dir, qualification)
+
+    assert result.returncode == 1
+    summary = json.loads(qualification.read_text(encoding="utf-8"))
+    operator_gate = next(gate for gate in summary["gates"] if gate["gateId"] == "operator-evidence")
+    assert operator_gate["status"] == "FAIL"
+    assert {
+        "operator_evidence_candidate_binding_not_pass",
+        "operator_evidence_candidate_binding_tree_mismatch",
+    } <= set(operator_gate["reasonCodes"])
+
+
+def test_operator_evidence_not_qualified_provider_blocks_qualification(tmp_path: Path) -> None:
+    manifest, _artifact_dir, candidate = _build_candidate(tmp_path)
+    evidence_dir = tmp_path / "evidence"
+    qualification = tmp_path / "qualification.json"
+    _write_evidence(evidence_dir, candidate)
+    evidence_path = evidence_dir / "operator-evidence.json"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    details = evidence["details"]
+    assert isinstance(details, dict)
+    details["providerQualificationStatus"] = "NOT_QUALIFIED"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    result = _qualify(manifest, evidence_dir, qualification)
+
+    assert result.returncode == 1
+    summary = json.loads(qualification.read_text(encoding="utf-8"))
+    operator_gate = next(gate for gate in summary["gates"] if gate["gateId"] == "operator-evidence")
+    assert operator_gate["status"] == "FAIL"
+    assert "operator_evidence_provider_not_qualified" in operator_gate["reasonCodes"]
+
+
 @pytest.mark.parametrize("gate_id", REQUIRED_GATES)
 def test_each_required_gate_failure_blocks_qualification(tmp_path: Path, gate_id: str) -> None:
     manifest, _artifact_dir, candidate = _build_candidate(tmp_path)
@@ -612,6 +664,14 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
             {
                 "schemaVersion": "wolfystock_operator_evidence_bundle_summary_v1",
                 "bundleStatus": "complete-review-required",
+                "providerQualificationStatus": "QUALIFIED",
+                "candidateBinding": {
+                    "status": "pass",
+                    "candidateSha": "a" * 40,
+                    "expectedCandidateSha": "a" * 40,
+                    "candidateTree": "b" * 40,
+                    "expectedCandidateTree": "b" * 40,
+                },
             }
         ),
         encoding="utf-8",

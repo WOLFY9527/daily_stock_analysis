@@ -30,6 +30,21 @@ SCHEMA_VERSION = "wolfystock_provider_operator_evidence_validation_v1"
 ALLOWED_ENVIRONMENTS = {"staging", "production-like", "sandbox"}
 ALLOWED_CREDENTIAL_PRESENCE = {"configured", "missing", "redacted"}
 ALLOWED_OUTCOMES = {"accepted", "rejected", "needs-review"}
+MARKETS = {"CN", "HK", "US"}
+SOURCE_STATES = {"primary", "fallback", "unavailable"}
+COVERAGE_STATES = {"covered", "partial", "unavailable"}
+FRESHNESS_STATES = {"fresh", "stale", "unavailable"}
+DELIVERY_STATES = {"realtime", "delayed", "unavailable"}
+ENTITLEMENT_STATES = {"entitled", "not-entitled", "not-qualified"}
+DISPLAY_RIGHTS_STATES = {"permitted", "not-permitted", "not-qualified"}
+RATE_LIMIT_STATES = {"normal", "degraded", "unavailable"}
+SOURCE_AUTHORITY_STATES = {"official", "authorized", "proxy-or-unknown"}
+QUALIFICATION_STATUSES = {"QUALIFIED", "NOT_QUALIFIED"}
+SAFE_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+-]{0,159}$")
+NON_OBSERVED_MARKER_RE = re.compile(
+    r"(?:synthetic|simulat(?:ed|ion)|dry[-_ ]?run|fixture|replay|mock|no[-_ ]?network|unavailable)",
+    re.IGNORECASE,
+)
 REQUIRED_FIELDS = (
     "providerName",
     "environment",
@@ -40,6 +55,7 @@ REQUIRED_FIELDS = (
     "credentialPresence",
     "circuitState",
     "fallbackState",
+    "qualificationStatus",
     "outcome",
     "evidenceRedactionVersion",
     "notes",
@@ -122,6 +138,91 @@ def _state_summary_present(value: Any) -> bool:
     return False
 
 
+def _safe_label(value: Any) -> bool:
+    return isinstance(value, str) and bool(SAFE_LABEL_RE.fullmatch(value))
+
+
+def _has_non_observed_marker(value: Any) -> bool:
+    return isinstance(value, str) and bool(NON_OBSERVED_MARKER_RE.search(value))
+
+
+def _validate_observation_matrix(artifact: dict[str, Any], findings: list[dict[str, str]]) -> tuple[bool, bool]:
+    matrix = artifact.get("observationMatrix")
+    if not isinstance(matrix, list):
+        findings.append(_finding("observationMatrix", "accepted_outcome_requires_observation_matrix"))
+        return False, False
+    observed_markets: set[str] = set()
+    valid = True
+    release_eligible = True
+    for index, row in enumerate(matrix):
+        field = f"observationMatrix[{index}]"
+        if not isinstance(row, dict):
+            findings.append(_finding(field, "observation_row_must_be_object"))
+            valid = False
+            continue
+        market = row.get("market")
+        if market not in MARKETS or market in observed_markets:
+            findings.append(_finding(f"{field}.market", "invalid_or_duplicate_market"))
+            valid = False
+        elif isinstance(market, str):
+            observed_markets.add(market)
+        for name in ("providerLabel", "sourceLabel", "observationRef"):
+            if not _safe_label(row.get(name)):
+                findings.append(_finding(f"{field}.{name}", "unsafe_or_missing_observation_label"))
+                valid = False
+            elif artifact.get("qualificationStatus") == "QUALIFIED" and _has_non_observed_marker(row.get(name)):
+                findings.append(_finding(f"{field}.{name}", "qualified_observation_contains_non_observed_marker"))
+                valid = False
+        if row.get("sourceState") not in SOURCE_STATES:
+            findings.append(_finding(f"{field}.sourceState", "invalid_source_state"))
+            valid = False
+        if row.get("sourceAuthority") not in SOURCE_AUTHORITY_STATES:
+            findings.append(_finding(f"{field}.sourceAuthority", "invalid_source_authority"))
+            valid = False
+        if row.get("coverageState") not in COVERAGE_STATES:
+            findings.append(_finding(f"{field}.coverageState", "invalid_coverage_state"))
+            valid = False
+        if not _parse_observed_at(row.get("asOf")):
+            findings.append(_finding(f"{field}.asOf", "invalid_as_of_timestamp"))
+            valid = False
+        if row.get("freshness") not in FRESHNESS_STATES:
+            findings.append(_finding(f"{field}.freshness", "invalid_freshness_state"))
+            valid = False
+        if row.get("delivery") not in DELIVERY_STATES:
+            findings.append(_finding(f"{field}.delivery", "invalid_delivery_state"))
+            valid = False
+        if row.get("entitlement") not in ENTITLEMENT_STATES:
+            findings.append(_finding(f"{field}.entitlement", "invalid_entitlement_state"))
+            valid = False
+        if row.get("displayRights") not in DISPLAY_RIGHTS_STATES:
+            findings.append(_finding(f"{field}.displayRights", "invalid_display_rights_state"))
+            valid = False
+        if row.get("rateLimitState") not in RATE_LIMIT_STATES:
+            findings.append(_finding(f"{field}.rateLimitState", "invalid_rate_limit_state"))
+            valid = False
+        if (
+            row.get("sourceState") != "primary"
+            or row.get("coverageState") != "covered"
+            or row.get("freshness") != "fresh"
+            or row.get("delivery") == "unavailable"
+            or row.get("rateLimitState") != "normal"
+            or row.get("sourceAuthority") not in {"official", "authorized"}
+            or row.get("entitlement") != "entitled"
+            or row.get("displayRights") != "permitted"
+        ):
+            release_eligible = False
+        if row.get("entitlement") != "entitled":
+            findings.append(_finding(f"{field}.entitlement", "accepted_outcome_requires_entitled"))
+            valid = False
+        if row.get("displayRights") != "permitted":
+            findings.append(_finding(f"{field}.displayRights", "accepted_outcome_requires_display_permitted"))
+            valid = False
+    if observed_markets != MARKETS:
+        findings.append(_finding("observationMatrix", "accepted_outcome_requires_cn_hk_us"))
+        valid = False
+    return valid, valid and release_eligible
+
+
 def _scan_unsafe_key(field: str, key: Any) -> list[dict[str, str]]:
     normalized_key = _normalize_key(key)
     if not any(marker in normalized_key for marker in UNSAFE_KEY_MARKERS):
@@ -170,6 +271,8 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, b
         "schemaValuesValid": False,
         "unsafeMarkersAbsent": False,
         "networkCallsEnabledAcceptedOutcome": False,
+        "providerObservationMatrixValid": False,
+        "releaseEligibleQualification": False,
     }
     if not isinstance(artifact, dict):
         return [_finding("$", "artifact_must_be_json_object")], checks
@@ -190,6 +293,8 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, b
         findings.append(_finding("environment", "invalid_environment"))
     if artifact.get("credentialPresence") not in ALLOWED_CREDENTIAL_PRESENCE:
         findings.append(_finding("credentialPresence", "invalid_credential_presence"))
+    if artifact.get("qualificationStatus") not in QUALIFICATION_STATUSES:
+        findings.append(_finding("qualificationStatus", "invalid_qualification_status"))
     if artifact.get("outcome") not in ALLOWED_OUTCOMES:
         findings.append(_finding("outcome", "invalid_outcome"))
     if "observedAt" in artifact and not _parse_observed_at(artifact.get("observedAt")):
@@ -203,6 +308,24 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, b
 
     if artifact.get("networkCallsEnabled") is True and artifact.get("outcome") != "accepted":
         findings.append(_finding("networkCallsEnabled", "network_calls_enabled_requires_accepted_outcome"))
+
+    if artifact.get("outcome") == "accepted":
+        if artifact.get("synthetic") is not False:
+            findings.append(_finding("synthetic", "accepted_outcome_requires_non_synthetic_evidence"))
+        if _has_non_observed_marker(artifact.get("probeMode")):
+            findings.append(_finding("probeMode", "accepted_outcome_requires_observed_probe"))
+        if artifact.get("qualificationStatus") == "QUALIFIED" and _has_non_observed_marker(artifact.get("providerName")):
+            findings.append(_finding("providerName", "qualified_provider_identity_contains_non_observed_marker"))
+        matrix_valid, release_eligible = _validate_observation_matrix(artifact, findings)
+        if artifact.get("qualificationStatus") == "QUALIFIED" and artifact.get("networkCallsEnabled") is not True:
+            findings.append(_finding("networkCallsEnabled", "qualified_outcome_requires_network_evidence"))
+            release_eligible = False
+        checks["providerObservationMatrixValid"] = matrix_valid
+        checks["releaseEligibleQualification"] = release_eligible
+        if artifact.get("qualificationStatus") == "QUALIFIED" and not release_eligible:
+            findings.append(_finding("qualificationStatus", "qualified_observation_matrix_not_release_eligible"))
+    elif artifact.get("qualificationStatus") != "NOT_QUALIFIED":
+        findings.append(_finding("qualificationStatus", "nonaccepted_outcome_requires_not_qualified"))
 
     findings.extend(_find_unsafe_markers(artifact))
     checks["unsafeMarkersAbsent"] = not any(
@@ -232,6 +355,7 @@ def _sanitized_artifact_summary(artifact: Any) -> dict[str, Any]:
         if isinstance(artifact.get("networkCallsEnabled"), bool)
         else False,
         "credentialPresence": str(artifact.get("credentialPresence") or "<missing>"),
+        "qualificationStatus": str(artifact.get("qualificationStatus") or "<missing>"),
         "outcome": str(artifact.get("outcome") or "<missing>"),
         "evidenceRedactionVersion": str(artifact.get("evidenceRedactionVersion") or "<missing>"),
     }
@@ -247,6 +371,7 @@ def validate_provider_operator_evidence(artifact: Any) -> dict[str, Any]:
         "runtimeBehaviorChanged": False,
         "networkCallsExecutedByValidator": False,
         "checks": checks,
+        "qualificationStatus": artifact.get("qualificationStatus") if isinstance(artifact, dict) else None,
         "artifact": _sanitized_artifact_summary(artifact),
         "findings": findings,
     }

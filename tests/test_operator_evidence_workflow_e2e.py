@@ -12,6 +12,7 @@ WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
 MANIFEST_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_manifest_check.py"
 
 EXPECTED_TEMPLATE_FILES = {
+    "candidate_binding_operator_evidence.json",
     "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
@@ -26,6 +27,7 @@ EXPECTED_TEMPLATE_FILES = {
     "manual_release_approval_review_record.json",
 }
 EXPECTED_TEMPLATE_CATEGORIES = {
+    "candidate-binding",
     "api-abuse-request-safety",
     "provider",
     "provider-sla-licensing",

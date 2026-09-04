@@ -15,6 +15,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.test_operator_evidence_bundle_check import _accepted_artifacts
+
 from scripts import private_operator_evidence_consumer as consumer
 
 
@@ -394,11 +396,29 @@ def test_validate_handoff_preserves_strict_sanitizer_and_candidate_validator_own
     fixture_root = REPO_ROOT / "tests/fixtures/operator_evidence/sanitized_complete"
     input_root = tmp_path / "bundle-input"
     input_root.mkdir()
-    for source in fixture_root.glob("*.json"):
-        payload = json.loads(source.read_text(encoding="utf-8"))
-        if source.name == "manual_release_approval_review_record.json":
-            payload["releaseCandidateSha"] = CANDIDATE_SHA
-        (input_root / source.name).write_text(json.dumps(payload), encoding="utf-8")
+    artifacts = _accepted_artifacts()
+    manual_review = artifacts["manual_release_approval_review_record.json"]
+    assert isinstance(manual_review, dict)
+    manual_review["releaseCandidateSha"] = CANDIDATE_SHA
+    sanitized_artifact_bytes = {
+        name: (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        for name, payload in artifacts.items()
+        if name != "candidate_binding_operator_evidence.json"
+    }
+    artifacts["candidate_binding_operator_evidence.json"] = {
+        "schemaVersion": "wolfystock_operator_evidence_candidate_binding_v1",
+        "candidateSha": CANDIDATE_SHA,
+        "candidateTree": CANDIDATE_TREE,
+        "observationRef": "operator-run-123",
+        "capturedAt": "2026-05-08T10:30:00Z",
+        "synthetic": False,
+        "artifactDigests": {
+            name: hashlib.sha256(body).hexdigest() for name, body in sorted(sanitized_artifact_bytes.items())
+        },
+        "outcome": "accepted",
+    }
+    for name, payload in artifacts.items():
+        (input_root / name).write_text(json.dumps(payload), encoding="utf-8")
 
     bundle_buffer = io.BytesIO()
     with tarfile.open(fileobj=bundle_buffer, mode="w", format=tarfile.USTAR_FORMAT) as archive:
@@ -450,6 +470,7 @@ def test_validate_handoff_preserves_strict_sanitizer_and_candidate_validator_own
     consumer._run_candidate_validators(
         candidate_root=REPO_ROOT,
         candidate_sha=CANDIDATE_SHA,
+        candidate_tree=CANDIDATE_TREE,
         input_directory=input_root,
         sanitized_directory=tmp_path / "delegated-sanitized",
         validation_directory=delegated_validation,
@@ -462,6 +483,7 @@ def test_validate_handoff_preserves_strict_sanitizer_and_candidate_validator_own
     assert "operator_evidence_bundle_check.py" in flattened
     assert "operator_evidence_workflow_run.py" in flattened
     assert f"--expected-candidate-sha {CANDIDATE_SHA}" in flattened
+    assert f"--expected-candidate-tree {CANDIDATE_TREE}" in flattened
 
 
 def test_release_workflow_uses_least_privilege_bounded_fail_closed_handoff() -> None:
