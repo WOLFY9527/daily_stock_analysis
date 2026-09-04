@@ -69,6 +69,11 @@ replay 复用本合同的 canonical identity、质量和 persistence owner，供
 - `authority=false`、`fallback=false`、`productionEligible=false`、`observationOnly=true`；
 - `freshness=stale`，因为 historical replay 不能表示 current 或 live 市场状态。
 
+每项 observation 的 `observedAt` 必须是有时区的采集时间。`asOfState=known`
+时，`asOf` 必须是来源明确提供的、带时区的数据 cutoff；`asOfState=unknown` 时，
+`asOf` 必须为 `null`。采集时间、请求时间或最后一根 bar 的日期都不得被填成 source
+cutoff。manifest entry 与 payload 必须逐字保留相同的 as-of 状态和值。
+
 该输入机制不是随仓数据集，也不证明任一市场有可分发或可用的真实数据。不得使用
 synthetic/R06 fixture、fabricated price、缺失 hash 的 payload，或把 replay 用作
 DATA-001、REL-001、production provider、实时 market context、portfolio valuation

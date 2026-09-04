@@ -288,8 +288,15 @@ class HistoricalMarketDataFoundation:
         interval: str,
         start: date,
         end: date,
+        venue: str | None = None,
+        asset_type: str | None = None,
     ) -> list[CanonicalHistoricalBar]:
-        identity = resolve_historical_symbol_identity(symbol=symbol, market=market)
+        identity = resolve_historical_symbol_identity(
+            symbol=symbol,
+            market=market,
+            venue=venue,
+            asset_type=asset_type,
+        )
         return self.repository.query_bars(
             symbol=identity["canonical_symbol"],
             market=identity["market"],

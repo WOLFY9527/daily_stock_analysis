@@ -69,7 +69,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/audits/t575-backend-production-simplification-audit.md](../audits/t575-backend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Backend simplification evidence and T612-T629 roadmap | cd1f8bc827a8 |
 | [docs/audits/t576-frontend-production-simplification-audit.md](../audits/t576-frontend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Frontend simplification evidence and T600-T611 roadmap | 9081512345ee |
 | [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 2d741a3d1ac4 |
-| [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | e2b619c59fe2 |
+| [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | cb22ed4a9c70 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | daafda4c2ccb |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 62cc4c8f5e48 |

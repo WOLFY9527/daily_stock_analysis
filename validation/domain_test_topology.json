@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8369,
-      "sha256": "c93aa71fec05f7aa610df62c9e9a571d002184f2ab787d2d710166b928418b90"
+      "count": 8374,
+      "sha256": "323765a3edca2f054aa60a18ad14bf2af401e9bfbde00bac3cc1214b4345176d"
     },
     "tests": [
       {
@@ -15884,7 +15884,32 @@
         "baseline": false
       },
       {
+        "id": "tests/test_development_historical_replay.py::test_replay_preserves_explicitly_unknown_as_of_without_inventing_a_cutoff",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_rejects_inconsistent_as_of_state[2024-01-03T08:00:00Z-unknown-payload_as_of_unknown_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_rejects_inconsistent_as_of_state[None-known-payload_as_of_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replay_rejects_inconsistent_as_of_state[None-unavailable-payload_as_of_state_invalid]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_development_historical_replay.py::test_replays_verified_cn_hk_us_observations_through_canonical_identity[CN-SH600519-600519.SH-600519-akshare_archive-eastmoney_historical]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_replays_verified_cn_hk_us_observations_through_canonical_identity[CN-SZ000001-000001.SZ-000001-akshare_archive-eastmoney_historical]",
         "domain": "market",
         "baseline": false
       },

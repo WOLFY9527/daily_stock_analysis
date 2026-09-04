@@ -100,7 +100,8 @@ class _ReplayObservation:
     provider: str
     source: str
     observed_at: str
-    as_of: str
+    as_of: str | None
+    as_of_state: str
 
 
 class DevelopmentHistoricalReplayProvider:
@@ -179,6 +180,8 @@ class DevelopmentHistoricalReplayProvider:
             interval=interval,
             start=start,
             end=end,
+            venue=identity["venue"],
+            asset_type=identity["asset_type"],
         )
         if request.lookback_bars and request.lookback_bars > 0:
             bars = bars[-request.lookback_bars :]
@@ -209,6 +212,7 @@ class DevelopmentHistoricalReplayProvider:
                 "canonicalSymbol": observation.canonical_symbol,
                 "observedAt": observation.observed_at,
                 "asOf": observation.as_of,
+                "asOfState": observation.as_of_state,
                 "manifestVersion": DEVELOPMENT_HISTORICAL_REPLAY_MANIFEST_VERSION,
             },
         )
@@ -293,14 +297,23 @@ def _validate_observation(
 ) -> _ReplayObservation:
     for document, prefix in ((entry, "entry"), (payload, "payload")):
         _require_replay_metadata(document, prefix)
-        for field_name in ("market", "symbol", "canonicalSymbol", "provider", "source", "observedAt", "asOf", "interval"):
+        for field_name in ("market", "symbol", "canonicalSymbol", "provider", "source", "observedAt", "interval"):
             if not _nonempty_text(document.get(field_name)):
                 raise DevelopmentHistoricalReplayError(f"{prefix}_{field_name}_missing")
+        if "asOf" not in document:
+            raise DevelopmentHistoricalReplayError(f"{prefix}_as_of_missing")
         _parse_timestamp(document["observedAt"], f"{prefix}_observed_at_invalid")
-        _parse_timestamp(document["asOf"], f"{prefix}_as_of_invalid")
+        as_of_state = document.get("asOfState")
+        if as_of_state == "known":
+            _parse_timestamp(document["asOf"], f"{prefix}_as_of_invalid")
+        elif as_of_state == "unknown":
+            if document["asOf"] is not None:
+                raise DevelopmentHistoricalReplayError(f"{prefix}_as_of_unknown_invalid")
+        else:
+            raise DevelopmentHistoricalReplayError(f"{prefix}_as_of_state_invalid")
         _require_replay_observation_source(document, prefix)
-    fields = ("market", "symbol", "canonicalSymbol", "provider", "source", "observedAt", "asOf", "interval")
-    if any(str(entry[field]).strip() != str(payload[field]).strip() for field in fields):
+    fields = ("market", "symbol", "canonicalSymbol", "provider", "source", "observedAt", "asOf", "asOfState", "interval")
+    if any(entry[field] != payload[field] for field in fields):
         raise DevelopmentHistoricalReplayError("entry_payload_metadata_mismatch")
     try:
         identity = resolve_historical_symbol_identity(symbol=str(payload["symbol"]), market=str(payload["market"]))
@@ -321,7 +334,8 @@ def _validate_observation(
         provider=str(payload["provider"]).strip(),
         source=str(payload["source"]).strip(),
         observed_at=str(payload["observedAt"]).strip(),
-        as_of=str(payload["asOf"]).strip(),
+        as_of=str(payload["asOf"]).strip() if payload["asOf"] is not None else None,
+        as_of_state=str(payload["asOfState"]),
     )
 
 

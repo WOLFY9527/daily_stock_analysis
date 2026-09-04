@@ -64,6 +64,7 @@ def _payload(
         "source": source,
         "observedAt": "2026-09-01T12:00:00Z",
         "asOf": "2024-01-03T08:00:00Z",
+        "asOfState": "known",
         "interval": "1d",
         "delivery": "local_replay",
         "historical": True,
@@ -113,6 +114,7 @@ def _write_manifest(tmp_path, payload: dict, *, payload_name: str = "observation
             "source",
             "observedAt",
             "asOf",
+            "asOfState",
             "interval",
             "delivery",
             "historical",
@@ -146,6 +148,7 @@ def _write_manifest(tmp_path, payload: dict, *, payload_name: str = "observation
     ("market", "symbol", "request_symbol", "canonical_symbol", "provider", "source"),
     [
         ("CN", "SH600519", "600519.SH", "600519", "akshare_archive", "eastmoney_historical"),
+        ("CN", "SZ000001", "000001.SZ", "000001", "akshare_archive", "eastmoney_historical"),
         ("HK", "00700", "HK00700", "HK00700", "stooq_archive", "stooq_historical"),
         ("US", "AAPL", "AAPL.US", "AAPL", "stooq_archive", "stooq_historical"),
     ],
@@ -196,6 +199,7 @@ def test_replays_verified_cn_hk_us_observations_through_canonical_identity(
         "canonicalSymbol": canonical_symbol,
         "observedAt": "2026-09-01T12:00:00Z",
         "asOf": "2024-01-03T08:00:00Z",
+        "asOfState": "known",
         "manifestVersion": DEVELOPMENT_HISTORICAL_REPLAY_MANIFEST_VERSION,
     }
 
@@ -222,6 +226,56 @@ def test_content_hash_tampering_fails_closed_before_replay(tmp_path) -> None:
     assert result.metadata["developmentReplayReason"] == "observation_sha256_mismatch"
     assert result.metadata["authority"] is False
     assert result.metadata["productionEligible"] is False
+
+
+def test_replay_preserves_explicitly_unknown_as_of_without_inventing_a_cutoff(tmp_path) -> None:
+    payload = _payload(
+        market="US",
+        symbol="AAPL",
+        canonical_symbol="AAPL",
+        provider="yfinance",
+        source="yahoo",
+    )
+    payload["asOf"] = None
+    payload["asOfState"] = "unknown"
+    manifest_path, _, _ = _write_manifest(tmp_path, payload)
+
+    result = DevelopmentHistoricalReplayProvider(manifest_path).fetch_ohlcv_history(
+        HistoricalOhlcvReadinessRequest(symbol="AAPL", market="US")
+    )
+
+    assert result.bars
+    assert result.metadata["asOf"] is None
+    assert result.metadata["asOfState"] == "unknown"
+    assert result.metadata["observedAt"] == "2026-09-01T12:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("as_of", "as_of_state", "reason"),
+    [
+        (None, "known", "payload_as_of_invalid"),
+        ("2024-01-03T08:00:00Z", "unknown", "payload_as_of_unknown_invalid"),
+        (None, "unavailable", "payload_as_of_state_invalid"),
+    ],
+)
+def test_replay_rejects_inconsistent_as_of_state(tmp_path, as_of, as_of_state, reason) -> None:
+    payload = _payload(
+        market="US",
+        symbol="AAPL",
+        canonical_symbol="AAPL",
+        provider="yfinance",
+        source="yahoo",
+    )
+    payload["asOf"] = as_of
+    payload["asOfState"] = as_of_state
+    manifest_path, _, _ = _write_manifest(tmp_path, payload)
+
+    result = DevelopmentHistoricalReplayProvider(manifest_path).fetch_ohlcv_history(
+        HistoricalOhlcvReadinessRequest(symbol="AAPL", market="US")
+    )
+
+    assert result.bars == ()
+    assert result.metadata["developmentReplayReason"] == reason.replace("payload_", "entry_", 1)
 
 
 def test_production_authority_claim_fails_closed_even_with_a_valid_hash(tmp_path) -> None:
