@@ -1294,6 +1294,19 @@ class WatchlistService:
             or cls._isoformat_datetime(getattr(run, "run_at", None))
             or cls._isoformat_datetime(getattr(candidate, "created_at", None))
         )
+        evaluation_mode = str(
+            run_diagnostics.get("evaluationMode")
+            or run_diagnostics.get("evaluation_mode")
+            or diagnostics.get("evaluationMode")
+            or diagnostics.get("evaluation_mode")
+            or "current"
+        ).strip().lower()
+        evaluation_cutoff = (
+            run_diagnostics.get("evaluationCutoff")
+            or run_diagnostics.get("evaluation_cutoff")
+            or diagnostics.get("evaluationCutoff")
+            or diagnostics.get("evaluation_cutoff")
+        )
         return {
             "contract_version": _LINEAGE_CONTRACT_VERSION,
             "source": "scanner",
@@ -1307,6 +1320,9 @@ class WatchlistService:
             "score_at_scan": cls._safe_float(getattr(candidate, "score", None) if getattr(candidate, "score", None) is not None else item.get("scanner_score")),
             "score_snapshot_kind": cls._lineage_score_snapshot_kind(item),
             "run_profile": cls._optional_str(getattr(run, "profile", None)),
+            "evaluation_mode": evaluation_mode,
+            "evaluation_cutoff": cls._optional_str(evaluation_cutoff),
+            "historical_research": evaluation_mode == "historical_development",
             "run_completed_at": run_completed_at,
             "watchlist_added_at": cls._optional_str(item.get("created_at")),
             "theme_id": cls._optional_str(item.get("theme_id")),

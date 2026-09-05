@@ -57,6 +57,15 @@ _REQUIREMENTS = {
 }
 _REQUIREMENTS["hk"] = _REQUIREMENTS["us"]
 
+# A completed-session historical research run has no contemporaneous pre-open
+# quote.  Its information set is intentionally limited to history-derived
+# factors that were available at the declared evaluation cutoff.
+_HISTORICAL_US_REQUIREMENTS = tuple(
+    requirement
+    for requirement in _REQUIREMENTS["us"]
+    if requirement.factor_id != "trend.gap_context_1d"
+)
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
@@ -145,6 +154,7 @@ def _factor_state(
     candidate: Mapping[str, Any],
     usable_bars: int,
     source: Mapping[str, Any],
+    historical_eligible: bool = False,
 ) -> tuple[str, list[str]]:
     missing_fields = [field for field in requirement.fields if not _has_value(candidate, field)]
     if source.get("sourceType") == "missing":
@@ -156,7 +166,7 @@ def _factor_state(
     missing_timestamps = [field for field in ("source.asOf", "source.observedAt") if not source.get(field.split(".", 1)[1])]
     if missing_timestamps:
         return "unavailable", missing_timestamps
-    if source.get("stale"):
+    if source.get("stale") and not historical_eligible:
         return "stale", []
     if source.get("sourceType") not in _AUTHORIZED_SOURCE_TYPES:
         return "rejected", []
@@ -165,8 +175,15 @@ def _factor_state(
 
 def build_scanner_factor_evidence(candidate: Mapping[str, Any], *, market: str) -> dict[str, Any]:
     normalized_market = _text(market).lower()
-    requirements = _REQUIREMENTS.get(normalized_market, ())
     diagnostics = _mapping(candidate.get("_diagnostics") or candidate.get("diagnostics"))
+    historical_mode = _text(
+        diagnostics.get("evaluation_mode") or diagnostics.get("evaluationMode")
+    ).lower() == "historical_development"
+    requirements = (
+        _HISTORICAL_US_REQUIREMENTS
+        if normalized_market == "us" and historical_mode
+        else _REQUIREMENTS.get(normalized_market, ())
+    )
     history = _mapping(diagnostics.get("history"))
     usable_bars = max(0, int(history.get("rows") or candidate.get("history_rows") or 0))
     components = _mapping(candidate.get("_component_scores") or diagnostics.get("component_scores"))
@@ -174,11 +191,25 @@ def build_scanner_factor_evidence(candidate: Mapping[str, Any], *, market: str) 
     blockers: list[str] = []
     for requirement in requirements:
         source = _source_context(candidate, requirement.source_kind)
+        evaluation_cutoff = _text(
+            diagnostics.get("evaluation_cutoff")
+            or diagnostics.get("evaluationCutoff")
+            or history.get("evaluation_cutoff")
+        )
+        historical_eligible = (
+            historical_mode
+            and source.get("stale") is True
+            and source.get("sourceType") == "cache_snapshot"
+            and bool(source.get("asOf"))
+            and bool(evaluation_cutoff)
+            and str(source.get("asOf"))[:10] <= evaluation_cutoff[:10]
+        )
         state, missing_fields = _factor_state(
             requirement,
             candidate=candidate,
             usable_bars=usable_bars,
             source=source,
+            historical_eligible=historical_eligible,
         )
         factor = {
             "component": requirement.component,
@@ -196,6 +227,8 @@ def build_scanner_factor_evidence(candidate: Mapping[str, Any], *, market: str) 
             "observedAt": source["observedAt"],
             "rawComponentScore": components.get(requirement.component),
             "scoreContributionAllowed": state == "valid",
+            "historicalEligible": historical_eligible,
+            "currentAuthorityAllowed": False if historical_eligible else state == "valid",
         }
         factors.append(factor)
         if requirement.required and state != "valid":

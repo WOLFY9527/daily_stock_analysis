@@ -12,12 +12,17 @@ import re
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from statistics import mean, pstdev
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
+import pandas as pd
+
+from data_provider.base import attach_stock_daily_close_tokens
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
+from src.core.trading_calendar import get_market_for_stock, is_market_open
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_response_contract import build_rule_run_contract
 from src.services._persisted_json import PersistedJsonState, decode_persisted_json
@@ -28,6 +33,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
+from src.services.development_historical_replay import DevelopmentHistoricalReplayProvider
 from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
 from src.services.backtest_parameter_stability import (
     build_parameter_stability_evidence_from_compare_summary,
@@ -68,6 +74,7 @@ from src.storage import (
 )
 
 logger = logging.getLogger(__name__)
+DEVELOPMENT_HISTORICAL_REPLAY_SOURCE = "development_historical_replay"
 _UNSET = object()
 _CONFIRMATION_REQUIRED_ERROR = "请先确认解析结果后再运行规则回测。"
 BLOCKED_RESULT_STATUS_MESSAGE = "回测未完成有效计算，无法显示研究结果。"
@@ -3197,7 +3204,7 @@ class RuleBacktestService:
         data_gate_bars = self._bars_for_window(bars, start_date=data_gate_start, end_date=data_gate_end)
         data_gate_required_bars = max(
             required_bars,
-            len(self._business_dates(data_gate_start, data_gate_end)) if data_gate_start and data_gate_end else 0,
+            len(self._market_session_dates(code, data_gate_start, data_gate_end)) if data_gate_start and data_gate_end else 0,
         )
         benchmark_required = self._benchmark_required_for_data_gate(benchmark_selection)
         benchmark_rows: List[Any] = []
@@ -4008,7 +4015,14 @@ class RuleBacktestService:
                     allow_provider_fallback=False,
                 )
                 if df is None or df.empty:
-                    return 0
+                    replay = self._fetch_development_replay_history(
+                        code=code,
+                        start=start_date,
+                        end=end_date,
+                    )
+                    if replay is None:
+                        return 0
+                    df, source = replay
                 if not isinstance(df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR), dict):
                     logger.warning("Rejected rule backtest date-range hydration for %s: exact close provenance missing", code)
                     return 0
@@ -4045,7 +4059,14 @@ class RuleBacktestService:
                 allow_provider_fallback=False,
             )
             if df is None or df.empty:
-                return 0
+                replay = self._fetch_development_replay_history(
+                    code=code,
+                    start=start_date,
+                    end=end_date,
+                )
+                if replay is None:
+                    return 0
+                df, source = replay
             if not isinstance(df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR), dict):
                 logger.warning("Rejected rule backtest history hydration for %s: exact close provenance missing", code)
                 return 0
@@ -4063,6 +4084,46 @@ class RuleBacktestService:
         except Exception as exc:
             logger.warning("Failed to ensure rule backtest history for %s: %s", code, exc)
             return 0
+
+    @staticmethod
+    def _fetch_development_replay_history(
+        *,
+        code: str,
+        start: date | None,
+        end: date | None,
+    ) -> tuple[pd.DataFrame, str] | None:
+        provider = DevelopmentHistoricalReplayProvider.from_env()
+        if provider is None:
+            return None
+        result = provider.fetch_ohlcv_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol=code,
+                market=str(get_market_for_stock(code) or "unknown").upper(),
+                timeframe="1d",
+                start=start,
+                end=end,
+            )
+        )
+        metadata = result.metadata
+        if (
+            result.unavailable_reason
+            or not result.bars
+            or metadata.get("development") is not True
+            or metadata.get("historical") is not True
+            or metadata.get("replay") is not True
+            or metadata.get("delivery") != "local_replay"
+            or metadata.get("productionEligible") is not False
+            or metadata.get("observationOnly") is not True
+        ):
+            return None
+        frame = pd.DataFrame([bar.as_dict() for bar in result.bars])
+        return (
+            attach_stock_daily_close_tokens(
+                frame,
+                [Decimal(str(bar.close)) for bar in result.bars],
+            ),
+            DEVELOPMENT_HISTORICAL_REPLAY_SOURCE,
+        )
 
     @staticmethod
     def _bar_date(bar: Any) -> Optional[date]:
@@ -4089,6 +4150,13 @@ class RuleBacktestService:
                 dates.append(current)
             current += timedelta(days=1)
         return dates
+
+    def _market_session_dates(self, code: str, start: date, end: date) -> List[date]:
+        market = get_market_for_stock(code)
+        dates = self._business_dates(start, end)
+        if not market:
+            return dates
+        return [session_date for session_date in dates if is_market_open(market, session_date)]
 
     @staticmethod
     def _provider_label(source: str) -> str:
@@ -4190,14 +4258,14 @@ class RuleBacktestService:
         source = source_values[0] if source_values else "database_cache"
         authority = assess_backtest_data_source_eligibility(code=code, source=source)
         expected_dates = (
-            self._business_dates(requested_start, requested_end)
+            self._market_session_dates(code, requested_start, requested_end)
             if requested_start is not None and requested_end is not None
             else []
         )
         actual_date_set = {item for item in resolved_dates}
         missing_dates = [item for item in expected_dates if item not in actual_date_set]
         expected_bar_count: Optional[int] = len(expected_dates) if expected_dates else None
-        missing_bar_count = max((expected_bar_count or 0) - len(window_bars), 0) if expected_bar_count is not None else 0
+        missing_bar_count = len(missing_dates)
         anomalies = self._detect_data_quality_anomalies(window_bars)
         benchmark_payload = dict(benchmark_summary or {})
         if historical_ohlcv_readiness is None:

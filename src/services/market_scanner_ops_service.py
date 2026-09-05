@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable, Dict, Optional
 from zoneinfo import ZoneInfo
 
@@ -58,6 +58,8 @@ class MarketScannerOperationsService:
         universe_type: str = "default",
         theme_id: Optional[str] = None,
         symbols: Optional[list[str]] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
         request_source: str = "api",
         notify: bool = False,
     ) -> Dict[str, Any]:
@@ -70,6 +72,8 @@ class MarketScannerOperationsService:
             universe_type=universe_type,
             theme_id=theme_id,
             symbols=symbols,
+            evaluation_mode=evaluation_mode,
+            evaluation_cutoff=evaluation_cutoff,
             trigger_mode="manual",
             request_source=request_source,
             notify=notify,
@@ -303,6 +307,8 @@ class MarketScannerOperationsService:
         universe_type: str = "default",
         theme_id: Optional[str] = None,
         symbols: Optional[list[str]] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
         trigger_mode: str,
         request_source: str,
         notify: bool,
@@ -339,6 +345,8 @@ class MarketScannerOperationsService:
                 universe_type=universe_type,
                 theme_id=theme_id,
                 symbols=symbols,
+                evaluation_mode=evaluation_mode,
+                evaluation_cutoff=evaluation_cutoff,
                 scope=_trigger_scope(trigger_mode),
             )
         except ValueError as exc:

@@ -79,6 +79,26 @@ synthetic/R06 fixture、fabricated price、缺失 hash 的 payload，或把 repl
 DATA-001、REL-001、production provider、实时 market context、portfolio valuation
 或免费网络 provider qualification 的证据。
 
+## Scanner Historical Research Seam
+
+`us_historical_research_v1` 是 Scanner 的显式历史开发 profile。调用
+`POST /api/v1/scanner/run` 时必须同时传入：
+
+- `evaluation_mode=historical_development`；
+- `evaluation_cutoff`，表示包含当日的已完成交易日截止日期。
+
+该 profile 只接受 verified development replay（或等价的显式本地历史数据平面），并将
+截止日期传给历史 OHLCV 读取边界；cutoff 之后的 bar 不得参与候选或 benchmark 计算。
+运行和 readback 会保留 `evaluationMode`、`evaluationCutoff` 与 profile identity，供
+Research Radar 及 owner-scoped Watchlist 继续传递。
+
+历史候选可以在自己的 cutoff-bound information set 内进行 factor eligibility 和
+ranking，但其来源仍是 `freshness=stale`、`observationOnly=true`、
+`productionEligible=false`、`authority=false`；它不是 current、live 或
+decision-grade signal。Watchlist 的 `scanner_lineage_v1` 保留
+`evaluation_mode`、`evaluation_cutoff` 和 `historical_research=true`，同时继续执行
+原有的 owner scope 与 no-advice 边界。
+
 ## Persistence
 
 `src.repositories.historical_market_data_repo.HistoricalMarketDataRepository`

@@ -1296,6 +1296,17 @@ def _scanner_candidate_to_engine_input(
     next_check = _watch_context_text(watch_context) or "Recheck price, volume, and evidence freshness on the next scanner run."
     quote_context = _mapping(diagnostics.get("quote_context"))
     history = _mapping(diagnostics.get("history"))
+    evaluation_mode = _text(
+        diagnostics.get("evaluation_mode") or diagnostics.get("evaluationMode")
+    ).lower()
+    evaluation_cutoff = _text(
+        diagnostics.get("evaluation_cutoff") or diagnostics.get("evaluationCutoff")
+    ) or None
+    if evaluation_mode == "historical_development":
+        limitation = (
+            "历史开发回放仅包含 evaluation cutoff 前的已完成交易日证据；当前结果不是实时发现或投资建议。"
+        )
+        next_check = "在相同 cutoff 下复核历史证据，或另行刷新当前数据后再做当前研究。"
     return {
         "ticker": payload["symbol"],
         "symbol": payload["symbol"],
@@ -1305,6 +1316,9 @@ def _scanner_candidate_to_engine_input(
         "dataFreshness": {
             "historySource": history.get("source") or "unknown",
             "historyLatestTradeDate": history.get("latest_trade_date"),
+            "evaluationMode": evaluation_mode or "current",
+            "evaluationCutoff": evaluation_cutoff,
+            "historical": evaluation_mode == "historical_development",
             "quoteState": "available" if quote_context.get("available") is True else "unavailable_or_stale",
             "quoteSource": quote_context.get("source"),
         },
@@ -1340,6 +1354,12 @@ def _scanner_lineage_from_run(
     market: str | None = None,
 ) -> dict[str, Any]:
     diagnostics = _json_load(getattr(run, "diagnostics_json", None), {})
+    evaluation_mode = _text(
+        diagnostics.get("evaluationMode") or diagnostics.get("evaluation_mode")
+    ).lower()
+    evaluation_cutoff = _text(
+        diagnostics.get("evaluationCutoff") or diagnostics.get("evaluation_cutoff")
+    ) or None
     readiness = _mapping(diagnostics.get("dataReadiness"))
     lineage = _mapping(diagnostics.get("scannerLineage") or readiness.get("scannerLineage"))
     if not lineage:
@@ -1350,6 +1370,9 @@ def _scanner_lineage_from_run(
         "universeSymbols": _canonical_symbol_list(lineage.get("universeSymbols"), market=market),
         "generatedAt": _text(lineage.get("generatedAt")) or None,
         "runId": lineage.get("runId") or getattr(run, "id", None),
+        "profile": _text(getattr(run, "profile", None)) or None,
+        "evaluationMode": evaluation_mode or "current",
+        "evaluationCutoff": evaluation_cutoff,
         "symbolsEvaluated": _canonical_symbol_list(lineage.get("symbolsEvaluated"), market=market),
         "symbolsSkipped": [
             {
@@ -1369,7 +1392,10 @@ def _filter_candidates_by_scanner_lineage(
     market: str | None = None,
 ) -> list[dict[str, Any]]:
     lineage = _mapping(scanner_lineage)
-    if _text(lineage.get("universeMode")) != "bounded_starter_local":
+    if _text(lineage.get("universeMode")) not in {
+        "bounded_starter_local",
+        "bounded_starter_development_replay",
+    }:
         return [dict(candidate) for candidate in candidates]
     allowed_symbols = {
         canonical

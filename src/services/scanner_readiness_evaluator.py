@@ -509,9 +509,13 @@ def _lineage(evidence: ScannerReadinessEvidence, ohlcv: Mapping[str, Any]) -> di
     universe_symbols = _text_list(universe_values, upper=True)
     resolved_symbols = _text_list(resolution.get("resolvedStarterSymbols") or resolution.get("data") or (), upper=True)
     strategy = str(resolution.get("coverage_strategy") or "").strip()
-    bounded = source == "bounded_starter_market_data_spine" or strategy == "bounded_starter_local_only"
-    bounded = bounded or bool(universe_symbols and universe_symbols == list(evidence.bounded_us_symbols))
-    universe_mode = "bounded_starter_local" if bounded else strategy or "default"
+    development_replay = strategy == "bounded_starter_development_replay"
+    bounded = not development_replay and (
+        source == "bounded_starter_market_data_spine"
+        or strategy == "bounded_starter_local_only"
+        or bool(universe_symbols and universe_symbols == list(evidence.bounded_us_symbols))
+    )
+    universe_mode = strategy if development_replay else "bounded_starter_local" if bounded else strategy or "default"
     if bounded:
         active = set(resolved_symbols or evaluated or sufficient)
         for symbol in universe_symbols:

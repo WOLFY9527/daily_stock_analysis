@@ -229,6 +229,8 @@ def run_market_scan(
             universe_type=request.universe_type,
             theme_id=request.theme_id,
             symbols=request.symbols,
+            evaluation_mode=request.evaluation_mode,
+            evaluation_cutoff=request.evaluation_cutoff,
             request_source="api",
             notify=False,
         )

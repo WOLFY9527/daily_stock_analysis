@@ -23,6 +23,8 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
 )
 from src.services.market_scanner_service import MarketScannerService
+from src.services.research_radar_service import ResearchRadarService, _scanner_lineage_from_run
+from src.services.rule_backtest_service import RuleBacktestService
 from src.storage import DatabaseManager
 
 
@@ -31,13 +33,13 @@ def _daily_rows(*, count: int) -> list[dict[str, object]]:
     session_date = date(2023, 1, 2)
     while len(rows) < count:
         if session_date.weekday() < 5:
-            close = 10.5 + len(rows) * 0.02
+            close = round(10.5 + len(rows) * 0.02, 4)
             rows.append(
                 {
                     "sessionDate": session_date.isoformat(),
-                    "open": close - 0.2,
-                    "high": close + 0.3,
-                    "low": close - 0.4,
+                    "open": round(close - 0.2, 4),
+                    "high": round(close + 0.3, 4),
+                    "low": round(close - 0.4, 4),
                     "close": close,
                     "volume": 1000 + len(rows),
                     "adjustedClose": close,
@@ -142,6 +144,56 @@ def _write_manifest(tmp_path, payload: dict, *, payload_name: str = "observation
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     return manifest_path, payload_path, manifest
+
+
+def _write_manifest_observations(tmp_path, payloads: list[dict]) -> tuple[object, list[object], dict]:
+    entries = []
+    payload_paths = []
+    for index, payload in enumerate(payloads):
+        payload_name = f"observation-{index}.json"
+        payload_path = tmp_path / payload_name
+        payload_bytes = json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
+        payload_path.write_bytes(payload_bytes)
+        entry = {
+            key: payload[key]
+            for key in (
+                "market",
+                "symbol",
+                "canonicalSymbol",
+                "provider",
+                "source",
+                "observedAt",
+                "asOf",
+                "asOfState",
+                "interval",
+                "delivery",
+                "historical",
+                "replay",
+                "development",
+                "authority",
+                "fallback",
+                "productionEligible",
+                "observationOnly",
+            )
+        }
+        entry.update({"path": payload_name, "sha256": hashlib.sha256(payload_bytes).hexdigest()})
+        entries.append(entry)
+        payload_paths.append(payload_path)
+    manifest = {
+        "schemaVersion": DEVELOPMENT_HISTORICAL_REPLAY_MANIFEST_VERSION,
+        "delivery": "local_replay",
+        "historical": True,
+        "replay": True,
+        "development": True,
+        "authority": False,
+        "fallback": False,
+        "productionEligible": False,
+        "observationOnly": True,
+        "observations": entries,
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path, payload_paths, manifest
 
 
 @pytest.mark.parametrize(
@@ -743,3 +795,173 @@ def test_scanner_loads_explicit_replay_after_local_us_cache_selection(tmp_path) 
     assert score_confidence["sourceAuthorityAllowed"] is False
     assert score_confidence["scoreContributionAllowed"] is False
     assert score_confidence["observationOnly"] is True
+
+
+def test_scanner_default_us_universe_uses_verified_replay_only_without_local_coverage(tmp_path) -> None:
+    manifest_path, _, _ = _write_manifest(
+        tmp_path,
+        _payload(
+            market="US",
+            symbol="AAPL",
+            canonical_symbol="AAPL",
+            provider="stooq_archive",
+            source="stooq_historical",
+            rows=_daily_rows(count=260),
+        ),
+    )
+    db = DatabaseManager(db_url="sqlite:///:memory:")
+    with (
+        patch.dict(
+            os.environ,
+            {
+                DEVELOPMENT_HISTORICAL_REPLAY_MANIFEST_ENV: str(manifest_path),
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+            },
+            clear=False,
+        ),
+        patch(
+            "src.services.market_scanner_service.get_config",
+            return_value=SimpleNamespace(scanner_local_universe_path=str(tmp_path / "scanner-universe.csv")),
+        ),
+        patch.object(MarketScannerService, "_load_local_us_universe_from_parquet", return_value=[]),
+        patch.object(MarketScannerService, "_load_local_us_universe_from_db", return_value=[]),
+    ):
+        service = MarketScannerService(db, data_manager=object())
+        resolution = service._resolve_us_stock_universe(profile=get_scanner_profile(market="us"))
+        readiness = service._development_replay_us_universe_readiness()
+
+    assert resolution["success"] is True
+    assert resolution["data"] == ["AAPL"]
+    assert resolution["coverage_strategy"] == "bounded_starter_development_replay"
+    assert resolution["universeSource"] == "development_historical_replay"
+    assert resolution["boundedStarterUniverse"] == ["AAPL"]
+    assert resolution["resolvedStarterSymbols"] == ["AAPL"]
+    assert resolution["noExternalCalls"] is True
+    assert resolution["providerCallsEnabled"] is False
+    assert resolution["attempts"][-1]["fetcher"] == "development_historical_replay_manifest"
+    assert resolution["attempts"][-1]["observationOnly"] is True
+    assert readiness is not None
+    assert readiness["status"] == "stale"
+    assert readiness["sourceMetadata"]["authority"] is False
+    assert readiness["sourceMetadata"]["observationOnly"] is True
+
+    readiness_payload = service._attach_data_readiness(
+        {
+            "universeSource": resolution["universeSource"],
+            "boundedStarterUniverse": resolution["boundedStarterUniverse"],
+            "scanner_data": {
+                "universe_resolution": service._public_resolution_diagnostics(resolution),
+            },
+        },
+        market="us",
+        profile="us_historical_research_v1",
+        status="completed",
+        universe_size=1,
+        preselected_size=1,
+        evaluated_size=1,
+        shortlist_size=1,
+        summary={"selected_count": 1},
+        candidates=[{"symbol": "AAPL", "status": "evaluated"}],
+    )
+    lineage = readiness_payload["dataReadiness"]["scannerLineage"]
+    assert lineage["universeMode"] == "bounded_starter_development_replay"
+    assert lineage["universeSymbols"] == ["AAPL"]
+    assert lineage["symbolsSkipped"] == []
+
+
+def test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_without_provider_fallback(tmp_path) -> None:
+    manifest_path, _, _ = _write_manifest_observations(
+        tmp_path,
+        [
+            _payload(
+                market="US",
+                symbol="AAPL",
+                canonical_symbol="AAPL",
+                provider="stooq_archive",
+                source="stooq_historical",
+                rows=_daily_rows(count=540),
+            ),
+            _payload(
+                market="US",
+                symbol="SPY",
+                canonical_symbol="SPY",
+                provider="stooq_archive",
+                source="stooq_historical",
+                rows=_daily_rows(count=540),
+            ),
+        ],
+    )
+    db = DatabaseManager(db_url="sqlite:///:memory:")
+    service = RuleBacktestService(db)
+
+    with patch.dict(os.environ, {DEVELOPMENT_HISTORICAL_REPLAY_MANIFEST_ENV: str(manifest_path)}, clear=False):
+        response = service.run_backtest(
+            code="AAPL",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2024-01-02",
+            end_date=date(2024, 12, 31),
+            lookback_bars=180,
+            benchmark_mode="custom_code",
+            benchmark_code="SPY",
+            confirmed=True,
+        )
+
+    aapl_stored = service.stock_repo.get_range("AAPL", date(2023, 9, 1), date(2024, 12, 31))
+    spy_stored = service.stock_repo.get_range("SPY", date(2023, 9, 1), date(2024, 12, 31))
+    assert response["status"] == "completed"
+    assert response["data_quality"]["source"] == "development_historical_replay"
+    assert response["data_quality"]["expected_bar_count"] == 252
+    assert response["data_quality"]["missing_bar_count"] == 0
+    assert response["professionalReadiness"]["provider_calls"] is False
+    assert aapl_stored and spy_stored
+    assert {row.data_source for row in aapl_stored} == {"development_historical_replay"}
+    assert {row.data_source for row in spy_stored} == {"development_historical_replay"}
+
+
+def test_historical_mode_cannot_reuse_preopen_profile() -> None:
+    service = MarketScannerService(DatabaseManager(db_url="sqlite:///:memory:"), data_manager=object())
+    with pytest.raises(ValueError, match="us_preopen_v1 requires evaluation_mode=current"):
+        service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            evaluation_mode="historical_development",
+            evaluation_cutoff=date(2024, 12, 31),
+        )
+
+
+def test_historical_profile_requires_historical_mode_and_cutoff() -> None:
+    service = MarketScannerService(DatabaseManager(db_url="sqlite:///:memory:"), data_manager=object())
+    with pytest.raises(ValueError, match="us_historical_research_v1 requires evaluation_mode=historical_development"):
+        service.run_scan(
+            market="us",
+            profile="us_historical_research_v1",
+            evaluation_mode="current",
+        )
+
+
+def test_research_radar_preserves_historical_scanner_lineage_and_temporal_boundary() -> None:
+    run = SimpleNamespace(
+        id=7,
+        market="us",
+        profile="us_historical_research_v1",
+        diagnostics_json=json.dumps(
+            {
+                "evaluationMode": "historical_development",
+                "evaluationCutoff": "2024-12-31",
+                "scannerLineage": {
+                    "source": "development_historical_replay",
+                    "universeMode": "bounded_starter_local",
+                    "universeSymbols": ["AAPL"],
+                    "generatedAt": "2026-09-01T00:00:00",
+                    "symbolsEvaluated": ["AAPL"],
+                    "symbolsSkipped": [],
+                },
+            }
+        ),
+    )
+    lineage = _scanner_lineage_from_run(run, market="us")
+    assert lineage["profile"] == "us_historical_research_v1"
+    assert lineage["evaluationMode"] == "historical_development"
+    assert lineage["evaluationCutoff"] == "2024-12-31"

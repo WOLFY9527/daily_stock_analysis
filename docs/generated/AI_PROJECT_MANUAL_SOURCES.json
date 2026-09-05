@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "216f0f5fb84c67ec2c8633066ab565ff4ec5f327104496a5aa76318ba2bdb568",
+    "manualSha256": "9903d9a0cde7d58d7543a4db2d4426bacaae22236539044f9df970ff68f298f4",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -363,13 +363,13 @@
       "title": "Data Trust And Protected Semantics"
     },
     {
-      "bytes": 6248,
+      "bytes": 7363,
       "editable": true,
       "id": "historical-market-data",
       "kind": "canonical",
-      "lineCount": 128,
+      "lineCount": 148,
       "path": "docs/contracts/historical-market-data.md",
-      "sha256": "cb22ed4a9c701853d38950aee9c8e848ab834c9a69d52c0d641fedb6b2b71653",
+      "sha256": "8ef03a355d44fd2d07bc07097fe2b29ee656e657924833b0a96c62a22a150e54",
       "status": "active",
       "summary": "Historical OHLCV foundation contract",
       "title": "Historical Market Data Foundation v1"

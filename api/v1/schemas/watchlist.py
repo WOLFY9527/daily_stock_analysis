@@ -266,6 +266,9 @@ class WatchlistScannerLineageV1Response(BaseModel):
     watchlist_added_at: Optional[str] = None
     theme_id: Optional[str] = None
     universe_type: Optional[str] = None
+    evaluation_mode: Optional[Literal["current", "historical_development"]] = None
+    evaluation_cutoff: Optional[str] = None
+    historical_research: bool = False
     research_reason: str
     research_next_step: str
     observationReasons: List[str] = Field(default_factory=list)

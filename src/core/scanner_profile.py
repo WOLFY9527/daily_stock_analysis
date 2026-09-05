@@ -34,6 +34,8 @@ class ScannerMarketProfile:
     sector_context_limit: int = 10
     recent_run_limit: int = 5
     benchmark_code: str = "000300"
+    evaluation_mode: str = "current"
+    evaluation_point: str = "current_market_context"
 
 
 CN_A_PREOPEN_V1 = ScannerMarketProfile(
@@ -81,6 +83,32 @@ US_PREOPEN_V1 = ScannerMarketProfile(
 )
 
 
+US_HISTORICAL_RESEARCH_V1 = ScannerMarketProfile(
+    key="us_historical_research_v1",
+    market="us",
+    label="US Historical Research Scanner v1",
+    description="基于已完成交易日 OHLCV 的历史研究扫描器；仅使用 evaluation cutoff 前可知信息。",
+    implemented=True,
+    universe_name="us_historical_research_v1",
+    shortlist_size=5,
+    universe_limit=180,
+    detail_limit=40,
+    history_days=180,
+    min_history_bars=70,
+    min_price=5.0,
+    min_amount=2.5e7,
+    min_turnover_rate=0.0,
+    min_volume_ratio=0.0,
+    min_avg_amount_20=2.5e7,
+    min_avg_volume_20=1.5e6,
+    sector_context_limit=0,
+    recent_run_limit=5,
+    benchmark_code="SPY",
+    evaluation_mode="historical_development",
+    evaluation_point="completed_session_close",
+)
+
+
 HK_PREOPEN_V1 = ScannerMarketProfile(
     key="hk_preopen_v1",
     market="hk",
@@ -108,6 +136,7 @@ HK_PREOPEN_V1 = ScannerMarketProfile(
 SCANNER_PROFILES: Dict[str, ScannerMarketProfile] = {
     CN_A_PREOPEN_V1.key: CN_A_PREOPEN_V1,
     US_PREOPEN_V1.key: US_PREOPEN_V1,
+    US_HISTORICAL_RESEARCH_V1.key: US_HISTORICAL_RESEARCH_V1,
     HK_PREOPEN_V1.key: HK_PREOPEN_V1,
 }
 

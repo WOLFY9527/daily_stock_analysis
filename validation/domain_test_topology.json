@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8374,
-      "sha256": "323765a3edca2f054aa60a18ad14bf2af401e9bfbde00bac3cc1214b4345176d"
+      "count": 8381,
+      "sha256": "f2ff7ee826663ca6cdecca2601f0abd91d3e4e5d98164ce9786f0285391cc52d"
     },
     "tests": [
       {
@@ -15794,6 +15794,16 @@
         "baseline": false
       },
       {
+        "id": "tests/test_development_historical_replay.py::test_historical_mode_cannot_reuse_preopen_profile",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_historical_profile_requires_historical_mode_and_cutoff",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_development_historical_replay.py::test_invalid_canonical_numeric_replay_rows_fail_closed[boolean-adjusted-close]",
         "domain": "market",
         "baseline": false
@@ -15924,7 +15934,22 @@
         "baseline": false
       },
       {
+        "id": "tests/test_development_historical_replay.py::test_research_radar_preserves_historical_scanner_lineage_and_temporal_boundary",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_without_provider_fallback",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_development_historical_replay.py::test_scanner_combines_local_us_cache_with_cn_manifest_replay",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_development_historical_replay.py::test_scanner_default_us_universe_uses_verified_replay_only_without_local_coverage",
         "domain": "scanner",
         "baseline": false
       },
@@ -24192,6 +24217,11 @@
         "id": "tests/test_market_scanner_api_contract.py::MarketScannerApiContractTestCase::test_public_candidate_dict_adds_consumer_diagnostics_projection",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_api_contract.py::MarketScannerApiContractTestCase::test_run_market_scan_passes_historical_evaluation_context",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_api_contract.py::MarketScannerApiContractTestCase::test_run_market_scan_passes_request_to_service",
@@ -41337,6 +41367,11 @@
         "id": "tests/test_watchlist_api.py::WatchlistApiTestCase::test_watchlist_catalyst_exposures_omit_missing_and_non_eligible_inputs",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_watchlist_api.py::WatchlistApiTestCase::test_watchlist_create_from_historical_scanner_candidate_preserves_replay_lineage_and_owner_scope",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_watchlist_api.py::WatchlistApiTestCase::test_watchlist_create_from_scanner_candidate_deduplicates_existing_symbol_entry",

@@ -895,6 +895,64 @@ def test_latest_scanner_reader_filters_primary_queue_to_bounded_starter_lineage(
         assert item["scannerLineage"]["source"] == "bounded_starter_market_data_spine"
         assert item["scannerLineage"]["universeSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
 
+    historical_repo = _BoundedScannerRepository()
+    historical_repo.runs = [
+        SimpleNamespace(
+            id=23,
+            status="completed",
+            market="us",
+            profile="us_historical_research_v1",
+            diagnostics_json=json.dumps(
+                {
+                    "evaluationMode": "historical_development",
+                    "evaluationCutoff": "2024-12-31",
+                    "scannerLineage": {
+                        "source": "development_historical_replay",
+                        "universeMode": "bounded_starter_development_replay",
+                        "universeSymbols": ["AAPL", "MSFT", "NVDA"],
+                        "symbolsEvaluated": ["AAPL", "MSFT", "NVDA"],
+                        "symbolsSkipped": [],
+                    },
+                }
+            ),
+        )
+    ]
+    for candidate in historical_repo.candidates:
+        diagnostics = json.loads(candidate.diagnostics_json)
+        diagnostics.update(
+            {
+                "evaluation_mode": "historical_development",
+                "evaluation_cutoff": "2024-12-31",
+            }
+        )
+        candidate.diagnostics_json = json.dumps(diagnostics)
+
+    historical_payload = ResearchRadarService(
+        scanner_repository=historical_repo,
+        now=_fixed_now,
+    ).build_from_latest_scanner_run(
+        market="us",
+        profile="us_historical_research_v1",
+        owner_id="user-1",
+        limit=5,
+    )
+
+    historical_symbols = [item["symbol"] for item in historical_payload["researchQueue"]]
+    assert historical_symbols
+    assert set(historical_symbols).issubset({"AAPL", "MSFT", "NVDA"})
+    for non_replay in ("SMCI", "INTC", "BAC", "XLF"):
+        assert non_replay not in historical_symbols
+    assert historical_payload["aggregateSummary"]["candidateCount"] == 3
+    historical_source = historical_payload["aggregateSummary"]["source"]
+    assert historical_source["scannerLineage"]["universeMode"] == "bounded_starter_development_replay"
+    assert historical_source["scannerLineage"]["universeSymbols"] == ["AAPL", "MSFT", "NVDA"]
+    for item in historical_payload["researchQueue"]:
+        assert item["scannerLineage"]["universeMode"] == "bounded_starter_development_replay"
+        assert item["dataFreshness"]["evaluationMode"] == "historical_development"
+        assert item["dataFreshness"]["evaluationCutoff"] == "2024-12-31"
+        assert item["dataFreshness"]["historical"] is True
+        assert "历史开发回放" in item["limitation"]
+
 
 def test_empty_consumer_radar_adds_onboarding_without_admin_leak_or_mutation() -> None:
     repo = _AdminOnlyScannerRepository()

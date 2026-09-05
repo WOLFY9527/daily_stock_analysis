@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import re
+from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -556,6 +557,14 @@ class ScannerRunRequest(BaseModel):
     universe_type: Literal["default", "theme", "symbols"] = Field("default", description="扫描标的池类型")
     theme_id: Optional[str] = Field(None, description="theme 标的池 id")
     symbols: List[str] = Field(default_factory=list, max_length=200, description="自定义扫描代码列表")
+    evaluation_mode: Literal["current", "historical_development"] = Field(
+        "current",
+        description="评估模式；historical_development 仅使用 cutoff 前的已完成交易日证据",
+    )
+    evaluation_cutoff: Optional[date] = Field(
+        None,
+        description="历史评估截止日（含当日）；historical_development 必填",
+    )
 
     @field_validator("theme_id")
     @classmethod
@@ -1136,6 +1145,8 @@ class ScannerRunDetailResponse(BaseModel):
     market: str
     profile: str
     profile_label: Optional[str] = None
+    evaluationMode: str = "current"
+    evaluationCutoff: Optional[str] = None
     status: str
     run_at: Optional[str] = None
     completed_at: Optional[str] = None
@@ -1288,6 +1299,8 @@ class ScannerRunHistoryItem(BaseModel):
     market: str
     profile: str
     profile_label: Optional[str] = None
+    evaluationMode: str = "current"
+    evaluationCutoff: Optional[str] = None
     status: str
     run_at: Optional[str] = None
     completed_at: Optional[str] = None

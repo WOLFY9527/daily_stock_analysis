@@ -654,6 +654,98 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertTrue(lineage["no_advice_boundary"])
         _assert_no_forbidden_consumer_response_fields(item)
 
+    def test_watchlist_create_from_historical_scanner_candidate_preserves_replay_lineage_and_owner_scope(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime(2026, 6, 25, 9, 30, 0)
+        run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="us",
+            profile="us_historical_research_v1",
+            universe_name="us_historical_research_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+            diagnostics_json=json.dumps(
+                {
+                    "evaluationMode": "historical_development",
+                    "evaluationCutoff": "2024-12-31",
+                    "source": "development_historical_replay",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        candidate = MarketScannerCandidate(
+            symbol="AAPL",
+            name="Apple Inc.",
+            rank=1,
+            score=74.3,
+            reason_summary="Completed-session historical evidence entered the research queue.",
+            reasons_json=json.dumps(["historical_replay", "momentum_structure"], ensure_ascii=False),
+            diagnostics_json=json.dumps(
+                {
+                    "evaluationMode": "historical_development",
+                    "evaluationCutoff": "2024-12-31",
+                    "history": {
+                        "source": "development_historical_replay",
+                        "latest_trade_date": "2024-12-31",
+                    },
+                    "candidateResearchSummaryFrame": {
+                        "primaryResearchReason": "Completed-session historical evidence entered the research queue.",
+                        "researchNextStep": "Review the completed-session evidence before any current-market interpretation.",
+                    },
+                    "score_explainability": {
+                        "score_confidence": 1.0,
+                        "score_grade_allowed": False,
+                        "source_confidence": {
+                            "freshness": "stale",
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityAllowed": False,
+                            "observationOnly": True,
+                        },
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run_id
+            session.add(candidate)
+            session.commit()
+
+        response = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "AAPL"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        item = response.json()
+        lineage = item["intelligence"]["scanner"]["scanner_lineage_v1"]
+        self.assertEqual(item["scanner_run_id"], run_id)
+        self.assertEqual(item["score_profile"], "us_historical_research_v1")
+        self.assertEqual(lineage["scanner_run_id"], run_id)
+        self.assertEqual(lineage["run_profile"], "us_historical_research_v1")
+        self.assertEqual(lineage["evaluation_mode"], "historical_development")
+        self.assertEqual(lineage["evaluation_cutoff"], "2024-12-31")
+        self.assertTrue(lineage["historical_research"])
+        self.assertTrue(lineage["no_advice_boundary"])
+        self.assertEqual(item["intelligence"]["scanner"]["status"], "preview")
+        _assert_no_forbidden_consumer_response_fields(item)
+
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-2", "bob")
+        cross_owner = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "AAPL"},
+        )
+        self.assertEqual(cross_owner.status_code, 404)
+        self.assertEqual(cross_owner.json()["error"], "not_found")
+
     def test_watchlist_create_from_scanner_candidate_returns_safe_not_found_for_missing_run_or_candidate(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 
@@ -1517,6 +1609,9 @@ class WatchlistApiTestCase(unittest.TestCase):
                 "score_at_scan": 71.5,
                 "score_snapshot_kind": "saved_at_add",
                 "run_profile": "us_preopen_v1",
+                "evaluation_mode": "current",
+                "evaluation_cutoff": None,
+                "historical_research": False,
                 "run_completed_at": "2026-05-04T09:30:00",
                 "watchlist_added_at": add_resp.json()["created_at"],
                 "theme_id": "crypto_miners",

@@ -885,6 +885,23 @@ class MarketScannerService:
             normalized_market == "US" and provider.local_us_provider is not None
         )
 
+    def _development_replay_universe_symbols(self, *, market: str) -> List[str]:
+        """Expose only verified replay symbols when that data plane owns the market."""
+
+        provider = self.historical_ohlcv_provider
+        normalized_market = str(market or "").strip().upper()
+        replay_provider = (
+            provider
+            if isinstance(provider, DevelopmentHistoricalReplayProvider)
+            else provider.replay_provider
+            if isinstance(provider, DevelopmentDataPlaneHistoricalOhlcvProvider)
+            and not (normalized_market == "US" and provider.local_us_provider is not None)
+            else None
+        )
+        if not isinstance(replay_provider, DevelopmentHistoricalReplayProvider):
+            return []
+        return list(replay_provider.replayed_symbols(market=normalized_market))
+
     def _visibility_kwargs(
         self,
         *,
@@ -1128,11 +1145,26 @@ class MarketScannerService:
         symbols: Optional[Sequence[str]] = None,
         scope: str = OWNERSHIP_SCOPE_USER,
         owner_id: Optional[str] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
     ) -> Dict[str, Any]:
         """Run one market scan and persist the resulting shortlist."""
 
         run_started_at = datetime.now()
+        normalized_evaluation_mode = str(evaluation_mode or "current").strip().lower()
+        if normalized_evaluation_mode not in {"current", "historical_development"}:
+            raise ValueError(f"未知 scanner evaluation_mode: {evaluation_mode}")
         profile_config = self._resolve_profile(market=market, profile=profile)
+        profile_evaluation_mode = str(profile_config.evaluation_mode or "current").strip().lower()
+        if normalized_evaluation_mode != profile_evaluation_mode:
+            raise ValueError(
+                f"scanner profile {profile_config.key} requires evaluation_mode={profile_evaluation_mode}"
+            )
+        if normalized_evaluation_mode == "historical_development":
+            if evaluation_cutoff is None:
+                raise ValueError("historical_development requires evaluation_cutoff")
+            if not self._uses_development_historical_replay_for_market(market):
+                raise ValueError("historical_development requires verified development replay")
         normalized_scope = normalize_scope(scope)
         resolved_owner_id = self._resolve_persisted_owner_id(
             scope=normalized_scope,
@@ -1164,6 +1196,8 @@ class MarketScannerService:
                 universe_selection=universe_selection,
                 scope=normalized_scope,
                 owner_id=resolved_owner_id,
+                evaluation_mode=normalized_evaluation_mode,
+                evaluation_cutoff=evaluation_cutoff,
             )
         if profile_config.market == "hk":
             return self._run_hk_scan(
@@ -1175,6 +1209,8 @@ class MarketScannerService:
                 universe_selection=universe_selection,
                 scope=normalized_scope,
                 owner_id=resolved_owner_id,
+                evaluation_mode=normalized_evaluation_mode,
+                evaluation_cutoff=evaluation_cutoff,
             )
         if profile_config.market != "cn":
             raise ValueError(f"当前阶段暂不支持市场: {profile_config.market}")
@@ -2499,6 +2535,35 @@ class MarketScannerService:
             },
         }
 
+    def _development_replay_us_universe_readiness(self) -> Dict[str, Any] | None:
+        symbols = self._development_replay_universe_symbols(market="US")
+        bounded_symbols = [
+            symbol for symbol in BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS if symbol in symbols
+        ]
+        if not bounded_symbols:
+            return None
+        return {
+            "status": "stale",
+            "universeSize": len(bounded_symbols),
+            "lastUpdatedAt": None,
+            "freshnessState": "stale",
+            "sourceMetadata": {
+                "sourceClass": "development_historical_replay",
+                "generatedFrom": "verified_development_historical_replay_manifest",
+                "symbols": bounded_symbols,
+                "historical": True,
+                "replay": True,
+                "development": True,
+                "authority": False,
+                "productionEligible": False,
+                "observationOnly": True,
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+                "readOnly": True,
+                "activationState": "development_replay_stale",
+            },
+        }
+
     @staticmethod
     def _summarize_local_us_parquet_readiness(
         *,
@@ -2601,7 +2666,10 @@ class MarketScannerService:
                 market=market, cache_path=self.local_universe_cache_path
             )
         elif str(market or "").strip().lower() == "us" and uses_default_universe:
-            cache_universe_readiness = self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
+            cache_universe_readiness = (
+                self._development_replay_us_universe_readiness()
+                or self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
+            )
         else:
             runtime_universe_available = self._readiness_int(universe_size) > 0
             cache_universe_readiness = {
@@ -3061,18 +3129,31 @@ class MarketScannerService:
         scope: str,
         owner_id: Optional[str],
         universe_selection: Optional[Dict[str, Any]] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
     ) -> Dict[str, Any]:
         market_options = self._quote_market_options(market=profile_config.market)
         universe_selection = universe_selection or self._resolve_universe_selection(
             market=profile_config.market,
         )
         if universe_selection["universe_type"] == "default":
-            universe_resolution = self._active_lifecycle_universe_resolution(market=profile_config.market)
+            universe_resolution = (
+                None
+                if evaluation_mode == "historical_development"
+                else self._active_lifecycle_universe_resolution(market=profile_config.market)
+            )
             if universe_resolution is None:
-                universe_resolution = market_options["resolve_universe"](
-                    profile=profile_config,
-                    target_symbol_count=resolved_universe_limit,
-                )
+                if profile_config.market == "us":
+                    universe_resolution = self._resolve_us_stock_universe(
+                        profile=profile_config,
+                        target_symbol_count=resolved_universe_limit,
+                        allow_development_replay=evaluation_mode == "historical_development",
+                    )
+                else:
+                    universe_resolution = market_options["resolve_universe"](
+                        profile=profile_config,
+                        target_symbol_count=resolved_universe_limit,
+                    )
         else:
             universe_resolution = {
                 "success": True,
@@ -3118,12 +3199,16 @@ class MarketScannerService:
                 ),
             )
 
-        benchmark_context = market_options["load_benchmark_context"](profile=profile_config)
+        benchmark_context = market_options["load_benchmark_context"](
+            profile=profile_config,
+            evaluation_cutoff=evaluation_cutoff,
+        )
         universe_df, universe_notes, universe_diag, history_cache = market_options["build_universe"](
             symbols=universe_symbols,
             profile=profile_config,
             universe_limit=resolved_universe_limit,
             benchmark_context=benchmark_context,
+            evaluation_cutoff=evaluation_cutoff,
         )
         coverage_strategy = str(universe_resolution.get("coverage_strategy") or "local_only")
         supplemented_seed_count = int(universe_resolution.get("supplemented_seed_count") or 0)
@@ -3284,7 +3369,10 @@ class MarketScannerService:
                 or (
                     str((universe_selection or {}).get("universe_type") or "default").strip().lower()
                     == "default"
-                    and coverage_strategy == "bounded_starter_local_only"
+                    and coverage_strategy in {
+                        "bounded_starter_local_only",
+                        "bounded_starter_development_replay",
+                    }
                 )
             )
         )
@@ -3461,6 +3549,8 @@ class MarketScannerService:
                 "degraded_mode_used": False,
             },
             "universe_selection": self._public_universe_selection(universe_selection),
+            "evaluationMode": evaluation_mode,
+            "evaluationCutoff": evaluation_cutoff.isoformat() if evaluation_cutoff else None,
             "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
             "universeSource": str(universe_resolution.get("universeSource") or universe_source),
             "noExternalCalls": bool(use_history_only_quote_context or universe_resolution.get("noExternalCalls")),
@@ -3514,6 +3604,8 @@ class MarketScannerService:
         scope: str,
         owner_id: Optional[str],
         universe_selection: Optional[Dict[str, Any]] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
     ) -> Dict[str, Any]:
         return self._run_quote_market_scan(
             profile_config=profile_config,
@@ -3524,6 +3616,8 @@ class MarketScannerService:
             scope=scope,
             owner_id=owner_id,
             universe_selection=universe_selection,
+            evaluation_mode=evaluation_mode,
+            evaluation_cutoff=evaluation_cutoff,
         )
 
     def _run_hk_scan(
@@ -3537,6 +3631,8 @@ class MarketScannerService:
         scope: str,
         owner_id: Optional[str],
         universe_selection: Optional[Dict[str, Any]] = None,
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[date] = None,
     ) -> Dict[str, Any]:
         return self._run_quote_market_scan(
             profile_config=profile_config,
@@ -3547,6 +3643,8 @@ class MarketScannerService:
             scope=scope,
             owner_id=owner_id,
             universe_selection=universe_selection,
+            evaluation_mode=evaluation_mode,
+            evaluation_cutoff=evaluation_cutoff,
         )
 
     def _resolve_hk_stock_universe(
@@ -3654,9 +3752,18 @@ class MarketScannerService:
         )
         return symbols
 
-    def _load_hk_benchmark_context(self, *, profile: ScannerMarketProfile) -> Dict[str, Any]:
+    def _load_hk_benchmark_context(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        evaluation_cutoff: Optional[date] = None,
+    ) -> Dict[str, Any]:
         benchmark_code = normalize_stock_code(str(profile.benchmark_code or DEFAULT_HK_SCANNER_BENCHMARK_CODE)).upper()
-        history_df, history_diag = self._load_history_local_first(code=benchmark_code, profile=profile)
+        history_df, history_diag = self._load_history_local_first(
+            code=benchmark_code,
+            profile=profile,
+            evaluation_cutoff=evaluation_cutoff,
+        )
         features = self._extract_history_features(history_df)
         return {
             "benchmark_code": benchmark_code,
@@ -3674,6 +3781,7 @@ class MarketScannerService:
         profile: ScannerMarketProfile,
         universe_limit: int,
         benchmark_context: Dict[str, Any],
+        evaluation_cutoff: Optional[date] = None,
     ) -> Tuple[pd.DataFrame, List[str], Dict[str, Any], Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         history_frames: Dict[str, pd.DataFrame] = {}
@@ -3702,7 +3810,11 @@ class MarketScannerService:
             if benchmark_code and symbol == benchmark_code:
                 continue
 
-            history_df, history_diag = self._load_history_local_first(code=symbol, profile=profile)
+            history_df, history_diag = self._load_history_local_first(
+                code=symbol,
+                profile=profile,
+                evaluation_cutoff=evaluation_cutoff,
+            )
             history_frames[symbol] = history_df
             history_diags[symbol] = history_diag
 
@@ -3865,6 +3977,7 @@ class MarketScannerService:
         *,
         profile: ScannerMarketProfile,
         target_symbol_count: Optional[int] = None,
+        allow_development_replay: Optional[bool] = None,
     ) -> Dict[str, Any]:
         attempts: List[Dict[str, Any]] = []
         combined_symbols: List[str] = []
@@ -3935,6 +4048,38 @@ class MarketScannerService:
             )
 
         local_symbol_count = int(len(combined_symbols))
+        development_replay_symbol_count = 0
+        replay_allowed = (
+            self._uses_development_historical_replay_for_market(profile.market)
+            if allow_development_replay is None
+            else bool(allow_development_replay)
+        )
+        if not combined_symbols and replay_allowed:
+            replay_symbols = [
+                symbol
+                for symbol in self._development_replay_universe_symbols(market="US")
+                if symbol in starter_symbols
+            ]
+            if replay_symbols:
+                development_replay_symbol_count = _merge_symbols(
+                    replay_symbols,
+                    source_name="development_historical_replay_manifest",
+                )
+                attempts.append(
+                    {
+                        "fetcher": "development_historical_replay_manifest",
+                        "status": "success",
+                        "rows": int(len(replay_symbols)),
+                        "added_rows": int(development_replay_symbol_count),
+                        "historical": True,
+                        "replay": True,
+                        "development": True,
+                        "authority": False,
+                        "productionEligible": False,
+                        "observationOnly": True,
+                        "noExternalCalls": True,
+                    }
+                )
         resolved_target_symbol_count = len(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
         supplemented_seed_count = 0
 
@@ -3944,6 +4089,11 @@ class MarketScannerService:
                 for symbol in BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS
                 if symbol in seen_symbols
             ]
+            bounded_starter_universe = (
+                ordered_symbols
+                if development_replay_symbol_count > 0
+                else list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
+            )
             return {
                 "success": True,
                 "source": "+".join(source_parts) if source_parts else "curated_us_liquid_seed",
@@ -3951,12 +4101,21 @@ class MarketScannerService:
                 "attempts": attempts,
                 "path": str(parquet_dir),
                 "local_symbol_count": local_symbol_count,
+                "development_replay_symbol_count": int(development_replay_symbol_count),
                 "supplemented_seed_count": int(supplemented_seed_count),
                 "final_symbol_count": int(len(ordered_symbols)),
                 "target_symbol_count": int(resolved_target_symbol_count),
-                "coverage_strategy": "bounded_starter_local_only",
-                "universeSource": "bounded_starter_market_data_spine",
-                "boundedStarterUniverse": list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS),
+                "coverage_strategy": (
+                    "bounded_starter_development_replay"
+                    if development_replay_symbol_count > 0
+                    else "bounded_starter_local_only"
+                ),
+                "universeSource": (
+                    "development_historical_replay"
+                    if development_replay_symbol_count > 0
+                    else "bounded_starter_market_data_spine"
+                ),
+                "boundedStarterUniverse": bounded_starter_universe,
                 "resolvedStarterSymbols": ordered_symbols,
                 "noExternalCalls": True,
                 "providerCallsEnabled": False,
@@ -3998,9 +4157,18 @@ class MarketScannerService:
         )
         return symbols
 
-    def _load_us_benchmark_context(self, *, profile: ScannerMarketProfile) -> Dict[str, Any]:
+    def _load_us_benchmark_context(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        evaluation_cutoff: Optional[date] = None,
+    ) -> Dict[str, Any]:
         benchmark_code = str(profile.benchmark_code or DEFAULT_US_SCANNER_BENCHMARK_CODE).upper()
-        history_df, history_diag = self._load_history_local_first(code=benchmark_code, profile=profile)
+        history_df, history_diag = self._load_history_local_first(
+            code=benchmark_code,
+            profile=profile,
+            evaluation_cutoff=evaluation_cutoff,
+        )
         features = self._extract_history_features(history_df)
         return {
             "benchmark_code": benchmark_code,
@@ -4018,6 +4186,7 @@ class MarketScannerService:
         profile: ScannerMarketProfile,
         universe_limit: int,
         benchmark_context: Dict[str, Any],
+        evaluation_cutoff: Optional[date] = None,
     ) -> Tuple[pd.DataFrame, List[str], Dict[str, Any], Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         history_frames: Dict[str, pd.DataFrame] = {}
@@ -4069,7 +4238,11 @@ class MarketScannerService:
                 }
                 continue
 
-            history_df, history_diag = self._load_history_local_first(code=symbol, profile=profile)
+            history_df, history_diag = self._load_history_local_first(
+                code=symbol,
+                profile=profile,
+                evaluation_cutoff=evaluation_cutoff,
+            )
             history_frames[symbol] = history_df
             history_diags[symbol] = history_diag
             history_source = str(history_diag.get("source") or "")
@@ -4551,6 +4724,8 @@ class MarketScannerService:
                 "benchmark_code": benchmark_context.get("benchmark_code"),
                 "market": profile.market,
                 "profile": profile.key,
+                "evaluation_mode": profile.evaluation_mode,
+                "evaluation_cutoff": history_diag.get("evaluation_cutoff"),
             },
         }
 
@@ -6205,6 +6380,8 @@ class MarketScannerService:
             "market": run.market,
             "profile": run.profile,
             "profile_label": summary.get("profile_label"),
+            "evaluationMode": diagnostics.get("evaluationMode") or diagnostics.get("evaluation_mode") or "current",
+            "evaluationCutoff": diagnostics.get("evaluationCutoff") or diagnostics.get("evaluation_cutoff"),
             "status": "unavailable" if storage_integrity is not None and run.status == "completed" else run.status,
             "run_at": run.run_at.isoformat() if run.run_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
@@ -6786,6 +6963,8 @@ class MarketScannerService:
             "market": row.market,
             "profile": row.profile,
             "profile_label": summary.get("profile_label"),
+            "evaluationMode": diagnostics.get("evaluationMode") or diagnostics.get("evaluation_mode") or "current",
+            "evaluationCutoff": diagnostics.get("evaluationCutoff") or diagnostics.get("evaluation_cutoff"),
             "status": "unavailable" if storage_integrity is not None and row.status == "completed" else row.status,
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
@@ -7737,13 +7916,20 @@ class MarketScannerService:
         *,
         code: str,
         profile: ScannerMarketProfile,
+        evaluation_cutoff: Optional[date] = None,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         normalized_code = normalize_stock_code(code)
-        provider_result = self._load_history_from_ohlcv_provider(code=normalized_code, profile=profile)
+        provider_result = self._load_history_from_ohlcv_provider(
+            code=normalized_code,
+            profile=profile,
+            evaluation_cutoff=evaluation_cutoff,
+        )
         if provider_result is not None:
             return provider_result
 
         local_df = self._load_local_history(normalized_code, history_days=profile.history_days)
+        if evaluation_cutoff is not None and not local_df.empty and "date" in local_df.columns:
+            local_df = local_df[pd.to_datetime(local_df["date"], errors="coerce").dt.date <= evaluation_cutoff].reset_index(drop=True)
         if self._is_history_sufficient(local_df, profile=profile):
             latest_trade_date = (
                 pd.to_datetime(local_df["date"]).max().date().isoformat()
@@ -8132,6 +8318,7 @@ class MarketScannerService:
         *,
         code: str,
         profile: ScannerMarketProfile,
+        evaluation_cutoff: Optional[date] = None,
     ) -> Optional[Tuple[pd.DataFrame, Dict[str, Any]]]:
         if self.historical_ohlcv_provider is None:
             return None
@@ -8148,7 +8335,7 @@ class MarketScannerService:
             readiness_service=self.ohlcv_readiness_service,
             historical_ohlcv_provider=self.historical_ohlcv_provider,
             require_adjusted=self.require_adjusted_ohlcv,
-            request_end=expected_session,
+            request_end=evaluation_cutoff or expected_session,
         )
         readiness = sanitize_historical_ohlcv_readiness(result.readiness)
         history_df = self._normalize_history_frame(pd.DataFrame([bar.as_dict() for bar in result.bars]))
@@ -8193,6 +8380,7 @@ class MarketScannerService:
             "observationOnly": is_development_replay,
             "historicalOhlcvReadiness": readiness,
             "unavailable_reason": result.unavailable_reason,
+            "evaluation_cutoff": evaluation_cutoff.isoformat() if evaluation_cutoff else None,
         }
         if fixture_source:
             history_diag.update(
@@ -8410,6 +8598,8 @@ class MarketScannerService:
                 "snapshot_source": snapshot_source,
                 "degraded_mode_used": bool(degraded_mode_used),
                 "profile": profile.key,
+                "evaluation_mode": profile.evaluation_mode,
+                "evaluation_cutoff": history_diag.get("evaluation_cutoff"),
             },
         }
         return candidate
@@ -8546,7 +8736,9 @@ class MarketScannerService:
             benchmark_relative_score = _clamp((_safe_float(candidate.get("benchmark_relative_20d")) + 3.0) / 12.0, 0.0, 1.0) * 10.0
 
             gap_pct = candidate.get("gap_pct")
-            if gap_pct is None:
+            if profile.evaluation_mode == "historical_development":
+                gap_context_score = 0.0
+            elif gap_pct is None:
                 gap_context_score = 4.0
             else:
                 gap_context_score = (
@@ -8560,7 +8752,7 @@ class MarketScannerService:
                 penalty_score += 2.0
             if candidate.get("gap_pct") is not None and abs(_safe_float(candidate.get("gap_pct"))) >= 8.0:
                 penalty_score += 2.0
-            if not candidate.get("quote_available"):
+            if profile.evaluation_mode != "historical_development" and not candidate.get("quote_available"):
                 penalty_score += 1.0
             if str(candidate.get("history_source")) == "local_partial_fallback":
                 penalty_score += 1.5
@@ -8850,7 +9042,13 @@ class MarketScannerService:
         history_diag = dict(diagnostics.get("history") or {})
         quote_diag = dict(diagnostics.get("quote_context") or {})
         missing: List[str] = []
-        quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
+        historical_profile = str(
+            diagnostics.get("evaluation_mode") or diagnostics.get("evaluationMode") or ""
+        ).strip().lower() == "historical_development"
+        quote_context_present = (
+            not historical_profile
+            and (bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics)
+        )
 
         if not history_diag.get("latest_trade_date"):
             missing.append("history")
@@ -8903,29 +9101,50 @@ class MarketScannerService:
         quote_source_type = self._quote_source_type(quote_diag, quote_source) if quote_source else ""
         history_source_type = resolve_source_type(history_source) if history_source else ""
         snapshot_source_type = resolve_source_type(snapshot_source) if snapshot_source else ""
-        primary_source_type = quote_source_type or history_source_type or snapshot_source_type
+        historical_profile = str(
+            diagnostics.get("evaluation_mode") or diagnostics.get("evaluationMode") or ""
+        ).strip().lower() == "historical_development"
+        primary_source_type = (
+            history_source_type or snapshot_source_type
+            if historical_profile
+            else quote_source_type or history_source_type or snapshot_source_type
+        )
         is_proxy_quote = self._is_proxy_quote_context(
             quote_diag,
             quote_source_type=quote_source_type,
         )
-        quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
+        quote_context_present = (
+            not historical_profile
+            and (bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics)
+        )
         is_fallback = (
             (quote_context_present and not quote_diag.get("available"))
             or degraded_mode_used
-            or _is_fallback_score_cap_source(quote_source, source_type=quote_source_type)
+            or (
+                not historical_profile
+                and _is_fallback_score_cap_source(quote_source, source_type=quote_source_type)
+            )
             or _is_fallback_score_cap_source(history_source, source_type=history_source_type)
-            or _is_fallback_score_cap_source(snapshot_source, source_type=snapshot_source_type)
+            or (
+                not historical_profile
+                and _is_fallback_score_cap_source(snapshot_source, source_type=snapshot_source_type)
+            )
+        )
+        historical_eligible = historical_profile and factor_evidence.get("rankingEligible") is True and all(
+            item.get("historicalEligible") is True
+            for item in factor_rows
+            if item.get("required") is True
         )
         is_stale = bool(history_diag.get("stale"))
         is_partial = (
             history_source in SCANNER_SCORE_CAP_PARTIAL_SOURCES
-            or bool(history_diag.get("observationOnly"))
+            or (bool(history_diag.get("observationOnly")) and not historical_eligible)
             or bool(core_missing)
         )
         degradation_reason = None
         if is_fallback:
             degradation_reason = "fallback_source"
-        elif is_stale:
+        elif is_stale and not historical_eligible:
             degradation_reason = "stale_source"
         elif is_partial:
             degradation_reason = "partial_coverage"
@@ -8951,7 +9170,7 @@ class MarketScannerService:
                 degradation_reason = SCANNER_PROXY_QUOTE_DEGRADATION_REASON
                 confidence_weight = SCANNER_PROXY_QUOTE_CONFIDENCE_CAP
 
-        confidence_source = quote_source or history_source or "scanner"
+        confidence_source = history_source if historical_profile else quote_source or history_source or "scanner"
         confidence_source_label = resolve_source_label(
             confidence_source,
             source_type=quote_source_type if quote_source else None,
@@ -8966,9 +9185,17 @@ class MarketScannerService:
                 {
                     "source": confidence_source,
                     "sourceLabel": confidence_source_label,
-                    "freshness": "delayed" if is_proxy_quote else "live" if quote_diag.get("available") else "unknown",
+                    "freshness": (
+                        "unknown"
+                        if historical_eligible
+                        else "delayed"
+                        if is_proxy_quote
+                        else "live"
+                        if quote_diag.get("available")
+                        else "unknown"
+                    ),
                     "isFallback": is_fallback,
-                    "isStale": is_stale,
+                    "isStale": is_stale and not historical_eligible,
                     "isPartial": is_partial,
                     "isSynthetic": primary_source_type == "synthetic_fixture",
                     "isUnavailable": primary_source_type == "missing",
@@ -8979,16 +9206,23 @@ class MarketScannerService:
                 }
             )
         ).to_dict()
-        if quote_source_type:
+        if quote_source_type and not historical_profile:
             confidence_contract["sourceType"] = quote_source_type
+        if historical_eligible:
+            # Keep the truthful stale marker while allowing the historical
+            # profile to rank within its own cutoff-bound information set.
+            confidence_contract["freshness"] = "stale"
+            confidence_contract["isStale"] = True
         score_grade_allowed = (
             factor_evidence.get("rankingEligible") is True
             and not bool(confidence_contract.get("capReason"))
             and not is_proxy_quote
+            and not historical_eligible
         )
         confidence_contract["scoreContributionAllowed"] = score_grade_allowed
         confidence_contract["sourceAuthorityAllowed"] = score_grade_allowed
         confidence_contract["observationOnly"] = not score_grade_allowed
+        confidence_contract["historicalEligible"] = historical_eligible
 
         raw_score = round(_clamp(_safe_float(candidate.get("raw_score"), default=_safe_float(candidate.get("score"))), 0.0, 100.0), 1)
         score_cap = round(_clamp(float(confidence_contract.get("confidenceWeight") or 0.0) * 100.0, 0.0, 100.0), 1)

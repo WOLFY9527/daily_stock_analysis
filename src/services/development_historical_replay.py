@@ -129,6 +129,21 @@ class DevelopmentHistoricalReplayProvider:
         manifest_path = Path(configured).expanduser()
         return cls(manifest_path)
 
+    def replayed_symbols(self, *, market: str, timeframe: str = "1d") -> tuple[str, ...]:
+        """Return verified canonical symbols available to a development consumer."""
+
+        if not self._ensure_loaded():
+            return ()
+        normalized_market = str(market or "").strip().upper()
+        normalized_interval = _normalize_interval(timeframe)
+        return tuple(
+            sorted(
+                observation.canonical_symbol
+                for observation in self._observations.values()
+                if observation.market == normalized_market and observation.interval == normalized_interval
+            )
+        )
+
     def fetch_ohlcv_history(
         self,
         request: HistoricalOhlcvReadinessRequest,

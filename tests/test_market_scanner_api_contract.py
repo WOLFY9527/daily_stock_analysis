@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
@@ -366,6 +367,8 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             universe_type="default",
             theme_id=None,
             symbols=[],
+            evaluation_mode="current",
+            evaluation_cutoff=None,
             request_source="api",
             notify=False,
         )
@@ -406,6 +409,48 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             universe_type="default",
             theme_id=None,
             symbols=[],
+            evaluation_mode="current",
+            evaluation_cutoff=None,
+            request_source="api",
+            notify=False,
+        )
+
+    def test_run_market_scan_passes_historical_evaluation_context(self) -> None:
+        service = MagicMock()
+        service.run_manual_scan.return_value = _make_run_payload(
+            run_id=25,
+            market="us",
+            profile="us_historical_research_v1",
+            profile_label="US Historical Research Scanner v1",
+            benchmark_code="SPY",
+        ) | {
+            "evaluationMode": "historical_development",
+            "evaluationCutoff": "2024-12-31",
+        }
+        request = ScannerRunRequest(
+            market="us",
+            profile="us_historical_research_v1",
+            evaluation_mode="historical_development",
+            evaluation_cutoff=date(2024, 12, 31),
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        self.assertEqual(response.profile, "us_historical_research_v1")
+        self.assertEqual(response.evaluationMode, "historical_development")
+        self.assertEqual(response.evaluationCutoff, "2024-12-31")
+        service.run_manual_scan.assert_called_once_with(
+            market="us",
+            profile="us_historical_research_v1",
+            shortlist_size=5,
+            universe_limit=None,
+            detail_limit=None,
+            universe_type="default",
+            theme_id=None,
+            symbols=[],
+            evaluation_mode="historical_development",
+            evaluation_cutoff=date(2024, 12, 31),
             request_source="api",
             notify=False,
         )
@@ -1129,6 +1174,8 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             universe_type="theme",
             theme_id="crypto_miners",
             symbols=[],
+            evaluation_mode="current",
+            evaluation_cutoff=None,
             request_source="api",
             notify=False,
         )
